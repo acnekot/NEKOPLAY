@@ -10,5 +10,5 @@
 - [ ] 5、登录音乐平台
 
 
-**Thanks to Hydrogen-Music for the UI reference**  
-**Thanks to Music Party for the function reference**
+**UI参考[Hydrogen-Music](https://github.com/Kaidesuyo/Hydrogen-Music)**  
+**一起听功能参考[Music Party](https://github.com/EveElseIf/MusicParty)**
