@@ -24,7 +24,8 @@
     <div class="brand" aria-label="NEKOPLAY" data-tauri-drag-region>NEKO<span>PLAY</span><span class="brand-eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
 
     <nav class="mainnav" aria-label="主导航" data-tauri-drag-region>
-      <button class="nav-item is-active" type="button" data-nav="now">正在播放</button>
+      <button class="nav-item is-active" type="button" data-nav="home">主页</button>
+      <button class="nav-item" type="button" data-nav="now">正在播放</button>
       <button class="nav-item" type="button" data-nav="library">曲库</button>
       <button class="nav-item" type="button" data-nav="playlist">播放列表</button>
     </nav>
@@ -57,6 +58,7 @@
       <button class="iconbtn only-m" id="btn-msearch" type="button" aria-label="搜索" aria-expanded="false">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
       </button>
+      <span class="lyrics-mark mono" aria-hidden="true">LYRICS</span>
     </div>
 
     <input type="file" id="file-audio" accept="audio/*" multiple hidden>
@@ -108,6 +110,19 @@
         <span id="big-time">00:00</span><span class="big-dur" id="big-dur">/ 05:11</span>
       </div>
 
+      <div class="orig-player" aria-label="播放控制">
+        <div class="orig-progress" data-progress></div>
+        <div class="orig-controls" data-controls></div>
+        <div class="orig-bottom">
+          <div class="seg mode-seg" data-mode-seg aria-label="播放模式"></div>
+          <div class="volume orig-volume">
+            <span class="label">音量</span>
+            <input class="slider vol js-vol" type="range" min="0" max="100" step="1" value="80" aria-label="音量">
+            <span class="mono vol-val js-volval">80</span>
+          </div>
+        </div>
+      </div>
+
       <div class="orig-stats" aria-hidden="true">
         <div><span class="label">格式</span><span class="mono" id="orig-format">FLAC</span></div>
         <div><span class="label">采样率</span><span class="mono" id="orig-rate">44.1 kHz</span></div>
@@ -130,6 +145,8 @@
       <div class="rpanel" id="rpanel" role="tabpanel"></div>
     </section>
   </div>
+
+  <section class="home" id="home" aria-label="主页"></section>
 </main>
 
 <footer class="playbar" aria-label="播放控制">
@@ -140,6 +157,7 @@
         <div class="pb-title" id="pb-title">—</div>
         <div class="pb-artist" id="pb-artist">—</div>
       </div>
+      <div class="seg mode-seg pb-mode-alt" data-mode-seg aria-label="播放模式"></div>
     </div>
 
     <div class="pb-center">
@@ -150,8 +168,9 @@
     <div class="pb-right">
       <div class="seg mode-seg" data-mode-seg aria-label="播放模式"></div>
       <div class="volume">
-        <span class="label">音量</span>
+        <span class="label vol-label"><span class="vol-cn">音量</span><span class="vol-en">VOLUME</span></span>
         <input class="slider vol js-vol" type="range" min="0" max="100" step="1" value="80" aria-label="音量">
+        <span class="mono vol-val js-volval">80</span>
       </div>
     </div>
   </div>

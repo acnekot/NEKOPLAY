@@ -49,7 +49,10 @@ const ICONS = {
   play: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M8 5.5v13l10-6.5z" fill="currentColor"/></svg>',
   pause: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><rect x="7" y="5.5" width="3.6" height="13" fill="currentColor"/><rect x="13.4" y="5.5" width="3.6" height="13" fill="currentColor"/></svg>',
   prev: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M7 5h2v14H7zM19 5v14L9.5 12z" fill="currentColor"/></svg>',
-  next: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M17 5h-2v14h2zM5 5v14l9.5-7z" fill="currentColor"/></svg>'
+  next: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M17 5h-2v14h2zM5 5v14l9.5-7z" fill="currentColor"/></svg>',
+  list: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>',
+  shuffle: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M2 5h3l6 6h3M2 11h3l6-6h3" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M11 3l2 2-2 2M11 13l2 2-2 2" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>',
+  repeat: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3 6h9a3 3 0 0 1 3 3M13 10H4a3 3 0 0 1-3-3" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M11 4l2 2-2 2M5 8l-2 2 2 2" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>'
 };
 
 const CONTROLS_HTML = `
@@ -66,11 +69,27 @@ const PROGRESS_HTML = `
   <span class="time dur mono js-dur">00:00</span>`;
 
 const MODE_HTML = `
-  <button type="button" data-mode="sequence" aria-pressed="true">顺序</button>
-  <button type="button" data-mode="shuffle" aria-pressed="false">随机</button>
-  <button type="button" data-mode="one" aria-pressed="false">单曲</button>`;
+  <button type="button" data-mode="sequence" aria-pressed="true" aria-label="顺序播放">
+    <span class="mode-ico">${ICONS.list}</span><span class="mode-label">顺序</span>
+  </button>
+  <button type="button" data-mode="shuffle" aria-pressed="false" aria-label="随机播放">
+    <span class="mode-ico">${ICONS.shuffle}</span><span class="mode-label">随机</span>
+  </button>
+  <button type="button" data-mode="one" aria-pressed="false" aria-label="单曲循环">
+    <span class="mode-ico">${ICONS.repeat}</span><span class="mode-label">单曲</span>
+  </button>`;
 
 const COVER_CELLS = '<span class="cell c1"></span><span class="cell c2"></span><span class="cell c3"></span><span class="cell c4"></span>';
+
+const HOME_DAILY_COUNT = 3;
+const HOME_COLLECTIONS = [
+  { id: 'lofi', title: '深夜低保真', cover: 0, ids: [4, 5, 7] },
+  { id: 'study', title: '写作业时听', cover: 1, ids: [1, 2, 6] },
+  { id: 'commute', title: '通勤 40 分钟', cover: 2, ids: [3, 6, 8] },
+  { id: 'recent', title: '最近添加', cover: 3, ids: null },
+  { id: 'favorite', title: '我的收藏', cover: 0, ids: [1, 4, 8] }
+];
+let homeDailyCache = { key: '', list: [] };
 
 const SPEC_COLORS = ['#1A4BE0', '#0F3FC7', '#2457F5', '#0B2E9E', '#5B3FD1', '#0F7B6C', '#B4441B', '#0E1117'];
 const SPEC_DEFAULT = { on: true, style: 'bars', position: 'bottom', count: 48, speed: 1, opacity: 16, height: 200, color: '#1A4BE0' };
@@ -170,7 +189,7 @@ const state = {
   mode: 'sequence',
   query: '',
   view: isMobile() ? 'player' : 'queue',
-  nav: 'now',
+  nav: isMobile() ? 'now' : 'home',
   filters: loadFilters(),
   spectrum: loadSpectrum(),
   theme: loadTheme()
@@ -340,13 +359,180 @@ function updateThemeTexts() {
   set('#orig-remain', `-${fmt(Math.max(0, dur - state.time))}`);
 }
 
+/* ---------- 渲染：主页 ---------- */
+
+function coverHTML(t, extra = '', forcedStyle = null) {
+  const idx = forcedStyle != null ? forcedStyle : (t ? Math.max(0, trackIndex(t)) : 0);
+  const art = t && t.coverUrl;
+  const style = art ? 'has-art' : `cover-s${(((idx % 4) + 4) % 4)}`;
+  return `<div class="cover ${extra} ${style}" aria-hidden="true">${art ? `<img src="${esc(art)}" alt="">` : COVER_CELLS}</div>`;
+}
+
+function homeDate() {
+  const d = new Date();
+  const mm = pad2(d.getMonth() + 1);
+  const dd = pad2(d.getDate());
+  return { mm, dd, key: `${d.getFullYear()}-${mm}-${dd}` };
+}
+
+function homeDaily() {
+  const date = homeDate();
+  const key = `${date.key}|${state.tracks.map((t) => t.id).join(',')}`;
+  if (homeDailyCache.key === key) return homeDailyCache.list;
+
+  const list = state.tracks.slice();
+  let seed = Number(date.mm) * 31 + Number(date.dd) || 1;
+  for (let i = list.length - 1; i > 0; i -= 1) {
+    seed = (seed * 9301 + 49297) % 233280;
+    const j = seed % (i + 1);
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+
+  homeDailyCache = { key, list: list.slice(0, Math.min(HOME_DAILY_COUNT, list.length)) };
+  return homeDailyCache.list;
+}
+
+function homeCollections() {
+  return HOME_COLLECTIONS.map((c) => {
+    let tracks;
+    if (c.ids) {
+      tracks = c.ids.map((id) => state.tracks.find((t) => t.id === id)).filter(Boolean);
+    } else {
+      tracks = state.tracks.slice(-8);
+    }
+    if (!tracks.length) tracks = state.tracks.slice(0, 1);
+
+    const total = tracks.reduce((sum, t) => sum + (t.durationSec || 0), 0);
+    return {
+      ...c,
+      tracks,
+      first: tracks[0] || null,
+      meta: `${pad2(tracks.length)} 首 · ${fmtLong(total)}`
+    };
+  });
+}
+
+function homeStats() {
+  const list = state.tracks;
+  const count = list.length;
+  const total = list.reduce((sum, t) => sum + (t.durationSec || 0), 0);
+  const artists = new Set(list.map((t) => t.artist)).size;
+  const lossless = list.filter((t) => /^(FLAC|WAV)$/i.test(t.format)).length;
+  return {
+    count,
+    total,
+    artists,
+    pct: count ? Math.round((lossless / count) * 100) : 0
+  };
+}
+
+function renderHome(animate = false) {
+  const home = $('#home');
+  if (!home) return;
+
+  const t = current();
+  const daily = homeDaily();
+  const collections = homeCollections();
+  const stats = homeStats();
+  const date = homeDate();
+  const dur = state.duration || t.durationSec || 0;
+  const dailyFirst = daily[0];
+  const rise = animate ? ' rise' : '';
+  const prevScroll = home.scrollTop;
+
+  home.innerHTML = `
+    <div class="home-top">
+      <section class="home-continue${rise}" style="--i:1" aria-label="继续播放">
+        <div class="label accent">一 · 继续播放</div>
+        <div class="home-body">
+          ${coverHTML(t, 'home-cover-lg')}
+          <div class="home-info">
+            <h1 class="home-title">${esc(t.title)}</h1>
+            <p class="home-artist">${esc(t.artist)}</p>
+            <div class="home-progress">
+              <div class="home-times mono"><span class="cur js-home-cur">${fmt(state.time)}</span><span class="dur js-home-dur">${fmt(dur)}</span></div>
+              <div class="home-track"><div class="home-fill js-home-fill"></div><div class="home-knob js-home-knob"></div></div>
+            </div>
+            <div class="home-actions">
+              <button class="home-play" type="button" data-act="home-play"><span>${state.playing ? '暂停' : '继续播放'}</span>${state.playing ? ICONS.pause : ICONS.play}</button>
+              <button class="home-ghost" type="button" data-act="home-queue">打开队列</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="home-daily${rise}" style="--i:2" aria-label="每日推荐">
+        <div class="home-daily-head"><span class="label accent">二 · 每日推荐</span><span class="label">DAILY MIX</span></div>
+        <div class="home-daily-bar">
+          <div class="home-daily-title">每日<br>推荐<div class="home-daily-sub mono">DAILY RECOMMENDATION</div></div>
+          <button class="home-daily-play" type="button" data-act="home-daily-play" data-id="${dailyFirst ? dailyFirst.id : ''}" aria-label="播放每日推荐">${ICONS.play}</button>
+          <div class="home-date mono" aria-label="${date.mm} 月 ${date.dd} 日"><span>${date.mm}</span><span>${date.dd}</span></div>
+        </div>
+        <div class="home-daily-list">
+          ${daily.map((d) => `<button class="home-daily-row" type="button" data-act="home-track" data-id="${d.id}" aria-label="播放 ${esc(d.title)}，${esc(d.artist)}">
+            ${coverHTML(d, 'home-cover-sm')}
+            <span class="home-daily-meta"><span class="home-daily-name">${esc(d.title)}</span><span class="home-daily-artist">${esc(d.artist)}</span></span>
+            <span class="mono home-daily-dur">${fmtLong(d.durationSec)}</span>
+          </button>`).join('')}
+        </div>
+      </section>
+    </div>
+
+    <section class="home-collections${rise}" style="--i:3" aria-label="推荐合集">
+      <div class="home-col-head">
+        <div class="home-col-title"><span class="label accent">三 · 推荐合集</span><span class="home-col-h">按心情和场景整理</span></div>
+        <button class="linkbtn" type="button" data-act="home-all">查看全部</button>
+      </div>
+      <div class="home-moods">
+        ${collections.map((c) => `<button class="home-mood" type="button" data-act="home-mood" data-id="${c.first ? c.first.id : ''}" aria-label="打开合集 ${esc(c.title)}">
+          ${coverHTML(null, 'home-mood-cover', c.cover)}
+          <span class="home-mood-title">${esc(c.title)}</span>
+          <span class="home-mood-meta mono">${c.meta}</span>
+        </button>`).join('')}
+      </div>
+    </section>
+
+    <section class="home-stats${rise}" style="--i:4" aria-label="曲库统计">
+      <div class="home-stat-cell"><div class="label">曲库</div><div class="home-stat-val">${pad2(stats.count)} 首</div></div>
+      <div class="home-stat-cell"><div class="label">总时长</div><div class="home-stat-val">${fmtLong(stats.total)}</div></div>
+      <div class="home-stat-cell"><div class="label">艺人</div><div class="home-stat-val">${pad2(stats.artists)} 位</div></div>
+      <div class="home-stat-cell"><div class="label">无损占比</div><div class="home-stat-val">${stats.pct}%</div></div>
+    </section>
+  `;
+
+  home.scrollTop = animate ? 0 : prevScroll;
+  updateHomeProgress();
+}
+
+function updateHomeProgress() {
+  if (state.nav !== 'home') return;
+  const home = $('#home');
+  if (!home) return;
+
+  const dur = state.duration || current().durationSec || 0;
+  const pct = dur ? clamp((state.time / dur) * 100, 0, 100) : 0;
+
+  $$('.js-home-cur', home).forEach((el) => { el.textContent = fmt(state.time); });
+  $$('.js-home-dur', home).forEach((el) => { el.textContent = fmt(dur); });
+  $$('.js-home-fill', home).forEach((el) => { el.style.width = pct.toFixed(2) + '%'; });
+  $$('.js-home-knob', home).forEach((el) => { el.style.left = pct.toFixed(2) + '%'; });
+
+  const btn = $('[data-act="home-play"]', home);
+  if (btn) {
+    const label = state.playing ? '暂停' : '继续播放';
+    const span = btn.querySelector('span');
+    if (!span || span.textContent !== label) {
+      btn.innerHTML = `<span>${label}</span>${state.playing ? ICONS.pause : ICONS.play}`;
+    }
+  }
+}
+
 /* ---------- 渲染：队列 / 曲库 / 播放列表 ---------- */
 
 function queueRow(t) {
   const isCur = t.id === state.currentId;
   const num = pad2(Math.max(0, trackIndex(t)) + 1);
-  const idxHtml = `<span class="qnum mono">${num}</span>`
-    + (isCur ? '<span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>' : '');
+  const idxHtml = `<span class="qmini" aria-hidden="true"><i></i><i></i><i></i></span><span class="qnum mono">${num}</span>`;
 
   return `<button class="qrow${isCur ? ' is-current' : ''}" type="button" data-id="${t.id}"
       aria-label="${esc(t.title)} — ${esc(t.artist)}"${isCur ? ' aria-current="true"' : ''}>
@@ -355,6 +541,7 @@ function queueRow(t) {
       <span class="qt">${esc(t.title)}</span>
       <span class="qa">${esc(t.artist)}</span>
     </span>
+    <span class="qwave" aria-hidden="true"></span>
     <span class="qdur mono">${fmtLong(t.durationSec)}</span>
   </button>`;
 }
@@ -380,7 +567,7 @@ function queueHTML() {
         <span class="qhead-count mono">${countText(list)}</span>
       </div>
       <div class="qhead-cols" aria-hidden="true">
-        <span>#</span><span>标题</span><span>艺人</span><span>时长</span>
+        <span>#</span><span>标题</span><span>艺人</span><span></span><span>时长</span>
       </div>
     </div>
     ${rows}
@@ -561,7 +748,9 @@ function updateTabs() {
   $$('.nav-item').forEach((b) => b.classList.toggle('is-active', b.dataset.nav === state.nav));
 
   $('#main').dataset.view = state.view;
+  $('#main').dataset.nav = state.nav;
   document.body.dataset.view = state.view;
+  document.body.dataset.nav = state.nav;
 
   $('#rtabs-meta').textContent = countText(visibleTracks());
 }
@@ -589,6 +778,7 @@ function renderTransport() {
     v.value = String(Math.round(state.volume * 100));
     paintSlider(v);
   });
+  $$('.js-volval').forEach((e) => { e.textContent = String(Math.round(state.volume * 100)); });
 
   document.body.classList.toggle('is-playing', state.playing);
 
@@ -615,6 +805,7 @@ function renderTransportTime() {
 
   updateLyricsCurrent(false);
   updateThemeTexts();
+  updateHomeProgress();
 }
 
 /* ---------- 播放核心 ---------- */
@@ -706,6 +897,7 @@ function setTrack(id, playNow = true) {
   renderNow();
   renderPanel();
   renderTransport();
+  renderHome(false);
 
   if (playNow) play();
 }
@@ -746,6 +938,7 @@ audio.addEventListener('loadedmetadata', () => {
     t.durationSec = audio.duration;
     state.duration = audio.duration;
     renderTransportTime();
+    renderHome(false);
   }
 });
 
@@ -1257,6 +1450,7 @@ function handleAudioFiles(files) {
         renderTransport();
       }
       renderPanel();
+      renderHome(false);
     }, { once: true });
   });
 
@@ -1272,6 +1466,7 @@ function handleAudioFiles(files) {
         track.coverUrl = url;
         if (track.id === state.currentId) renderNow();
         renderPanel();
+        renderHome(false);
       }
     })();
   }
@@ -1309,8 +1504,10 @@ function switchView(view) {
 
 function switchNav(nav) {
   state.nav = nav;
+  if (isMobile() && nav === 'home') state.nav = 'now';
   renderPanel();
   updateTabs();
+  if (state.nav === 'home') renderHome(true);
 }
 
 /* ---------- 初始化 DOM ---------- */
@@ -1336,6 +1533,10 @@ function bindEvents() {
     state.query = e.target.value.trim();
     const box = e.target.closest('.search');
     if (box) box.classList.toggle('has-value', !!e.target.value);
+    if (state.query && state.nav === 'home') {
+      state.nav = 'now';
+      state.view = 'queue';
+    }
     if (isMobile() && state.query && state.view === 'player') state.view = 'queue';
     renderPanel();
     updateTabs();
@@ -1478,6 +1679,16 @@ function bindEvents() {
       else if (a === 'seek-lyric') {
         seekTo(Number(act.dataset.time));
         if (!state.playing) play();
+      } else if (a === 'home-play') {
+        togglePlay();
+      } else if (a === 'home-queue') {
+        switchNav('now');
+        switchView('queue');
+      } else if (a === 'home-all') {
+        switchNav('library');
+      } else if (a === 'home-daily-play' || a === 'home-track' || a === 'home-mood') {
+        const id = Number(act.dataset.id);
+        if (id) setTrack(id, true);
       }
       return;
     }
@@ -1493,7 +1704,7 @@ function bindEvents() {
     const viewBtn = e.target.closest('button[data-view]');
     if (viewBtn) { switchView(viewBtn.dataset.view); return; }
 
-    const navBtn = e.target.closest('[data-nav]');
+    const navBtn = e.target.closest('button[data-nav]');
     if (navBtn) { switchNav(navBtn.dataset.nav); return; }
 
     const modeBtn = e.target.closest('[data-mode]');
@@ -1513,6 +1724,7 @@ function bindEvents() {
         if (v !== e.target) v.value = e.target.value;
         paintSlider(v);
       });
+      $$('.js-volval').forEach((v) => { v.textContent = e.target.value; });
       return;
     }
     if (e.target.matches('.js-seek')) {
@@ -1687,5 +1899,6 @@ bindEvents();
 renderNow();
 renderPanel();
 renderTransport();
+renderHome(true);
 applySpectrum();
 requestAnimationFrame(loop);
