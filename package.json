@@ -1,0 +1,16 @@
+{
+  "name": "nekoplay",
+  "private": true,
+  "version": "0.1.0",
+  "description": "NEKOPLAY local music player (Tauri)",
+  "scripts": {
+    "sync": "node scripts/sync-web.mjs",
+    "dev": "npm run sync && tauri dev",
+    "build": "npm run sync && tauri build",
+    "build:exe": "npm run sync && tauri build --no-bundle",
+    "icon": "tauri icon app-icon.png"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.5"
+  }
+}

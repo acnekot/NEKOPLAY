@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>NEKOPLAY · 本地音乐播放器原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-view="queue">
+
+<a class="skip" href="#main">跳到主要内容</a>
+
+<!-- 频谱背景层：位于内容之下、播放栏之上 -->
+<div class="spectrum" id="spectrum" aria-hidden="true">
+  <div class="bars" id="bars"></div>
+</div>
+
+<header class="topbar">
+  <div class="wrap topbar-in rise" style="--i:0" data-tauri-drag-region>
+    <div class="brand" aria-label="NEKOPLAY" data-tauri-drag-region>NEKO<span>PLAY</span><span class="brand-eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
+
+    <nav class="mainnav" aria-label="主导航" data-tauri-drag-region>
+      <button class="nav-item is-active" type="button" data-nav="now">正在播放</button>
+      <button class="nav-item" type="button" data-nav="library">曲库</button>
+      <button class="nav-item" type="button" data-nav="playlist">播放列表</button>
+    </nav>
+
+    <div class="actions" data-tauri-drag-region>
+      <label class="search" id="search-box">
+        <span class="sr-only">搜索曲目或艺人</span>
+        <span class="search-tag mono" aria-hidden="true">SEARCH</span>
+        <input id="search" type="search" autocomplete="off" spellcheck="false" aria-label="搜索曲目或艺人">
+        <span class="search-esc mono" aria-hidden="true">ESC</span>
+      </label>
+
+      <div class="avatar-wrap">
+        <button class="avatar" id="btn-avatar" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="avatar-menu" aria-label="账户与设置">猫</button>
+        <div class="avatar-menu" id="avatar-menu" role="menu" aria-label="账户菜单" hidden>
+          <span class="menu-corner tl" aria-hidden="true"></span>
+          <span class="menu-corner tr" aria-hidden="true"></span>
+          <span class="menu-corner bl" aria-hidden="true"></span>
+          <span class="menu-corner br" aria-hidden="true"></span>
+          <div class="avatar-head">
+            <div class="avatar-name">本地账户</div>
+            <div class="avatar-sub mono">LOCAL ACCOUNT</div>
+          </div>
+          <button class="menu-item" id="btn-settings" type="button" role="menuitem">设置</button>
+          <button class="menu-item" id="btn-import" type="button" role="menuitem">导入音乐</button>
+          <button class="menu-item danger" id="btn-quit" type="button" role="menuitem">退出应用</button>
+        </div>
+      </div>
+
+      <button class="iconbtn only-m" id="btn-msearch" type="button" aria-label="搜索" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+      </button>
+    </div>
+
+    <input type="file" id="file-audio" accept="audio/*" multiple hidden>
+    <input type="file" id="file-lrc" accept=".lrc,.txt,text/plain" hidden>
+  </div>
+
+  <div class="wincontrols" role="group" aria-label="窗口控制">
+    <button class="winbtn" type="button" data-win="min" aria-label="最小化">
+      <svg class="ico" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path d="M2 6h8" stroke="currentColor" stroke-width="1.4"/></svg>
+    </button>
+    <button class="winbtn" type="button" data-win="max" aria-label="最大化">
+      <svg class="ico ico-max" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><rect x="2.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+      <svg class="ico ico-restore" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><rect x="2.2" y="4" width="5.8" height="5.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.2 2.4h5.4v5.4" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+    </button>
+    <button class="winbtn winbtn-close" type="button" data-win="close" aria-label="关闭">
+      <svg class="ico" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path d="M2.6 2.6l6.8 6.8M9.4 2.6l-6.8 6.8" stroke="currentColor" stroke-width="1.4"/></svg>
+    </button>
+  </div>
+</header>
+<div class="toprule"></div>
+
+<main class="wrap layout" id="main" data-view="queue">
+  <div class="mtabs" role="tablist" aria-label="视图切换">
+    <button class="mtab" type="button" role="tab" data-view="player" aria-selected="false">正在播放</button>
+    <button class="mtab" type="button" role="tab" data-view="queue" aria-selected="true">队列</button>
+    <button class="mtab" type="button" role="tab" data-view="lyrics" aria-selected="false">歌词</button>
+  </div>
+
+  <div class="cols">
+    <section class="col-left" aria-label="正在播放">
+      <div class="theme-kicker label accent" aria-hidden="true">NOW PLAYING · 正在播放</div>
+      <div class="big-number" aria-hidden="true">
+        <span id="big-num">04</span><span class="big-num-total" id="big-num-total">/ 08</span>
+      </div>
+      <div class="cover rise" id="cover" style="--i:1" aria-hidden="true"></div>
+      <h1 class="track-title rise" id="track-title" style="--i:2">—</h1>
+      <p class="track-artist rise" id="track-artist" style="--i:2">—</p>
+      <p class="track-meta mono rise" id="track-meta" style="--i:3">—</p>
+
+      <div class="next-block rise" style="--i:3">
+        <div class="label accent">NEXT · 下一首</div>
+        <button class="next-track" id="next-track" type="button">
+          <span class="nt-title" id="next-title">—</span>
+          <span class="nt-artist" id="next-artist">—</span>
+        </button>
+      </div>
+
+      <div class="big-elapsed" aria-hidden="true">
+        <span id="big-time">00:00</span><span class="big-dur" id="big-dur">/ 05:11</span>
+      </div>
+
+      <div class="orig-stats" aria-hidden="true">
+        <div><span class="label">格式</span><span class="mono" id="orig-format">FLAC</span></div>
+        <div><span class="label">采样率</span><span class="mono" id="orig-rate">44.1 kHz</span></div>
+        <div><span class="label">剩余</span><span class="mono" id="orig-remain">-05:11</span></div>
+      </div>
+
+      <div class="m-player">
+        <div class="m-progress" data-progress></div>
+        <div class="m-controls" data-controls></div>
+        <div class="seg mode-seg m-mode" data-mode-seg aria-label="播放模式"></div>
+      </div>
+    </section>
+
+    <section class="col-right rise" style="--i:2" aria-label="队列与歌词">
+      <div class="rtabs" id="rtabs" role="tablist" aria-label="队列与歌词">
+        <button class="rtab" type="button" role="tab" data-view="queue" aria-selected="true">队列</button>
+        <button class="rtab" type="button" role="tab" data-view="lyrics" aria-selected="false">歌词</button>
+        <span class="rtabs-meta mono" id="rtabs-meta"></span>
+      </div>
+      <div class="rpanel" id="rpanel" role="tabpanel"></div>
+    </section>
+  </div>
+</main>
+
+<footer class="playbar" aria-label="播放控制">
+  <div class="wrap pb-grid rise" style="--i:4">
+    <div class="pb-left">
+      <div class="cover mini-cover" id="mini-cover" aria-hidden="true"></div>
+      <div class="pb-meta">
+        <div class="pb-title" id="pb-title">—</div>
+        <div class="pb-artist" id="pb-artist">—</div>
+      </div>
+    </div>
+
+    <div class="pb-center">
+      <div class="pb-controls" data-controls></div>
+      <div class="pb-progress" data-progress></div>
+    </div>
+
+    <div class="pb-right">
+      <div class="seg mode-seg" data-mode-seg aria-label="播放模式"></div>
+      <div class="volume">
+        <span class="label">音量</span>
+        <input class="slider vol js-vol" type="range" min="0" max="100" step="1" value="80" aria-label="音量">
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- 手机端歌词 / 队列底部固定控制 -->
+<div class="m-foot" id="m-foot" aria-label="播放控制">
+  <div class="m-foot-progress" data-progress></div>
+  <div class="m-controls" data-controls></div>
+</div>
+
+<!-- 设置面板 -->
+<div class="settings" id="spectrum-panel" role="dialog" aria-label="设置" hidden>
+  <div class="settings-head">
+    <span class="settings-title">SETTINGS · 设置</span>
+    <button class="linkbtn" id="settings-done" type="button">完成</button>
+  </div>
+
+  <div class="settings-body">
+    <div class="setrow setrow-theme">
+      <span class="label">主题</span>
+      <div class="setctl seg theme-seg" data-theme-set role="group" aria-label="主题">
+        <button type="button" data-v="classic" aria-pressed="true">经典</button>
+        <button type="button" data-v="glass" aria-pressed="false">玻璃</button>
+        <button type="button" data-v="bigtype" aria-pressed="false">大字</button>
+        <button type="button" data-v="bignum" aria-pressed="false">数字</button>
+        <button type="button" data-v="original" aria-pressed="false">初版</button>
+      </div>
+    </div>
+
+    <div class="settings-section"><span class="label accent">SPECTRUM · 频谱</span></div>
+
+    <div class="setrow">
+      <span class="label">显示</span>
+      <div class="setctl"><input class="check" type="checkbox" id="set-visible" aria-label="显示频谱" checked></div>
+    </div>
+
+    <div class="setrow">
+      <span class="label">样式</span>
+      <div class="setctl seg" data-set="style" role="group" aria-label="频谱样式">
+        <button type="button" data-v="bars" aria-pressed="true">柱状</button>
+        <button type="button" data-v="thin" aria-pressed="false">细线</button>
+        <button type="button" data-v="mirror" aria-pressed="false">镜像</button>
+      </div>
+    </div>
+
+    <div class="setrow">
+      <span class="label">位置</span>
+      <div class="setctl seg" data-set="position" role="group" aria-label="频谱位置">
+        <button type="button" data-v="bottom" aria-pressed="true">底部</button>
+        <button type="button" data-v="fill" aria-pressed="false">铺满</button>
+      </div>
+    </div>
+
+    <div class="setrow">
+      <span class="label">柱数</span>
+      <div class="setctl seg" data-set="count" role="group" aria-label="频谱柱数">
+        <button type="button" data-v="24" aria-pressed="false">24</button>
+        <button type="button" data-v="48" aria-pressed="true">48</button>
+        <button type="button" data-v="96" aria-pressed="false">96</button>
+      </div>
+    </div>
+
+    <div class="setrow">
+      <span class="label">速度</span>
+      <div class="setctl seg" data-set="speed" role="group" aria-label="频谱速度">
+        <button type="button" data-v="0.5" aria-pressed="false">0.5×</button>
+        <button type="button" data-v="1" aria-pressed="true">1×</button>
+        <button type="button" data-v="2" aria-pressed="false">2×</button>
+      </div>
+    </div>
+
+    <div class="setrow">
+      <span class="label">透明度</span>
+      <div class="setctl">
+        <input class="slider" id="set-opacity" type="range" min="4" max="45" step="1" value="16" aria-label="频谱透明度">
+        <span class="val mono" id="val-opacity">16%</span>
+      </div>
+    </div>
+
+    <div class="setrow">
+      <span class="label">高度</span>
+      <div class="setctl">
+        <input class="slider" id="set-height" type="range" min="80" max="320" step="1" value="200" aria-label="频谱高度">
+        <span class="val mono" id="val-height">200px</span>
+      </div>
+    </div>
+
+    <div class="setrow">
+      <span class="label">颜色</span>
+      <div class="setctl"><div class="swatches" id="set-colors"></div></div>
+    </div>
+  </div>
+
+  <div class="settings-foot">
+    <button class="linkbtn" id="settings-reset" type="button">恢复默认</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<audio id="audio" preload="metadata"></audio>
+
+<script src="app.js"></script>
+</body>
+</html>

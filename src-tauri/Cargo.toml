@@ -1,0 +1,17 @@
+[package]
+name = "nekoplay"
+version = "0.1.0"
+description = "NEKOPLAY local music player"
+authors = ["NEKOPLAY"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "nekoplay_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
