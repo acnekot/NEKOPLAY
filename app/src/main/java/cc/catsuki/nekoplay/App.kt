@@ -28,9 +28,13 @@ class App : Application(), SingletonImageLoader.Factory {
                 .header("Referer", "https://music.163.com/").build() else r)
         }.build()
         return ImageLoader.Builder(context)
-            .memoryCache { MemoryCache.Builder().maxSizeBytes(24L * 1024 * 1024).build() }
+            .memoryCache { MemoryCache.Builder().maxSizeBytes((if (UiPref.lowMem) 10L else 24L) * 1024 * 1024).build() }
             .diskCache { DiskCache.Builder().directory(context.cacheDir.resolve("img").toOkioPath()).maxSizeBytes(200L * 1024 * 1024).build() }
-            .components { add(OkHttpNetworkFetcherFactory(callFactory = { client })) }
+            .components {
+                add(OkHttpNetworkFetcherFactory(callFactory = { client }))
+                // 动态头像：Android 9+ 用系统解码器，老系统用 GIF 解码器
+                if (android.os.Build.VERSION.SDK_INT >= 28) add(coil3.gif.AnimatedImageDecoder.Factory()) else add(coil3.gif.GifDecoder.Factory())
+            }
             .build()
     }
 

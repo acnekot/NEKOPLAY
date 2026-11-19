@@ -49,6 +49,8 @@ sealed interface Page {
     data object Background : Page
     data object HomeLayout : Page
     data object Effects : Page
+    data object Fm : Page
+    data object Tuning : Page
 }
 
 /** 全局界面状态 */
@@ -63,7 +65,7 @@ class Nav {
     var sheet by mutableStateOf<SheetSpec?>(null)
     var comments by mutableStateOf<Track?>(null)
     /** 宽屏右侧面板：0 关 / 1 歌词 / 2 播放队列 */
-    var side by mutableIntStateOf(1)
+    var side by mutableIntStateOf(0) // 默认不打开
     var input by mutableStateOf<InputSpec?>(null)
     fun push(p: Page) { stack.add(p) }
     fun back(): Boolean = when {
@@ -86,7 +88,7 @@ object Boot {
         Ncm.init(); Store.init(); Engine.init(); Bg.init(); HomeLayout.init(); FxStore.init()
         val ui = Plat.prefs("ui")
         Anim.level = ui.getInt("anim", 1)
-        ThemePref.load(); Typo.load(); Look.load()
+        ThemePref.load(); Typo.load(); Look.load(); LyricPref.load(); AnimStyle.load(); UiPref.load(); Vol.load()
         Perf.overlay.value = ui.getBoolean("perf", false)
     }
 }
@@ -99,12 +101,27 @@ object Anim {
     val f get() = factors[level]
     fun stiff(base: Float) = base * f * f
 }
-val sp get() = spring<IntOffset>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.StiffnessMediumLow))
-val spF get() = spring<Float>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.StiffnessMediumLow))
+/** 动效形式：0 弹簧（带一点回弹感的物理动画）/ 1 缓动（先快后慢）/ 2 线性 / 3 关闭（瞬间切换） */
+object AnimStyle {
+    val labels = listOf("弹簧", "缓动", "线性", "关闭")
+    var style by mutableIntStateOf(0)
+    fun load() { style = Plat.prefs("ui").getInt("animStyle", 0) }
+    fun set(v: Int) { style = v; Plat.prefs("ui").edit().putInt("animStyle", v).apply() }
+    val ms get() = (320 / Anim.f).toInt()
+}
+private fun <T> styled(stiff: Float): androidx.compose.animation.core.FiniteAnimationSpec<T> = when (AnimStyle.style) {
+    1 -> androidx.compose.animation.core.tween(AnimStyle.ms, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+    2 -> androidx.compose.animation.core.tween(AnimStyle.ms, easing = androidx.compose.animation.core.LinearEasing)
+    3 -> androidx.compose.animation.core.snap()
+    else -> spring(dampingRatio = .92f, stiffness = Anim.stiff(stiff))
+}
+val sp: androidx.compose.animation.core.FiniteAnimationSpec<IntOffset> get() = styled(Spring.StiffnessMediumLow)
+val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styled(Spring.StiffnessMediumLow)
 
 /** chrome：桌面版的自绘标题栏（放在最上面，能用 LocalNav）；手机传 null */
 @Composable fun Root(chrome: (@Composable () -> Unit)? = null) {
     val nav = remember { Nav() }
+    SideEffect { Keys.nav = nav }
     val st by Engine.state.collectAsState()
     val err by Engine.error.collectAsState()
     LaunchedEffect(err) { if (err != null) { nav.toast = err; Engine.error.value = null } }
@@ -116,6 +133,7 @@ val spF get() = spring<Float>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.S
         BoxWithConstraints(Modifier.fillMaxSize().backdrop()) {
             // 窗口宽度 ≥ 900dp：PC 三栏布局；否则就是手机布局（拖动窗口大小会实时切换）
             val wide = maxWidth >= 900.dp
+            SideEffect { Screen.wide = wide }
             BgLayer()
             Column(Modifier.fillMaxSize()) {
             chrome?.invoke()
@@ -146,17 +164,23 @@ val spF get() = spring<Float>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.S
             }
             if (!wide) QueueSheet()
             if (!wide) CommentSheet() // PC 宽屏：评论放在右栏
-            ActionSheet()
+            ActionSheet(wide)
             InputDialog()
             AnimatedVisibility(nav.toast != null, Modifier.align(Alignment.BottomCenter).padding(bottom = if (hasTrack) 150.dp else 90.dp, start = 24.dp, end = 24.dp).navigationBarsPadding(),
                 enter = fadeIn(tween(180)), exit = fadeOut(tween(180))) {
                 Box(Modifier.background(c.k).padding(horizontal = 16.dp, vertical = 11.dp)) { T(nav.toast ?: "", 14, c.tagFg, lines = 3, lh = 1.4f, align = TextAlign.Center) }
             }
             val po by Perf.overlay.collectAsState()
+            // 桌面版没有系统帧统计：浮窗开着时自己数帧（两帧间隔超过 1.5 倍刷新周期算卡顿）
+            if (po && Plat.isDesktop) LaunchedEffect(Unit) {
+                var last = 0L
+                while (true) androidx.compose.runtime.withFrameNanos { t -> if (last != 0L) { val d = t - last; Perf.frame(d, 0, d > 25_000_000) }; last = t }
+            }
             if (po) {
                 val ps by Perf.stat.collectAsState()
                 Box(Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 6.dp, bottom = 140.dp).background(Color(0xCC000000)).padding(horizontal = 6.dp, vertical = 4.dp)) {
-                    T("CPU %.0f%%  %dfps\n帧 %.1f GPU %.1fms 卡%d\nGPU %s  PSS %dM".format(ps.cpu, ps.fps, ps.frameMs, ps.gpuMs, ps.jank, ps.gpu ?: "-", ps.pss), 10, Color.White, mono = true, lines = 3, lh = 1.3f)
+                    T(if (Plat.isDesktop) "CPU %.0f%%  %dfps\n帧 %.1fms 卡%d\n内存 %dM".format(ps.cpu, ps.fps, ps.frameMs, ps.jank, ps.pss)
+                      else "CPU %.0f%%  %dfps\n帧 %.1f GPU %.1fms 卡%d\nGPU %s  PSS %dM".format(ps.cpu, ps.fps, ps.frameMs, ps.gpuMs, ps.jank, ps.gpu ?: "-", ps.pss), 10, Color.White, mono = true, lines = 3, lh = 1.3f)
                 }
             }
         }
@@ -166,7 +190,7 @@ val spF get() = spring<Float>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.S
 @Composable fun TopBar() {
     val nav = LocalNav.current
     val p = c
-    Row(Modifier.fillMaxWidth().background(p.bar).statusBarsPadding().height(56.dp).drawBehind {
+    Row(Modifier.fillMaxWidth().background(barBg()).statusBarsPadding().height(56.dp).drawBehind {
         if (!Look.flat) drawRect(p.k, Offset(0f, size.height - 3.dp.toPx()), androidx.compose.ui.geometry.Size(size.width, 3.dp.toPx()))
     }.padding(start = 18.dp, end = 6.dp, bottom = 3.dp), verticalAlignment = Alignment.CenterVertically) {
         T("NEKOPLAY", Fs.PAGE, w = 900, ls = .02f, modifier = Modifier.press { nav.player = false; nav.stack.clear(); nav.tab = 0 })
@@ -205,7 +229,7 @@ val spF get() = spring<Float>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.S
 @Composable fun BottomNav() {
     val nav = LocalNav.current
     val p = c
-    Row(Modifier.fillMaxWidth().background(p.bar).drawBehind { if (!Look.flat) drawRect(p.k, size = androidx.compose.ui.geometry.Size(size.width, 3.dp.toPx())) }.navigationBarsPadding().padding(top = 3.dp).height(56.dp)) {
+    Row(Modifier.fillMaxWidth().background(barBg()).drawBehind { if (!Look.flat) drawRect(p.k, size = androidx.compose.ui.geometry.Size(size.width, 3.dp.toPx())) }.navigationBarsPadding().padding(top = 3.dp).height(56.dp)) {
         listOf(Triple(NIcons.home, "主页", 0), Triple(NIcons.library, "曲库", 1)).forEach { (i, l, k) ->
             val on = nav.tab == k && nav.stack.isEmpty()
             Column(Modifier.weight(1f).fillMaxHeight().press(haptic = true) { nav.stack.clear(); nav.tab = k }.background(if (on) p.p else Color.Transparent),
@@ -260,7 +284,7 @@ val spF get() = spring<Float>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.S
     if (page !is Page.Search) Row(Modifier.fillMaxWidth().height(48.dp).drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx())) }.padding(start = 6.dp, end = 18.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(44.dp).press { nav.back() }, contentAlignment = Alignment.Center) { NIcon(NIcons.back, 20.dp) }
-        T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; else -> "" }, 12, p.s, mono = true, ls = .1f)
+        T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "DETAILS"; else -> "" }, 12, p.s, mono = true, ls = .1f)
     }
     Box(Modifier.weight(1f)) {
         when (page) {
@@ -283,9 +307,59 @@ val spF get() = spring<Float>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.S
             Page.Background -> BgEditorPage()
             Page.HomeLayout -> HomeLayoutPage()
     Page.Effects -> FxPage()
+    Page.Fm -> FmPage()
+    Page.Tuning -> TuningPage()
         }
     }
 }
+}
+
+/** 键盘快捷键（桌面）：拿到当前界面状态 */
+object Keys {
+    var nav: Nav? = null
+    val HELP = listOf(
+        "空格" to "播放 / 暂停", "Ctrl + →" to "下一首", "Ctrl + ←" to "上一首", "→ / ←" to "快进 / 快退 5 秒",
+        "Ctrl + ↑ / ↓" to "音量 + / −", "Ctrl + L" to "喜欢 / 取消喜欢", "Ctrl + P" to "打开 / 收起播放页",
+        "Ctrl + F" to "搜索", "Ctrl + Q" to "播放队列", "Ctrl + D" to "歌词栏", "Ctrl + ," to "设置", "Esc" to "返回",
+        "媒体键" to "播放 / 暂停、上一首、下一首（窗口在前台时）",
+    )
+    /** 带 Ctrl 的组合键和媒体键：输入框里也生效 */
+    fun handleCtrl(key: androidx.compose.ui.input.key.Key, ctrl: Boolean): Boolean {
+        val n = nav ?: return false
+        val K = androidx.compose.ui.input.key.Key
+        when (key) {
+            K.MediaPlayPause -> { Engine.toggle(); return true }
+            K.MediaNext -> { Engine.next(); return true }
+            K.MediaPrevious -> { Engine.prev(); return true }
+        }
+        if (!ctrl) return false
+        when (key) {
+            K.DirectionRight -> Engine.next()
+            K.DirectionLeft -> Engine.prev()
+            K.DirectionUp -> Vol.set(Vol.v + .05f)
+            K.DirectionDown -> Vol.set(Vol.v - .05f)
+            K.Spacebar -> Engine.toggle()
+            K.L -> Engine.state.value.current?.let { t -> Store.toggleLike(t) { n.toast = it }; n.toast = if (t.id in Store.likedIds.value) "已喜欢" else "已取消喜欢" }
+            K.P -> { if (Engine.state.value.current != null) { n.lyrics = false; n.player = !n.player } }
+            K.F -> { n.player = false; n.stack.clear(); n.push(Page.Search) }
+            K.Q -> n.queue = true
+            K.D -> n.side = if (n.side == 1) 0 else 1
+            K.Comma -> { n.player = false; n.stack.clear(); n.push(Page.Settings) }
+            else -> return false
+        }
+        return true
+    }
+    /** 不带修饰键的：输入框没用掉才会到这里 */
+    fun handlePlain(key: androidx.compose.ui.input.key.Key): Boolean {
+        val K = androidx.compose.ui.input.key.Key
+        when (key) {
+            K.Spacebar -> Engine.toggle()
+            K.DirectionRight -> Engine.seek(Engine.position.value + 5000)
+            K.DirectionLeft -> Engine.seek((Engine.position.value - 5000).coerceAtLeast(0))
+            else -> return false
+        }
+        return true
+    }
 }
 
 /** 标题栏搜索框 → 搜索页：把要搜的词交给搜索页 */

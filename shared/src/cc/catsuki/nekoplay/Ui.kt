@@ -277,6 +277,7 @@ private fun vector(spec: String): ImageVector = iconCache.getOrPut(spec) {
 /** 进度条：热区 16，线 4（拖动时 6），拖动时出现方形滑块 */
 @Composable fun ScrubBar(durMs: Long, hit: Dp = 16.dp, interactive: Boolean = true, onScrub: (Float?) -> Unit = {}) {
     val pos by Engine.position.collectAsState()
+    val buf by Engine.buffered.collectAsState()
     var drag by remember { mutableStateOf<Float?>(null) }
     val dur = durMs.coerceAtLeast(1)
     // 和 Flutter 版 ScrubBar 完全一致：
@@ -302,6 +303,8 @@ private fun vector(spec: String): ImageVector = iconCache.getOrPut(spec) {
     }).drawBehind {
         val y = size.height / 2; val hp = h.toPx()
         drawRect(p.l3, Offset(0f, y - hp / 2), Size(size.width, hp))
+        // 已缓存的部分：比底色深一点
+        if (UiPref.showBuffer && interactive) drawRect(p.k.copy(alpha = .22f), Offset(0f, y - hp / 2), Size(size.width * (buf.toFloat() / dur).coerceIn(0f, 1f), hp))
         drawRect(p.p, Offset(0f, y - hp / 2), Size(size.width * fill, hp))
         if (th > 0) { val s = 12.dp.toPx() * ts; drawRect(p.p.copy(alpha = th), Offset(size.width * thumbAt - s / 2, y - s / 2), Size(s, s)) }
     })
@@ -323,11 +326,43 @@ fun listMeta(l: List<Track>) = "${two(l.size)} 首 · ${fmt(l.sumOf { it.duratio
     val p by Store.profile.collectAsState()
     Box(Modifier.size(size).background(c.p).nb(1.dp, c.k), contentAlignment = Alignment.Center) {
         if (p == null) T("猫", font, Color.White, 900)
-        else AsyncImage(img(p!!.avatar, 256), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+        else Plat.impl.AnimatedImage(p!!.avatar, Modifier.matchParentSize())
     }
 }
 
 @Suppress("unused") private fun Float.r() = roundToInt()
+
+/** 当前是不是宽屏（PC）布局，由 Root 按窗口宽度更新 */
+object Screen { var wide by mutableStateOf(false) }
+
+/** 操作按钮行：手机占满一行；宽屏只占右边一半，避免按钮拉得太长 */
+@Composable fun ActionRow(content: @Composable RowScope.() -> Unit) {
+    if (Screen.wide) Row(Modifier.fillMaxWidth()) { Spacer(Modifier.weight(1f)); Row(Modifier.weight(1f), content = content) }
+    else Row(Modifier.fillMaxWidth(), content = content)
+}
+
+/** 顶栏 / 侧边栏 / 播放条的底色：有自定义背景时半透明，让背景连成一片 */
+@Composable fun barBg(): Color = if (Bg.on) c.bar.copy(alpha = UiPref.barAlpha) else c.bar
+
+/** 细节偏好（详细调整页） */
+object UiPref {
+    var showBuffer by mutableStateOf(true)      // 进度条上显示已缓存的部分
+    var lyricBlur by mutableStateOf(true)       // 歌词远处轻微模糊
+    var karaoke by mutableStateOf(true)         // 逐字高亮
+    var barAlpha by mutableFloatStateOf(.5f)    // 有背景时栏位的不透明度
+    var lowMem by mutableStateOf(false)         // 省内存模式
+    var tray by mutableStateOf(true)            // 桌面：关闭窗口时留在托盘继续播放
+    private val k get() = Plat.prefs("ui")
+    fun load() { showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true) }
+    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).apply() }
+}
+
+/** 歌词字号（设置里可调，歌词页 / 右栏 / 播放页都用它） */
+object LyricPref {
+    var size by mutableIntStateOf(24)
+    fun load() { size = Plat.prefs("ui").getInt("lyricSize", 24) }
+    fun set(v: Int) { size = v.coerceIn(16, 40); Plat.prefs("ui").edit().putInt("lyricSize", size).apply() }
+}
 
 /** 带角标的封面：封面图 + 右下角蓝底白色图标；没有封面时退回图标块 */
 @Composable fun BadgeCover(url: String?, size: Dp, icon: String, filledFallback: Boolean) {

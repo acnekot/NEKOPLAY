@@ -21,6 +21,8 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -43,8 +45,34 @@ import java.awt.MouseInfo
     val p = c
     val max = state.placement == WindowPlacement.Maximized
     fun toggleMax() { state.placement = if (max) WindowPlacement.Floating else WindowPlacement.Maximized }
-    WindowDraggableArea(Modifier.fillMaxWidth().height(60.dp)) {
-        Row(Modifier.fillMaxSize().pointerInput(max) { detectTapGestures(onDoubleTap = { toggleMax() }) }.padding(start = 26.dp, end = 8.dp),
+    // 整条标题栏都能拖（按钮、头像除外）；双击最大化 / 还原。自己处理拖动，比 WindowDraggableArea 的判定范围大
+    var lastDown by remember { mutableStateOf(0L) }
+    Box(Modifier.fillMaxWidth().height(60.dp).pointerInput(max) {
+        awaitEachGesture {
+            awaitFirstDown()
+            val now = System.currentTimeMillis()
+            if (now - lastDown < 350) { lastDown = 0; toggleMax(); return@awaitEachGesture }
+            lastDown = now
+            val start = MouseInfo.getPointerInfo().location
+            val w0 = window.location
+            var moved = false
+            while (true) {
+                val ev = awaitPointerEvent()
+                if (ev.changes.none { it.pressed }) break
+                val p0 = MouseInfo.getPointerInfo().location
+                val dx = p0.x - start.x; val dy = p0.y - start.y
+                if (!moved && dx * dx + dy * dy < 16) continue
+                if (!moved && max) {
+                    // 最大化时拖动：先还原，再让窗口跟着鼠标走
+                    state.placement = WindowPlacement.Floating
+                }
+                moved = true
+                window.setLocation(w0.x + dx, w0.y + dy)
+                ev.changes.forEach { it.consume() }
+            }
+        }
+    }) {
+        Row(Modifier.fillMaxSize().padding(start = 26.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             T("NEKOPLAY", Fs.HEAD + 2, w = 900, ls = .01f, modifier = Modifier.press { nav.player = false; nav.stack.clear(); nav.tab = 0 })
             Spacer(Modifier.weight(1f))

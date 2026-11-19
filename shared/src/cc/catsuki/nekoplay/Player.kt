@@ -48,7 +48,7 @@ import androidx.compose.runtime.withFrameMillis
     val t = st.current ?: return
     val p = c
     Box(Modifier.fillMaxWidth().height(60.dp)) {
-        Row(Modifier.fillMaxSize().background(p.bar).drawBehind { if (!Look.flat) drawRect(p.l2, size = Size(size.width, 1.dp.toPx())) }
+        Row(Modifier.fillMaxSize().background(barBg()).drawBehind { if (!Look.flat) drawRect(p.l2, size = Size(size.width, 1.dp.toPx())) }
             .press { nav.lyrics = false; nav.player = true }.padding(start = 14.dp, end = 6.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Cover(t.cover, 40.dp, t.title)
             Spacer(Modifier.width(12.dp))
@@ -273,7 +273,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                 Box(Modifier.fillMaxWidth()
                     .onPlaced { val y = it.positionInParent().y; if (tops[i] != y) { tops[i] = y; measured++ } }
                     .graphicsLayer { translationY = offs[i].value + manual.value; alpha = a }
-                    .then(if (!browsing && dist in 2..8 && Plat.impl.liveBlur) Modifier.blur(1.2.dp) else Modifier)
+                    .then(if (UiPref.lyricBlur && !browsing && dist in 2..8 && Plat.impl.liveBlur) Modifier.blur(1.2.dp) else Modifier)
                     .press { Engine.seek(line.t); backJob?.cancel(); browsing = false; scope.launch { manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessMediumLow))) } }
                     .padding(bottom = with(LocalDensity.current) { gap.toDp() })) {
                     if (line.text.isEmpty()) {
@@ -283,7 +283,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                             repeat(3) { k -> Box(Modifier.size(8.dp).background(if (i == cur && prog > k / 3f) p.k else p.k.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape)) }
                         }
                     } else Column {
-                        if (i == cur && line.words != null && !browsing) KaraokeLine(line, pos) else T(line.text, Fs.PAGE, p.k, 800, lines = 6, lh = 1.25f)
+                        if (UiPref.karaoke && i == cur && line.words != null && !browsing) KaraokeLine(line, pos) else T(line.text, LyricPref.size.toFloat(), p.k, 800, lines = 6, lh = 1.25f)
                         if (showTr && line.tr != null) T(line.tr, Fs.SUB, p.s, lines = 4, lh = 1.45f, modifier = Modifier.padding(top = 4.dp))
                     }
                 }
@@ -335,10 +335,10 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     var now by remember { mutableLongStateOf(pos) }
     LaunchedEffect(pos, playing) {
         val base = pos; now = base
-        if (playing) { val start = withFrameMillis { it }; while (true) withFrameMillis { f -> now = base + (f - start) } }
+        if (playing) { val start = withFrameMillis { it }; while (true) { withFrameMillis { f -> now = base + (f - start) }; if (UiPref.lowMem) kotlinx.coroutines.delay(40) } }
     }
     var lay by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
-    val st = androidx.compose.ui.text.TextStyle(fontSize = Fs.PAGE.sp, fontWeight = androidx.compose.ui.text.font.FontWeight(800), fontFamily = Typo.family, lineHeight = (Fs.PAGE * 1.25f).sp)
+    val st = androidx.compose.ui.text.TextStyle(fontSize = LyricPref.size.sp, fontWeight = androidx.compose.ui.text.font.FontWeight(800), fontFamily = Typo.family, lineHeight = (LyricPref.size * 1.25f).sp)
     Box {
         androidx.compose.foundation.text.BasicText(line.text, style = st.copy(color = p.k.copy(alpha = .32f)), maxLines = 6, onTextLayout = { lay = it })
         androidx.compose.foundation.text.BasicText(line.text, style = st.copy(color = p.k), maxLines = 6, modifier = Modifier.drawWithContent {
@@ -561,20 +561,29 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
             // 收起播放页（也可以按 Esc）
             Box(Modifier.align(Alignment.TopStart).padding(8.dp).size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp, p.s) }
         }
-        // 右栏：歌词；打开评论时换成评论
-        Box(Modifier.weight(1f).fillMaxHeight().padding(top = if (nav.comments != null) 0.dp else 24.dp, end = if (nav.side == 2 || nav.comments != null) 0.dp else 24.dp)) {
-            val ct = nav.comments
-            if (ct != null) CommentsBody(ct) { nav.comments = null } else Lyrics(t, showTr)
-        }
-        // 第三栏：播放队列（看歌词的同时打开）
-        if (nav.side == 2) Column(Modifier.width(360.dp).fillMaxHeight().drawBehind {
-            if (!Look.flat) drawRect(p.k, Offset.Zero, Size(3.dp.toPx(), size.height))
-        }.padding(start = 3.dp)) {
-            Row(Modifier.fillMaxWidth().height(48.dp).padding(start = 18.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                T("QUEUE", 12, p.k, 700, mono = true, ls = .1f, modifier = Modifier.weight(1f))
-                Box(Modifier.size(40.dp).press { nav.side = 1 }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp) }
+        // 右栏：歌词；打开评论时换成评论（从右边滑进来）
+        Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
+            AnimatedContent(nav.comments, Modifier.fillMaxSize(), transitionSpec = {
+                if (targetState != null) (slideInHorizontally(sp) { it / 3 } + fadeIn(tween(200))) togetherWith fadeOut(tween(120))
+                else fadeIn(tween(200)) togetherWith (slideOutHorizontally(tween(200)) { it / 3 } + fadeOut(tween(160)))
+            }, label = "right") { ct ->
+                if (ct != null) CommentsBody(ct) { nav.comments = null }
+                else Box(Modifier.fillMaxSize().padding(top = 24.dp, end = 24.dp)) { Lyrics(t, showTr) }
             }
-            Box(Modifier.weight(1f)) { QueueList(st) }
+        }
+        // 第三栏：播放队列（看歌词的同时打开），从右边展开
+        AnimatedVisibility(nav.side == 2, Modifier.fillMaxHeight(),
+            enter = expandHorizontally(spring(1f, Anim.stiff(Spring.StiffnessMediumLow)), expandFrom = Alignment.Start) + fadeIn(tween(200)),
+            exit = shrinkHorizontally(tween(220), shrinkTowards = Alignment.Start) + fadeOut(tween(160))) {
+            Column(Modifier.width(360.dp).fillMaxHeight().drawBehind {
+                if (!Look.flat) drawRect(p.k, Offset.Zero, Size(3.dp.toPx(), size.height))
+            }.padding(start = 3.dp)) {
+                Row(Modifier.fillMaxWidth().height(48.dp).padding(start = 18.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    T("QUEUE", 12, p.k, 700, mono = true, ls = .1f, modifier = Modifier.weight(1f))
+                    Box(Modifier.size(40.dp).press { nav.side = 0 }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp) }
+                }
+                Box(Modifier.weight(1f)) { QueueList(st) }
+            }
         }
     }
 }

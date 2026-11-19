@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,13 +37,16 @@ import androidx.compose.ui.unit.dp
     val nav = LocalNav.current
     val st by Engine.state.collectAsState()
     // 手机版里「打开队列」的操作，在宽屏上改为打开右侧队列面板
-    LaunchedEffect(nav.queue) { if (nav.queue) { nav.side = if (nav.side == 2) 1 else 2; nav.queue = false } }
+    LaunchedEffect(nav.queue) { if (nav.queue) { nav.side = if (nav.side == 2) 0 else 2; nav.queue = false } }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 Sidebar()
                 Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) { WideContent() }
-                if ((nav.side != 0 || nav.comments != null) && st.current != null) SidePanel(st)
+                // 右栏（歌词 / 队列 / 评论）：从右边展开、收起
+                androidx.compose.animation.AnimatedVisibility((nav.side != 0 || nav.comments != null) && st.current != null,
+                    enter = androidx.compose.animation.expandHorizontally(spring(1f, Anim.stiff(androidx.compose.animation.core.Spring.StiffnessMediumLow)), expandFrom = Alignment.Start) + fadeIn(tween(200)),
+                    exit = androidx.compose.animation.shrinkHorizontally(tween(220), shrinkTowards = Alignment.Start) + fadeOut(tween(160))) { SidePanel(st) }
             }
             PlayerBar()
         }
@@ -58,7 +62,7 @@ import androidx.compose.ui.unit.dp
     val rec by Store.recents.collectAsState()
     val liked = pls.firstOrNull { it.liked }
     val top = nav.stack.lastOrNull()
-    Column(Modifier.width(232.dp).fillMaxHeight().background(p.bar).drawBehind {
+    Column(Modifier.width(232.dp).fillMaxHeight().background(barBg()).drawBehind {
         if (!Look.flat) drawRect(p.k, Offset(size.width - 3.dp.toPx(), 0f), Size(3.dp.toPx(), size.height))
     }.padding(end = 3.dp)) {
         // 桌面版的名字在标题栏里，侧边栏就不重复了
@@ -68,9 +72,17 @@ import androidx.compose.ui.unit.dp
         SideItem(NIcons.home, "主页", nav.stack.isEmpty() && nav.tab == 0) { nav.player = false; nav.stack.clear(); nav.tab = 0 }
         SideItem(NIcons.library, "曲库", nav.stack.isEmpty() && nav.tab == 1) { nav.player = false; nav.stack.clear(); nav.tab = 1 }
         SideItem(NIcons.search, "搜索", top is Page.Search) { nav.player = false; nav.stack.clear(); nav.push(Page.Search) }
-        SideItem(NIcons.radio, "私人 FM", Engine.state.collectAsState().value.fm) { Engine.startFm { nav.toast = it } }
+        SideItem(NIcons.radio, "私人 FM", top is Page.Fm) { nav.player = false; nav.stack.clear(); nav.push(Page.Fm) }
         SideItem(NIcons.chart, "发现 · 排行榜", top is Page.Playlists && top.kind == "top") { nav.player = false; nav.stack.clear(); nav.push(Page.Playlists("top", "", "排行榜")) }
         Spacer(Modifier.height(14.dp))
+        // 进入曲库时：歌单列表放大、往右飞进曲库，这里留空；离开曲库再滑回来
+        val inLib = nav.stack.isEmpty() && nav.tab == 1
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+        androidx.compose.animation.AnimatedVisibility(!inLib, Modifier.fillMaxSize(),
+            enter = fadeIn(tween(240, 80)) + androidx.compose.animation.slideInHorizontally(spring(1f, Anim.stiff(androidx.compose.animation.core.Spring.StiffnessMediumLow))) { -it / 3 },
+            exit = fadeOut(tween(200)) + androidx.compose.animation.scaleOut(tween(260), targetScale = 1.35f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f))
+                + androidx.compose.animation.slideOutHorizontally(tween(260)) { it * 2 / 3 }) {
+        Column(Modifier.fillMaxSize()) {
         Box(Modifier.padding(horizontal = 18.dp)) { TagRow("PLAYLISTS", 0.dp) }
         Spacer(Modifier.height(6.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
@@ -79,6 +91,9 @@ import androidx.compose.ui.unit.dp
             items(pls.filter { !it.liked }, key = { "sp" + it.id }) { pl ->
                 SideList(pl.name, (top as? Page.Detail)?.id == pl.id, { Cover(pl.cover, 32.dp, pl.name, decodeSize = 64.dp) }) { nav.stack.clear(); nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
             }
+        }
+        }
+        }
         }
         // 账号（桌面版在右上角标题栏里，这里不重复）
         if (!Plat.isDesktop) Row(Modifier.fillMaxWidth().height(64.dp).press { nav.stack.clear(); nav.push(if (prof != null) Page.User(prof!!.uid, prof!!.name) else Page.Login) }.padding(horizontal = 14.dp),
@@ -108,7 +123,12 @@ import androidx.compose.ui.unit.dp
 @Composable private fun WideContent() {
     val nav = LocalNav.current
     val key: Any = nav.stack.lastOrNull() ?: "tab${nav.tab}"
-    AnimatedContent(key, Modifier.fillMaxSize(), transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(110)) }, label = "wide") { k ->
+    AnimatedContent(key, Modifier.fillMaxSize(), transitionSpec = {
+        // 进曲库：内容从侧边栏的位置放大移进来（和侧边栏歌单飞出去接上）
+        if (targetState == "tab1") (fadeIn(tween(240)) + androidx.compose.animation.scaleIn(spring(1f, Anim.stiff(androidx.compose.animation.core.Spring.StiffnessMediumLow)), initialScale = .78f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, .35f))
+            + androidx.compose.animation.slideInHorizontally(spring(1f, Anim.stiff(androidx.compose.animation.core.Spring.StiffnessMediumLow))) { -it / 3 }) togetherWith fadeOut(tween(110))
+        else fadeIn(tween(160)) togetherWith fadeOut(tween(110))
+    }, label = "wide") { k ->
         Box(Modifier.fillMaxSize()) {
             when (k) {
                 is Page -> Box(Modifier.fillMaxSize().background(c.page)) { BgLayer(); PageContent(k) }
@@ -133,6 +153,7 @@ import androidx.compose.ui.unit.dp
     }.padding(start = 3.dp)) {
         // 打开评论时，右栏换成评论；关掉回到歌词 / 队列
         nav.comments?.let { ct -> CommentsBody(ct) { nav.comments = null }; return@Column }
+        if (nav.side == 0) return@Column
         Row(Modifier.fillMaxWidth().height(52.dp).padding(start = 18.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             listOf(1 to "LYRICS", 2 to "QUEUE").forEach { (k, l) ->
                 Box(Modifier.padding(end = 8.dp).press { nav.side = k }.background(if (nav.side == k) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 5.dp)) {
@@ -171,7 +192,7 @@ import androidx.compose.ui.unit.dp
     val st by Engine.state.collectAsState()
     val liked by Store.likedIds.collectAsState()
     val t = st.current
-    Row(Modifier.fillMaxWidth().height(84.dp).background(p.bar).drawBehind {
+    Row(Modifier.fillMaxWidth().height(84.dp).background(barBg()).drawBehind {
         if (!Look.flat) drawRect(p.k, Offset.Zero, Size(size.width, 3.dp.toPx()))
     }.padding(top = 3.dp, start = 14.dp, end = 14.dp), verticalAlignment = Alignment.CenterVertically) {
         // 左：封面 + 歌名
@@ -226,16 +247,23 @@ import androidx.compose.ui.unit.dp
         Box(Modifier.size(22.dp).background(if (on) c.p else Color.Transparent).nbf(1.dp, c.k), contentAlignment = Alignment.Center) { T(s, 12, if (on) Color.White else c.k, 700) }
     }
 
+/** 全局音量（音量条和快捷键共用） */
+object Vol {
+    var v by mutableFloatStateOf(1f)
+    fun load() { v = Plat.prefs("ui").getFloat("vol", 1f); runCatching { Plat.impl.audio.volume = v } }
+    fun set(x: Float, save: Boolean = true) { v = x.coerceIn(0f, 1f); Plat.impl.audio.volume = v; if (save) Plat.prefs("ui").edit().putFloat("vol", v).apply() }
+}
+
 /** 音量：点或拖动设置（存起来，下次打开沿用） */
 @Composable private fun VolumeBar() {
     val p = c
-    var v by remember { mutableFloatStateOf(Plat.prefs("ui").getFloat("vol", 1f).also { Plat.impl.audio.volume = it }) }
+    var v by Vol::v
     Box(Modifier.width(90.dp).height(24.dp).pointerInput(Unit) {
         awaitPointerEventScope {
             while (true) {
                 val e = awaitPointerEvent(); val ch = e.changes.firstOrNull() ?: continue
-                if (ch.pressed) { v = (ch.position.x / size.width).coerceIn(0f, 1f); Plat.impl.audio.volume = v; ch.consume() }
-                else if (ch.previousPressed) Plat.prefs("ui").edit().putFloat("vol", v).apply()
+                if (ch.pressed) { Vol.set((ch.position.x / size.width).coerceIn(0f, 1f), save = false); ch.consume() }
+                else if (ch.previousPressed) Vol.set(Vol.v)
             }
         }
     }.drawBehind {

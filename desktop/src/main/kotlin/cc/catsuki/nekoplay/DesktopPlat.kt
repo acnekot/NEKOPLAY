@@ -64,11 +64,11 @@ class DesktopPlat : PlatImpl {
         file.writeBytes(data.bytes)
     }
 
-    @Composable override fun imagePicker(onPick: (ByteArray) -> Unit): () -> Unit = {
-        val d = java.awt.FileDialog(null as java.awt.Frame?, "选择背景图片", java.awt.FileDialog.LOAD)
-        d.setFilenameFilter { _, n -> n.lowercase().let { it.endsWith(".jpg") || it.endsWith(".jpeg") || it.endsWith(".png") || it.endsWith(".webp") } }
-        d.isVisible = true
-        if (d.file != null) onPick(File(d.directory, d.file).readBytes())
+    /** 用应用内的选择器（缩略图网格 + 预览），代替系统的文件对话框 */
+    @Composable override fun imagePicker(onPick: (ByteArray) -> Unit): () -> Unit {
+        var open by remember { mutableStateOf(false) }
+        if (open) ImagePickerDialog(onDismiss = { open = false }) { f -> open = false; onPick(f.readBytes()) }
+        return { open = true }
     }
 
     @Composable override fun BackHandler(enabled: Boolean, onBack: () -> Unit) {
@@ -87,6 +87,54 @@ class DesktopPlat : PlatImpl {
             onState(false, 0, 0, if (ok) "已在 mpv 窗口中播放" else "需要安装 mpv 才能播放 MV")
         }
     }
+
+    /** 动态头像：下载原图，用 Skia 解出每一帧自己播；只有一帧就当静态图 */
+    @Composable override fun AnimatedImage(url: String, modifier: Modifier) {
+        if (UiPref.lowMem) { coil3.compose.AsyncImage(img(url, 256), null, modifier, contentScale = androidx.compose.ui.layout.ContentScale.Crop); return }
+        var frames by remember(url) { mutableStateOf(animCache[url]) }
+        LaunchedEffect(url) {
+            if (frames == null) frames = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { decodeFrames(url) }.getOrNull() }?.also { animCache[url] = it }
+        }
+        val f = frames
+        if (f == null) { coil3.compose.AsyncImage(img(url, 256), null, modifier, contentScale = androidx.compose.ui.layout.ContentScale.Crop); return }
+        var i by remember(f) { mutableIntStateOf(0) }
+        if (f.size > 1) LaunchedEffect(f) { while (true) { delay(f[i].second.coerceAtLeast(20).toLong()); i = (i + 1) % f.size } }
+        androidx.compose.foundation.Image(f[i % f.size].first, null, modifier, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+    }
+    private val animCache = HashMap<String, List<Pair<ImageBitmap, Int>>>()
+    private fun decodeFrames(url: String): List<Pair<ImageBitmap, Int>> {
+        val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0").header("Referer", "https://music.163.com/").build()
+        val bytes = Ncm.http.newCall(req).execute().use { it.body!!.bytes() }
+        val codec = org.jetbrains.skia.Codec.makeFromData(org.jetbrains.skia.Data.makeFromBytes(bytes))
+        val n = codec.frameCount.coerceIn(1, 120)
+        val info = codec.framesInfo
+        val full = org.jetbrains.skia.Bitmap(); full.allocPixels(codec.imageInfo)
+        val m = maxOf(codec.width, codec.height)
+        val tw = (codec.width * 160 / m).coerceAtLeast(1); val th = (codec.height * 160 / m).coerceAtLeast(1)
+        // 逐帧解到同一块缓冲（GIF 帧会叠加在前一帧上），再缩成 160px 的小图存起来
+        return (0 until n).map { k ->
+            codec.readPixels(full, k)
+            val small = if (m <= 160) full.makeClone() else {
+                val surf = org.jetbrains.skia.Surface.makeRasterN32Premul(tw, th)
+                surf.canvas.drawImageRect(org.jetbrains.skia.Image.makeFromBitmap(full), org.jetbrains.skia.Rect.makeWH(codec.width.toFloat(), codec.height.toFloat()),
+                    org.jetbrains.skia.Rect.makeWH(tw.toFloat(), th.toFloat()), org.jetbrains.skia.SamplingMode.LINEAR, null, true)
+                org.jetbrains.skia.Bitmap.makeFromImage(surf.makeImageSnapshot())
+            }
+            small.setImmutable(); small.asComposeImageBitmap() to (info.getOrNull(k)?.duration ?: 100)
+        }
+    }
+
+    /** CPU：JVM 报告的本进程占用；内存：已提交的内存（接近任务管理器里的值） */
+    override fun cpuMem(): Pair<Float, Long>? = runCatching {
+        val os = java.lang.management.ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean
+        val cpu = (os.processCpuLoad * 100).toFloat().coerceAtLeast(0f)
+        val rss = runCatching { File("/proc/self/status").readLines().first { it.startsWith("VmRSS") }.split(Regex("\\s+"))[1].toLong() / 1024 }.getOrNull()
+        val mem = rss ?: run {
+            val heap = java.lang.management.ManagementFactory.getMemoryMXBean()
+            (heap.heapMemoryUsage.committed + heap.nonHeapMemoryUsage.committed) / 1048576 + 60 // 加上 Skia / 原生库的大致占用
+        }
+        cpu to mem
+    }.getOrNull()
 
     override fun memInfo(): String {
         val rt = Runtime.getRuntime()
@@ -159,6 +207,7 @@ private class MpvAudio : Audio {
     @Volatile private var playing = false
     @Volatile private var ended = false
     @Volatile private var pos = 0L
+    @Volatile private var bufPos = 0L
 
     init {
         // 每 200ms 读一次状态，转成回调（在界面线程里发）
@@ -171,6 +220,7 @@ private class MpvAudio : Audio {
                 val eof = str("eof-reached") == "yes"
                 val buf = str("paused-for-cache") == "yes"
                 pos = (num("time-pos") * 1000).toLong()
+                bufPos = (num("demuxer-cache-time") * 1000).toLong()
                 playing = !paused && !eof
                 java.awt.EventQueue.invokeLater {
                     if (playing != lastPlaying) { lastPlaying = playing; listener?.onPlaying(playing) }
@@ -199,6 +249,7 @@ private class MpvAudio : Audio {
     override val isPlaying get() = playing
     override val idle get() = !opened
     override val position get() = pos
+    override val buffered get() = bufPos
     override fun isCached(key: String) = false
     override fun cacheBytes() = 0L
     override fun clearCache() {}

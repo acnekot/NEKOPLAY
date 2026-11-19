@@ -2,6 +2,10 @@ package cc.catsuki.nekoplay
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -120,15 +124,34 @@ fun openArtists(nav: Nav, t: Track) {
     }
 }
 
-@Composable fun ActionSheet() {
+@Composable fun ActionSheet(wide: Boolean = false) {
     val nav = LocalNav.current
     val p = c
     var last by remember { mutableStateOf<SheetSpec?>(null) }
     nav.sheet?.let { last = it }
     AnimatedVisibility(nav.sheet != null, enter = fadeIn(tween(200)), exit = fadeOut(tween(200))) {
-        Box(Modifier.fillMaxSize().background(Color(0x80000000)).pointerInput(Unit) { detectTapGestures { nav.sheet = null } })
+        Box(Modifier.fillMaxSize().background(Color(if (wide) 0x55000000 else 0x80000000)).pointerInput(Unit) { detectTapGestures { nav.sheet = null } })
     }
-    AnimatedVisibility(nav.sheet != null, Modifier.fillMaxSize(), enter = slideInVertically(sp) { it }, exit = slideOutVertically(sp) { it }) {
+    // PC 宽屏：居中的小弹窗（缩放 + 淡入）；手机：底部弹出
+    if (wide) AnimatedVisibility(nav.sheet != null, Modifier.fillMaxSize(),
+        enter = fadeIn(tween(160)) + scaleIn(spring(.8f, Anim.stiff(Spring.StiffnessMedium)), initialScale = .92f),
+        exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = .96f)) {
+        val s = last ?: return@AnimatedVisibility
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(Modifier.width(380.dp).heightIn(max = 620.dp).background(p.sheet).nb(1.dp, p.k).topLine().pointerInput(Unit) { detectTapGestures { } }
+                .verticalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
+                Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 8.dp)) {
+                    T(s.title, 16, w = 800, lines = 2); if (s.sub != null) T(s.sub, 12, p.s, lines = 2)
+                }
+                s.items.forEach { it ->
+                    Box(Modifier.fillMaxWidth().height(42.dp).press { nav.sheet = null; it.run() }.padding(horizontal = 18.dp).topLine(p.l1, 1.dp), contentAlignment = Alignment.CenterStart) {
+                        T(it.label, 14, if (it.danger) p.bad else p.k)
+                    }
+                }
+            }
+        }
+    }
+    else AnimatedVisibility(nav.sheet != null, Modifier.fillMaxSize(), enter = slideInVertically(sp) { it }, exit = slideOutVertically(sp) { it }) {
         val s = last ?: return@AnimatedVisibility
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             Column(Modifier.fillMaxWidth().background(p.sheet).topLine().pointerInput(Unit) { detectTapGestures { } }.navigationBarsPadding().padding(bottom = 8.dp)) {
@@ -177,7 +200,7 @@ fun openArtists(nav: Nav, t: Track) {
                     T(a!!.brief, 13, p.s, lines = if (expand) 40 else 3, lh = 1.6f)
                 }
                 Spacer(Modifier.height(16.dp))
-                Row {
+                ActionRow {
                     PrimaryBar("播放热门歌曲", NIcons.play, Modifier.weight(1f)) { Engine.playList(hot, 0) }
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(hot, 0, shuffle = true) }
                     if (Ncm.loggedIn && a != null) {
@@ -249,7 +272,7 @@ fun openArtists(nav: Nav, t: Track) {
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                Row {
+                ActionRow {
                     PrimaryBar("播放全部", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(list, 0, shuffle = true) }
                     if (Ncm.loggedIn) {
@@ -544,7 +567,7 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
                 T("听歌排行", Fs.HERO, w = 800, lh = 1.3f); T(pg.name, 13, p.s)
                 Spacer(Modifier.height(12.dp)); ChipRow(listOf("最近一周", "所有时间"), sel) { sel = it }
                 Spacer(Modifier.height(12.dp))
-                PrimaryBar("播放全部", NIcons.play) { Engine.playList(list, 0) }
+                ActionRow { PrimaryBar("播放全部", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) } }
                 Spacer(Modifier.height(12.dp)); Rule()
                 when { err != null -> T("加载失败：$err（对方可能隐藏了排行）", 13, p.bad, lines = 3, modifier = Modifier.padding(vertical = 24.dp))
                     data == null -> T("LOADING", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp))

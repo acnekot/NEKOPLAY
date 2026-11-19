@@ -50,6 +50,8 @@ interface Audio {
     val isPlaying: Boolean
     val idle: Boolean
     val position: Long
+    /** 已经缓冲（下载）到的位置 */
+    val buffered: Long
     /** 某个缓存键是否已经完整缓存 */
     fun isCached(key: String): Boolean
     fun cacheBytes(): Long
@@ -82,6 +84,10 @@ interface PlatImpl {
     @Composable fun BackHandler(enabled: Boolean, onBack: () -> Unit)
     /** MV 播放区域 */
     @Composable fun VideoPlayer(url: String?, modifier: Modifier, onState: (playing: Boolean, pos: Long, dur: Long, err: String?) -> Unit, control: VideoControl)
+    /** 能动的图片（动态头像 GIF 等），不支持就按静态图显示 */
+    @Composable fun AnimatedImage(url: String, modifier: Modifier)
+    /** 桌面版：本进程 CPU（%）和内存（MB）；安卓返回 null（用 /proc） */
+    fun cpuMem(): Pair<Float, Long>? = null
     fun memInfo(): String
     fun memAnalysis(): String
 }

@@ -31,6 +31,7 @@ object Engine {
     private val audio get() = Plat.impl.audio
     val state = MutableStateFlow(PlayState())
     val position = MutableStateFlow(0L)
+    val buffered = MutableStateFlow(0L)
     val error = MutableStateFlow<String?>(null)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var loadJob: Job? = null
@@ -50,7 +51,7 @@ object Engine {
             override fun onError(msg: String) { error.value = "播放失败：$msg"; next() }
         }
         // 进度：播放时定时更新
-        scope.launch { while (isActive) { val p = audio.position; if (audio.isPlaying || position.value != p) position.value = p; delay(if (fastPos > 0) 50 else 250) } }
+        scope.launch { while (isActive) { val p = audio.position; if (audio.isPlaying || position.value != p) position.value = p; runCatching { buffered.value = if (state.value.cached) Long.MAX_VALUE else audio.buffered }; delay(if (fastPos > 0) 50 else 250) } }
         Store.restoreQueue()?.let { (q, i, pos) -> state.value = state.value.copy(queue = q, index = i); load(i, false, pos) }
     }
 
@@ -129,6 +130,9 @@ object Engine {
             then?.invoke()
         }
     }
+    /** FM 页：下一首不够了就先要一批 */
+    fun fmEnsureNext() { val s = state.value; if (s.fm && s.index + 2 >= s.queue.size) fmFill() }
+
     /** FM 里「不喜欢」：告诉网易云并跳到下一首 */
     fun fmTrash() {
         val t = state.value.current ?: return

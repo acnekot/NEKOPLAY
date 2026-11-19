@@ -29,14 +29,17 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "cc.catsuki.nekoplay.MainKt"
-        jvmArgs += listOf("-Xmx256m", "-XX:+UseSerialGC", "-XX:TieredStopAtLevel=1")
+        // 省内存：小堆 + Serial GC + 空闲时把堆还给系统 + 小代码缓存 / 线程栈
+        jvmArgs += listOf("-Xms24m", "-Xmx180m", "-XX:+UseSerialGC", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=25",
+            "-XX:TieredStopAtLevel=1", "-XX:ReservedCodeCacheSize=40m", "-XX:MaxMetaspaceSize=96m", "-Xss512k", "-XX:CICompilerCount=2",
+            "-Dskiko.vsync.enabled=true")
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb) // AppImage 和 dmg 共用输出目录会冲突；免安装版另外打 zip
             packageName = "NEKOPLAY"
             packageVersion = "1.0.0" // Windows 安装包和 macOS 要求主版本号 ≥ 1
             description = "NEKOPLAY music player" // 安装包元数据用英文：WiX 默认代码页处理不了中文
             vendor = "acnekot"
-            modules("java.sql", "jdk.unsupported")
+            modules("java.sql", "jdk.unsupported", "jdk.management") // jdk.management：性能浮窗读 CPU
             // 播放内核 libmpv：打包时放进 resources/<系统>/（由 GitHub Actions 下载），装好就能直接播放
             appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
             windows { menuGroup = "NEKOPLAY"; shortcut = true; upgradeUuid = "8f2a6c3e-5b1d-4e7a-9c40-3d2f1a6b7e91" }

@@ -92,6 +92,12 @@ object Ncm {
         }
     }
 
+    /** 不加密的老接口（GET），weapi 被拦时的后备 */
+    private suspend fun plainGet(path: String): JSONObject = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url("https://music.163.com$path").header("Referer", "https://music.163.com/").header("User-Agent", UA).build()
+        http.newCall(req).execute().use { r -> JSONObject(r.body?.string() ?: "{}") }
+    }
+
     private suspend fun api(path: String, data: JSONObject = JSONObject()): JSONObject {
         val j = raw(path, data).j
         val c = j.optInt("code", 200)
@@ -315,7 +321,7 @@ object Ncm {
 
     // ---------- 第 2 批：排行榜 / 歌单广场 / 新碟新歌 / 历史日推 ----------
     suspend fun toplists(): List<Playlist> {
-        val a = api("/weapi/toplist").optJSONArray("list") ?: JSONArray()
+        val a = runCatching { api("/weapi/toplist").optJSONArray("list") }.getOrNull() ?: plainGet("/api/toplist").optJSONArray("list") ?: JSONArray()
         return (0 until a.length()).map { a.getJSONObject(it).let { o -> plOf(o).copy(desc = o.optString("updateFrequency")) } }
     }
     suspend fun recPlaylists(): List<Playlist> {

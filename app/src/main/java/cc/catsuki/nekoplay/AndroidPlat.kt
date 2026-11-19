@@ -89,6 +89,9 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
         return { l.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     }
 
+    @Composable override fun AnimatedImage(url: String, modifier: Modifier) =
+        coil3.compose.AsyncImage(if (UiPref.lowMem) img(url, 256) else url, null, modifier, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+
     @Composable override fun BackHandler(enabled: Boolean, onBack: () -> Unit) = androidx.activity.compose.BackHandler(enabled, onBack)
 
     @Composable override fun VideoPlayer(url: String?, modifier: Modifier, onState: (Boolean, Long, Long, String?) -> Unit, control: VideoControl) {
@@ -216,6 +219,7 @@ class ExoAudio(c: Context) : Audio {
     override val isPlaying get() = exo.isPlaying
     override val idle get() = exo.playbackState == Player.STATE_IDLE
     override val position get() = exo.currentPosition
+    override val buffered get() = exo.bufferedPosition
     override fun isCached(key: String): Boolean {
         val len = ContentMetadata.getContentLength(cache.getContentMetadata(key))
         return len > 0 && cache.isCached(key, 0, len)

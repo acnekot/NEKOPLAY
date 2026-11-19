@@ -63,6 +63,7 @@ import java.util.Calendar
         // 首页模块：按「首页布局」里的顺序和开关排列
         HomeLayout.visible.forEachIndexed { mi, m ->
             when (m) {
+                "combo" -> item { HomeCombo(mi > 0) }
                 "continue" -> {
                 // ---- CONTINUE LISTENING
                 item {
@@ -80,7 +81,7 @@ import java.util.Calendar
                             }
                         }
                         Spacer(Modifier.height(16.dp))
-                        Row {
+                        ActionRow {
                             PrimaryBar(if (st.playing) "暂停" else if (st.current != null) "继续播放" else "播放", if (st.playing) NIcons.pause else NIcons.play, Modifier.weight(1f)) {
                                 if (st.current != null) Engine.toggle() else if (daily.isNotEmpty()) Engine.playList(daily, 0)
                             }
@@ -96,18 +97,22 @@ import java.util.Calendar
                     Column(Modifier.padding(top = 32.dp)) {
                         Tag("DAILY MIX")
                         Row(Modifier.padding(top = 10.dp).bottomLine(c.k, 3.dp).padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f).press { nav.push(Page.Detail("daily", "daily", "每日推荐", daily.firstOrNull()?.cover)) }) {
-                                Row(verticalAlignment = Alignment.CenterVertically) { T("每日推荐", Fs.PAGE, w = 800, ls = .08f, lh = 1.15f); Spacer(Modifier.width(6.dp)); NIcon(NIcons.chevronRight, 20.dp, c.s) }
-                                Spacer(Modifier.height(4.dp))
-                                T(if (daily.isNotEmpty()) "${daily.size} 首 · 点开查看全部" else "DAILY RECOMMENDATION", 11, c.s, mono = true, ls = .08f)
+                            // 可点的标题块：50% 灰色细框，一看就知道能点进去
+                            Row(Modifier.weight(1f)) {
+                                Column(Modifier.border(1.dp, Color.Gray.copy(alpha = .5f)).press { nav.push(Page.Detail("daily", "daily", "每日推荐", daily.firstOrNull()?.cover)) }.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) { T("每日推荐", Fs.PAGE, w = 800, ls = .08f, lh = 1.15f); Spacer(Modifier.width(6.dp)); NIcon(NIcons.chevronRight, 20.dp, c.s) }
+                                    Spacer(Modifier.height(4.dp))
+                                    T(if (daily.isNotEmpty()) "${daily.size} 首 · 点开查看全部" else "DAILY RECOMMENDATION", 11, c.s, mono = true, ls = .08f)
+                                }
                             }
                             Spacer(Modifier.width(14.dp))
-                            SquareBtn(NIcons.play) { if (mix.isNotEmpty()) Engine.playList(mix, 0) }
-                            Spacer(Modifier.width(14.dp))
+                            // 日期在左、播放按钮在右
                             Column(horizontalAlignment = Alignment.End) {
                                 T(two(now.get(Calendar.MONTH) + 1), 46, c.p, 600, mono = true, ls = -.05f, lh = .9f)
                                 T(two(now.get(Calendar.DAY_OF_MONTH)), 46, c.p, 600, mono = true, ls = -.05f, lh = .9f)
                             }
+                            Spacer(Modifier.width(14.dp))
+                            Box(Modifier.border(1.dp, Color.Gray.copy(alpha = .5f))) { SquareBtn(NIcons.play) { if (mix.isNotEmpty()) Engine.playList(mix, 0) } }
                         }
                         if (mix.isEmpty()) T("LOADING", 12, c.s, mono = true, ls = .06f, modifier = Modifier.padding(vertical = 22.dp))
                     }
@@ -120,7 +125,7 @@ import java.util.Calendar
                 item {
                     Column(Modifier.padding(top = 32.dp)) {
                         Tag("PERSONAL FM")
-                        Row(Modifier.padding(top = 10.dp).fillMaxWidth().press { if (st.fm) { nav.lyrics = false; nav.player = true } else Engine.startFm { nav.toast = it } }
+                        Row(Modifier.padding(top = 10.dp).fillMaxWidth().press { nav.push(Page.Fm) }
                             .bottomLine(c.k, 3.dp).padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (st.fm && st.current != null) Cover(st.current!!.cover, 56.dp, st.current!!.title) else IconCover(NIcons.radio, 56.dp, true)
                             Spacer(Modifier.width(14.dp))
@@ -262,7 +267,7 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
         if (prof == null) item {
             Column(Modifier.padding(vertical = 24.dp)) {
                 T("NOT LOGGED IN", 12, c.s, mono = true, lines = 2, ls = .06f, lh = 1.7f)
-                Spacer(Modifier.height(12.dp)); PrimaryBar("登录网易云音乐", NIcons.chevronRight) { nav.push(Page.Login) }
+                Spacer(Modifier.height(12.dp)); ActionRow { PrimaryBar("登录网易云音乐", NIcons.chevronRight, Modifier.weight(1f)) { nav.push(Page.Login) } }
             }
         }
         if (prof != null) {
@@ -326,7 +331,7 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                Row {
+                ActionRow {
                     PrimaryBar("播放全部", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(list, 0, shuffle = true) }
                     // 别人的歌单：可以收藏
@@ -511,7 +516,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { val ps by Perf.stat.collectAsState(); T(Perf.line(ps), 11, p.s, mono = true, lines = 3, lh = 1.5f, modifier = Modifier.padding(vertical = 10.dp)) }
         item { val po by Perf.overlay.collectAsState(); SwitchRow("性能浮窗", "在所有页面左下角显示 CPU、帧率和 GPU", po) { Perf.overlay.value = it; prefs.edit().putBoolean("perf", it).apply() } }
         item { Group("MOTION") }
-        item { NavRow("动效速度", "页面切换、播放页、队列的动画快慢", Anim.labels[Anim.level]) { Anim.level = (Anim.level + 1) % 4; prefs.edit().putInt("anim", Anim.level).apply() } }
+        item { NavRow("详细调整", "动效形式和速度、歌词字号与效果、进度条缓存显示、背景下的栏位透明度", "${AnimStyle.labels[AnimStyle.style]} · ${Anim.labels[Anim.level]}") { nav.push(Page.Tuning) } }
         item { Group("ABOUT") }
         item { NavRow("版本", null, "原生版 0.2.0", clickable = false) {} }
         item {
@@ -532,7 +537,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
 
 @Composable private fun Group(tag: String) = Box(Modifier.padding(top = 22.dp, bottom = 8.dp)) { Tag(tag) }
 
-@Composable private fun SwitchRow(title: String, sub: String?, on: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) =
+@Composable fun SwitchRow(title: String, sub: String?, on: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) =
     Row(Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).bottomLine().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { T(title, 16, if (enabled) c.k else c.s); if (sub != null) T(sub, 13, c.s, lh = 1.4f) }
         Box(Modifier.graphicsAlpha(if (enabled) 1f else .45f)) { NSwitch(on) { if (enabled) onChange(it) } }
@@ -599,4 +604,54 @@ fun qrBitmap(text: String): androidx.compose.ui.graphics.ImageBitmap {
     cv.drawRect(0f, 0f, m.width.toFloat(), m.height.toFloat(), white)
     for (x in 0 until m.width) for (y in 0 until m.height) if (m[x, y]) cv.drawRect(x.toFloat(), y.toFloat(), x + 1f, y + 1f, black)
     return b
+}
+
+
+/** 可选布局：继续收听和每日推荐各占一半（窄屏时上下排） */
+@Composable fun HomeCombo(topPad: Boolean) {
+    val nav = LocalNav.current
+    val st by Engine.state.collectAsState()
+    val daily by Store.daily.collectAsState()
+    val cur = st.current ?: daily.firstOrNull()
+    val now = remember { Calendar.getInstance() }
+    val p = c
+    val left = @Composable { m: Modifier ->
+        Column(m.border(1.dp, Color.Gray.copy(alpha = .5f)).padding(14.dp)) {
+            Tag("CONTINUE LISTENING"); Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.press { if (st.current != null) { nav.lyrics = false; nav.player = true } else if (daily.isNotEmpty()) Engine.playList(daily, 0) }) { Cover(cur?.cover, 88.dp, cur?.title ?: "") }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) { T(cur?.title ?: "还没有曲目", Fs.HEAD, w = 800, lines = 2, lh = 1.2f); T(cur?.artist ?: "", 13, p.s) }
+            }
+            Spacer(Modifier.height(10.dp))
+            if (st.current != null) { ScrubBar(st.current!!.durationMs, 10.dp, interactive = false); TimeRow(st.current!!.durationMs) }
+            Spacer(Modifier.height(8.dp))
+            Row {
+                PrimaryBar(if (st.playing) "暂停" else if (st.current != null) "继续播放" else "播放", if (st.playing) NIcons.pause else NIcons.play, Modifier.weight(1f)) {
+                    if (st.current != null) Engine.toggle() else if (daily.isNotEmpty()) Engine.playList(daily, 0)
+                }
+                Spacer(Modifier.width(8.dp)); OutlineBtn("队列", pad = 12.dp) { nav.queue = true }
+            }
+        }
+    }
+    val right = @Composable { m: Modifier ->
+        Column(m.border(1.dp, Color.Gray.copy(alpha = .5f)).padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).press { nav.push(Page.Detail("daily", "daily", "每日推荐", daily.firstOrNull()?.cover)) }) {
+                    Tag("DAILY MIX"); Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) { T("每日推荐", Fs.HEAD, w = 800); NIcon(NIcons.chevronRight, 18.dp, p.s) }
+                    T("${daily.size} 首", 11, p.s, mono = true)
+                }
+                T("${two(now.get(Calendar.MONTH) + 1)}/${two(now.get(Calendar.DAY_OF_MONTH))}", 28, p.p, 600, mono = true)
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.border(1.dp, Color.Gray.copy(alpha = .5f))) { SquareBtn(NIcons.play) { if (daily.isNotEmpty()) Engine.playList(daily, 0) } }
+            }
+            Spacer(Modifier.height(6.dp))
+            daily.take(3).forEachIndexed { i, t -> TrackRow(t, st.current?.id == t.id, null, onLong = { trackActions(nav, t) }) { Engine.playList(daily, i) } }
+        }
+    }
+    BoxWithConstraints(Modifier.padding(top = if (topPad) 32.dp else 0.dp)) {
+        if (maxWidth >= 640.dp) Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) { left(Modifier.weight(1f).fillMaxHeight()); Spacer(Modifier.width(14.dp)); right(Modifier.weight(1f).fillMaxHeight()) }
+        else Column { left(Modifier.fillMaxWidth()); Spacer(Modifier.height(14.dp)); right(Modifier.fillMaxWidth()) }
+    }
 }

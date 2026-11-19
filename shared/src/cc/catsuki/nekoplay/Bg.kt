@@ -69,7 +69,7 @@ object Bg {
         }
     }
 
-    private fun blurred(s0: ImageBitmap, b: Float): ImageBitmap {
+    fun blurred(s0: ImageBitmap, b: Float): ImageBitmap {
         val w = 360; val h = (s0.height * w / s0.width.toFloat()).toInt().coerceAtLeast(1)
         val px = Plat.impl.pixels(Plat.impl.scaled(s0, w, h))
         val r = (b * .6f).toInt().coerceAtLeast(1)
@@ -108,19 +108,49 @@ object Bg {
         withContext(Dispatchers.Main) { src = bm; image = bm; resetTransform(); reblur() }
     }
 
+    /** 字节 → 图片（长边 1600 以内），不保存 */
+    suspend fun decodeBytes(bytes: ByteArray): ImageBitmap = withContext(Dispatchers.IO) {
+        val tmp = File(Plat.impl.cacheDir, "bg_in"); tmp.writeBytes(bytes)
+        (Plat.impl.decodeImage(tmp.path, 1600) ?: throw Exception("读不了这张图片")).also { tmp.delete() }
+    }
+    val source get() = src
+
+    /** 把编辑页的草稿应用成正式背景 */
+    suspend fun apply(d: BgDraft) {
+        if (d.src == null) { clear(); return }
+        if (d.newImage) withContext(Dispatchers.IO) { Plat.impl.saveJpeg(d.src!!, file) }
+        src = d.src; image = d.shown ?: d.src
+        blur = d.blur; alpha = d.alpha; scale = d.scale; ox = d.ox; oy = d.oy
+        save()
+    }
+
     fun clear() { job?.cancel(); image = null; src = null; runCatching { file.delete() } }
 }
 
-/** 背景图层：放在页面最底下。base 是图片下面的底色（图片半透明时透出来） */
-@Composable fun BgLayer(base: Color? = null) {
-    val img = Bg.image ?: return
+/** 背景图层：放在页面最底下。base 是图片下面的底色（图片半透明时透出来）；draft 不为空时画草稿（编辑页预览用） */
+@Composable fun BgLayer(base: Color? = null, draft: BgDraft? = null) {
+    val img = (if (draft != null) draft.shown ?: draft.src else Bg.image) ?: return
+    val sc = draft?.scale ?: Bg.scale; val x = draft?.ox ?: Bg.ox; val y = draft?.oy ?: Bg.oy; val a = draft?.alpha ?: Bg.alpha
     Box(Modifier.fillMaxSize().then(if (base != null) Modifier.background(base) else Modifier).clipToBounds()) {
         Image(img, null, Modifier.fillMaxSize().graphicsLayer {
-            scaleX = Bg.scale; scaleY = Bg.scale
-            translationX = Bg.ox * size.width; translationY = Bg.oy * size.height
-            alpha = Bg.alpha
+            scaleX = sc; scaleY = sc
+            translationX = x * size.width; translationY = y * size.height
+            alpha = a
         }, contentScale = ContentScale.Crop)
     }
+}
+
+/** 背景编辑草稿：只在预览里生效，点「应用」才写进正式背景 */
+class BgDraft {
+    var src by mutableStateOf(Bg.source)
+    var shown by mutableStateOf(Bg.image)
+    var blur by mutableFloatStateOf(Bg.blur)
+    var alpha by mutableFloatStateOf(Bg.alpha)
+    var scale by mutableFloatStateOf(Bg.scale)
+    var ox by mutableFloatStateOf(Bg.ox)
+    var oy by mutableFloatStateOf(Bg.oy)
+    var newImage = false
+    val changed get() = newImage || src != Bg.source || blur != Bg.blur || alpha != Bg.alpha || scale != Bg.scale || ox != Bg.ox || oy != Bg.oy
 }
 
 /** 方形滑块条（BenchLab 风格） */
@@ -150,58 +180,72 @@ object Bg {
     val nav = LocalNav.current
     val scope = rememberCoroutineScope()
     val p = c
+    var d by remember { mutableStateOf(BgDraft()) }
+    val dr = d
     val pick = Plat.impl.imagePicker { bytes ->
-        scope.launch { try { Bg.set(bytes); nav.toast = "背景已更换" } catch (e: Exception) { nav.toast = "设置失败：${e.message}" } }
+        scope.launch {
+            try { val img = Bg.decodeBytes(bytes); dr.src = img; dr.shown = img; dr.newImage = true; dr.scale = 1f; dr.ox = 0f; dr.oy = 0f }
+            catch (e: Exception) { nav.toast = "读取失败：${e.message}" }
+        }
     }
-    fun choose() = pick()
+    // 模糊在后台按草稿重新算（停手 120ms 后）
+    LaunchedEffect(dr.src, dr.blur) {
+        val s0 = dr.src ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(120)
+        dr.shown = withContext(Dispatchers.Default) { if (dr.blur < .5f) s0 else Bg.blurred(s0, dr.blur) }
+    }
     val win = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
     val ratio = win.width.toFloat() / win.height.coerceAtLeast(1)
+    val has = dr.src != null
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 24.dp)) {
         item {
             Column {
                 Tag("BACKGROUND"); Spacer(Modifier.height(4.dp))
                 T("自定义背景", Fs.HERO, w = 800, lh = 1.3f)
-                T(if (Bg.on) "在预览里双指缩放、单指拖动调整位置" else "选一张图片作为全局背景", 13, p.s)
+                T(if (has) "先在预览里调好（可双指缩放、拖动），满意了再点「应用」" else "选一张图片作为全局背景", 13, p.s)
                 Spacer(Modifier.height(16.dp))
-                // 预览：按手机屏幕比例缩小，手势直接改背景
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Box(Modifier.fillMaxWidth(.62f).aspectRatio(ratio).clipToBounds().background(p.page).pointerInput(Bg.on) {
-                        if (!Bg.on) return@pointerInput
+                    Box(Modifier.fillMaxWidth(if (Screen.wide) .42f else .62f).aspectRatio(ratio).clipToBounds().backdrop().pointerInput(has) {
+                        if (!has) return@pointerInput
                         detectTransformGestures { _, pan, zoom, _ ->
-                            Bg.scale = (Bg.scale * zoom).coerceIn(1f, 4f)
-                            Bg.ox = (Bg.ox + pan.x / size.width).coerceIn(-1.5f, 1.5f)
-                            Bg.oy = (Bg.oy + pan.y / size.height).coerceIn(-1.5f, 1.5f)
-                            Bg.save()
+                            dr.scale = (dr.scale * zoom).coerceIn(1f, 4f)
+                            dr.ox = (dr.ox + pan.x / size.width).coerceIn(-1.5f, 1.5f)
+                            dr.oy = (dr.oy + pan.y / size.height).coerceIn(-1.5f, 1.5f)
                         }
                     }) {
-                        BgLayer()
-                        // 示意的界面元素，方便看清字在背景上的效果
+                        BgLayer(draft = dr)
                         Column(Modifier.padding(10.dp)) {
                             T("NEKOPLAY", 13, w = 900); Spacer(Modifier.height(8.dp))
                             Box(Modifier.size(48.dp).background(p.ph).nb(1.dp, p.k)); Spacer(Modifier.height(6.dp))
                             T("歌曲标题", 12, w = 800); T("歌手名", 11, p.s)
                         }
-                        if (!Bg.on) Box(Modifier.matchParentSize().press { choose() }, contentAlignment = Alignment.Center) { T("点击选择图片", 13, p.s, 700) }
-                        // 边框画在最上层，避免被图片盖住
+                        if (!has) Box(Modifier.matchParentSize().press { pick() }, contentAlignment = Alignment.Center) { T("点击选择图片", 13, p.s, 700) }
                         Box(Modifier.matchParentSize().border(2.dp, p.k))
+                        if (dr.changed) Box(Modifier.align(Alignment.TopEnd).padding(6.dp).background(p.p).padding(horizontal = 6.dp, vertical = 2.dp)) { T("预览中", 11, Color.White, 700) }
                     }
                 }
                 Spacer(Modifier.height(18.dp))
-                Row {
-                    PrimaryBar(if (Bg.on) "更换图片" else "选择图片", NIcons.plus, Modifier.weight(1f)) { choose() }
-                    if (Bg.on) { Spacer(Modifier.width(10.dp)); OutlineBtn("移除", pad = 14.dp, color = p.bad) { Bg.clear(); nav.toast = "已移除背景" } }
+                ActionRow {
+                    OutlineBtn(if (has) "换一张" else "选择图片", pad = 14.dp) { pick() }
+                    if (has) { Spacer(Modifier.width(10.dp)); OutlineBtn("移除", pad = 14.dp, color = p.bad) { dr.src = null; dr.shown = null } }
+                    Spacer(Modifier.weight(1f))
+                    if (dr.changed) { OutlineBtn("还原", pad = 14.dp) { d = BgDraft() }; Spacer(Modifier.width(10.dp)) }
+                    Box(Modifier.press(.96f, true) {
+                        if (!dr.changed) return@press
+                        scope.launch { runCatching { Bg.apply(dr) }.onSuccess { d = BgDraft(); nav.toast = "背景已应用" }.onFailure { nav.toast = "应用失败：${it.message}" } }
+                    }.height(48.dp).background(if (dr.changed) p.p else p.l3).padding(horizontal = 22.dp), contentAlignment = Alignment.Center) { T("应用", 15, Color.White, 700) }
                 }
             }
         }
-        if (Bg.on) item {
+        if (has) item {
             Column(Modifier.padding(top = 22.dp)) {
-                SliderRow("模糊", "%.0f".format(Bg.blur), Bg.blur, 0f..30f) { Bg.blur = it; Bg.reblur() }
-                SliderRow("透明度", "%.0f%%".format(Bg.alpha * 100), Bg.alpha, .05f..1f) { Bg.alpha = it }
-                SliderRow("大小", "%.2fx".format(Bg.scale), Bg.scale, 1f..4f) { Bg.scale = it }
-                SliderRow("水平位置", "%+.0f%%".format(Bg.ox * 100), Bg.ox, -1f..1f) { Bg.ox = it }
-                SliderRow("垂直位置", "%+.0f%%".format(Bg.oy * 100), Bg.oy, -1f..1f) { Bg.oy = it }
+                SliderRow("模糊", "%.0f".format(dr.blur), dr.blur, 0f..30f) { dr.blur = it }
+                SliderRow("透明度", "%.0f%%".format(dr.alpha * 100), dr.alpha, .05f..1f) { dr.alpha = it }
+                SliderRow("大小", "%.2fx".format(dr.scale), dr.scale, 1f..4f) { dr.scale = it }
+                SliderRow("水平位置", "%+.0f%%".format(dr.ox * 100), dr.ox, -1f..1f) { dr.ox = it }
+                SliderRow("垂直位置", "%+.0f%%".format(dr.oy * 100), dr.oy, -1f..1f) { dr.oy = it }
                 Spacer(Modifier.height(10.dp))
-                OutlineBtn("重置位置和大小") { Bg.resetTransform() }
+                ActionRow { Spacer(Modifier.weight(1f)); OutlineBtn("重置位置和大小", pad = 14.dp) { dr.scale = 1f; dr.ox = 0f; dr.oy = 0f } }
             }
         }
     }
@@ -211,6 +255,6 @@ object Bg {
     val p = c
     Column(Modifier.fillMaxWidth().bottomLine().padding(vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) { T(label, 16, w = 600, modifier = Modifier.weight(1f)); T(value, 13, p.p, 600, mono = true) }
-        NSlider(v, range, onDone = { Bg.save() }, onChange = onChange)
+        NSlider(v, range, onChange = onChange)
     }
 }
