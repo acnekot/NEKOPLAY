@@ -31,7 +31,7 @@ compose.desktop {
         mainClass = "cc.catsuki.nekoplay.MainKt"
         jvmArgs += listOf("-Xmx256m", "-XX:+UseSerialGC", "-XX:TieredStopAtLevel=1")
         nativeDistributions {
-            targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb, TargetFormat.AppImage)
+            targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb) // AppImage 和 dmg 共用输出目录会冲突；免安装版另外打 zip
             packageName = "NEKOPLAY"
             packageVersion = "1.0.0" // Windows 安装包和 macOS 要求主版本号 ≥ 1
             description = "NEKOPLAY music player" // 安装包元数据用英文：WiX 默认代码页处理不了中文
