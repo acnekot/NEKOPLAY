@@ -67,11 +67,12 @@ jobs:
           path: NEKOPLAY-${{ runner.os }}-portable.zip
 
       # 2) 安装包：Windows 的 jpackage（JDK 21）需要 WiX 3，新版 runner 没预装，先装上
-      - name: 安装 WiX 3（Windows）
+      - name: 确认 WiX 3（Windows）
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install wixtoolset --version 3.14.1 -y --no-progress
+          # runner 一般已经装好 WiX 3.14，没装才安装
+          if (-not (Test-Path "C:\Program Files (x86)\WiX Toolset v3.14\bin\light.exe")) { choco install wixtoolset -y --no-progress }
           echo "C:\Program Files (x86)\WiX Toolset v3.14\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: 打包安装包
         working-directory: desktop

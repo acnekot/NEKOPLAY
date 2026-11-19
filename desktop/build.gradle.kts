@@ -34,8 +34,8 @@ compose.desktop {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb, TargetFormat.AppImage)
             packageName = "NEKOPLAY"
             packageVersion = "1.0.0" // Windows 安装包和 macOS 要求主版本号 ≥ 1
-            description = "NEKOPLAY 音乐播放器"
-            vendor = "好奇猫a"
+            description = "NEKOPLAY music player" // 安装包元数据用英文：WiX 默认代码页处理不了中文
+            vendor = "acnekot"
             modules("java.sql", "jdk.unsupported")
             // 播放内核 libmpv：打包时放进 resources/<系统>/（由 GitHub Actions 下载），装好就能直接播放
             appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
