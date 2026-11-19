@@ -7,3 +7,8 @@ local.properties
 *.jks
 .idea/
 *.iml
+
+# 打包时下载的 libmpv
+desktop/resources/windows/
+desktop/resources/macos/
+desktop/resources/linux/

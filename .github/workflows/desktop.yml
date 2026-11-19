@@ -15,6 +15,42 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 21 }
 
+      # 0) 把播放内核 libmpv 放进 desktop/resources/<系统>/，安装包和免安装版都会带上
+      - name: 准备 libmpv（Windows）
+        if: runner.os == 'Windows'
+        shell: bash
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          mkdir -p desktop/resources/windows mpvtmp
+          gh release download -R shinchiro/mpv-winbuild-cmake --pattern "mpv-dev-x86_64-2*.7z" -D mpvtmp
+          7z e mpvtmp/*.7z -omp libmpv-2.dll -r -y
+          cp mp/libmpv-2.dll desktop/resources/windows/
+          ls -l desktop/resources/windows
+      - name: 准备 libmpv（macOS）
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          brew install mpv dylibbundler
+          mkdir -p desktop/resources/macos && cd desktop/resources/macos
+          cp "$(brew --prefix mpv)/lib/libmpv.2.dylib" . && chmod u+w libmpv.2.dylib
+          # 把依赖的 dylib 一起拷进来，路径改成相对自己（@loader_path）
+          dylibbundler -of -b -x ./libmpv.2.dylib -d . -p @loader_path/
+          codesign --force -s - ./*.dylib
+          ls | head -50; du -sh .
+      - name: 准备 libmpv（Linux）
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q libmpv-dev patchelf
+          D=desktop/resources/linux; mkdir -p $D
+          cp -L "$(ldconfig -p | awk '/libmpv\.so\.2 .*x86-64/{print $NF; exit}')" $D/libmpv.so.2
+          # 依赖一起带上；系统基础库（glibc、显卡、X11/Wayland、声音服务）用系统自己的
+          ldd $D/libmpv.so.2 | awk '/=> \//{print $3}' \
+            | grep -vE '/(libc|libm|libdl|libpthread|librt|libresolv|ld-linux[^/]*|libstdc\+\+|libgcc_s|libGL[^/]*|libEGL|libGLX|libGLdispatch|libX[^/]*|libxcb[^/]*|libwayland[^/]*|libdrm|libgbm|libasound|libpulse[^/]*|libsystemd|libdbus[^/]*|libudev|libz|libexpat|libffi|libselinux|libpcre2[^/]*)\.so' \
+            | xargs -I{} cp -L {} $D/
+          patchelf --set-rpath '$ORIGIN' $D/*.so*
+          ls $D | wc -l; du -sh $D
+
       # 1) 免安装版：直接解压就能用，不依赖安装包工具
       - name: 打包免安装版
         working-directory: desktop
