@@ -36,13 +36,13 @@ import androidx.compose.ui.unit.dp
     val nav = LocalNav.current
     val st by Engine.state.collectAsState()
     // 手机版里「打开队列」的操作，在宽屏上改为打开右侧队列面板
-    LaunchedEffect(nav.queue) { if (nav.queue) { nav.side = 2; nav.queue = false } }
+    LaunchedEffect(nav.queue) { if (nav.queue) { nav.side = if (nav.side == 2) 1 else 2; nav.queue = false } }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 Sidebar()
                 Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) { WideContent() }
-                if (nav.side != 0 && st.current != null) SidePanel(st)
+                if ((nav.side != 0 || nav.comments != null) && st.current != null) SidePanel(st)
             }
             PlayerBar()
         }
@@ -131,6 +131,8 @@ import androidx.compose.ui.unit.dp
     Column(Modifier.width(380.dp).fillMaxHeight().background(p.page.copy(alpha = .6f)).drawBehind {
         if (!Look.flat) drawRect(p.k, Offset.Zero, Size(3.dp.toPx(), size.height))
     }.padding(start = 3.dp)) {
+        // 打开评论时，右栏换成评论；关掉回到歌词 / 队列
+        nav.comments?.let { ct -> CommentsBody(ct) { nav.comments = null }; return@Column }
         Row(Modifier.fillMaxWidth().height(52.dp).padding(start = 18.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             listOf(1 to "LYRICS", 2 to "QUEUE").forEach { (k, l) ->
                 Box(Modifier.padding(end = 8.dp).press { nav.side = k }.background(if (nav.side == k) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 5.dp)) {
@@ -141,15 +143,22 @@ import androidx.compose.ui.unit.dp
             Box(Modifier.size(40.dp).press { nav.side = 0 }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp) }
         }
         if (nav.side == 1) Box(Modifier.weight(1f).fillMaxWidth()) { Lyrics(t, true) }
-        else {
-            val ls = rememberLazyListState((st.index - 2).coerceAtLeast(0))
-            Row(Modifier.padding(horizontal = 18.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                T("${st.queue.size} 首", 12, p.s, mono = true, modifier = Modifier.weight(1f)); LinkBtn("清空待播") { Engine.clearUpcoming() }
-            }
-            LazyColumn(Modifier.weight(1f).fillMaxWidth(), ls, contentPadding = PaddingValues(start = 18.dp, end = 10.dp, bottom = 12.dp)) {
-                itemsIndexed(st.queue, key = { i, x -> "$i${x.id}" }) { i, x ->
-                    TrackRow(x, i == st.index, null, onLong = { trackActions(nav, x) }) { Engine.playAt(i) }
-                }
+        else Box(Modifier.weight(1f).fillMaxWidth()) { QueueList(st) }
+    }
+}
+
+/** 播放队列列表（右栏 / 播放页第三栏共用） */
+@Composable fun QueueList(st: PlayState) {
+    val nav = LocalNav.current
+    val p = c
+    Column(Modifier.fillMaxSize()) {
+        val ls = rememberLazyListState((st.index - 2).coerceAtLeast(0))
+        Row(Modifier.padding(horizontal = 18.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            T("${st.queue.size} 首", 12, p.s, mono = true, modifier = Modifier.weight(1f)); LinkBtn("清空待播") { Engine.clearUpcoming() }
+        }
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), ls, contentPadding = PaddingValues(start = 18.dp, end = 10.dp, bottom = 12.dp)) {
+            itemsIndexed(st.queue, key = { i, x -> "$i${x.id}" }) { i, x ->
+                TrackRow(x, i == st.index, null, onLong = { trackActions(nav, x) }) { Engine.playAt(i) }
             }
         }
     }

@@ -145,7 +145,7 @@ val spF get() = spring<Float>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.S
                 AccountMenu(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = if (chrome != null) 54.dp else 59.dp, end = 12.dp))
             }
             if (!wide) QueueSheet()
-            CommentSheet()
+            if (!wide) CommentSheet() // PC 宽屏：评论放在右栏
             ActionSheet()
             InputDialog()
             AnimatedVisibility(nav.toast != null, Modifier.align(Alignment.BottomCenter).padding(bottom = if (hasTrack) 150.dp else 90.dp, start = 24.dp, end = 24.dp).navigationBarsPadding(),

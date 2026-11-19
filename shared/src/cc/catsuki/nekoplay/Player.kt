@@ -371,96 +371,103 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     nav.comments?.let { last = it }
     AnimatedVisibility(nav.comments != null, Modifier.fillMaxSize(), enter = slideInVertically(sp) { it }, exit = slideOutVertically(sp) { it }) {
         val t = last ?: return@AnimatedVisibility
-        val me = Store.profile.collectAsState().value
-        var hot by remember(t.id) { mutableStateOf(true) }
-        val list = remember(t.id, hot) { mutableStateListOf<Comment>() }
-        var total by remember(t.id, hot) { mutableIntStateOf(-1) }
-        var busy by remember(t.id, hot) { mutableStateOf(false) }
-        var end by remember(t.id, hot) { mutableStateOf(false) }
-        var err by remember(t.id, hot) { mutableStateOf<String?>(null) }
-        var text by remember(t.id) { mutableStateOf("") }
-        var replyTo by remember(t.id) { mutableStateOf<Comment?>(null) }
-        var sending by remember { mutableStateOf(false) }
-        val scope = rememberCoroutineScope()
-        val fm = androidx.compose.ui.platform.LocalFocusManager.current
-        val fr = remember { androidx.compose.ui.focus.FocusRequester() }
-        fun more() {
-            if (busy || end) return
-            busy = true
-            scope.launch {
-                try {
-                    val (l, n) = Ncm.comments(t.id, hot, list.size, if (!hot) list.lastOrNull()?.time ?: 0 else 0)
-                    list += l.filter { x -> list.none { it.id == x.id } }; total = n; if (l.isEmpty() || (total in 0..list.size)) end = true
-                } catch (e: Exception) { err = e.message; end = true }
-                busy = false
+        CommentsBody(t) { nav.comments = null }
+    }
+}
+
+/** 评论内容（手机是全屏弹层；PC 宽屏放在右栏替换歌词） */
+@Composable fun CommentsBody(t: Track, onClose: () -> Unit) {
+    val nav = LocalNav.current
+    val p = c
+    val me = Store.profile.collectAsState().value
+    var hot by remember(t.id) { mutableStateOf(true) }
+    val list = remember(t.id, hot) { mutableStateListOf<Comment>() }
+    var total by remember(t.id, hot) { mutableIntStateOf(-1) }
+    var busy by remember(t.id, hot) { mutableStateOf(false) }
+    var end by remember(t.id, hot) { mutableStateOf(false) }
+    var err by remember(t.id, hot) { mutableStateOf<String?>(null) }
+    var text by remember(t.id) { mutableStateOf("") }
+    var replyTo by remember(t.id) { mutableStateOf<Comment?>(null) }
+    var sending by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val fm = androidx.compose.ui.platform.LocalFocusManager.current
+    val fr = remember { androidx.compose.ui.focus.FocusRequester() }
+    fun more() {
+        if (busy || end) return
+        busy = true
+        scope.launch {
+            try {
+                val (l, n) = Ncm.comments(t.id, hot, list.size, if (!hot) list.lastOrNull()?.time ?: 0 else 0)
+                list += l.filter { x -> list.none { it.id == x.id } }; total = n; if (l.isEmpty() || (total in 0..list.size)) end = true
+            } catch (e: Exception) { err = e.message; end = true }
+            busy = false
+        }
+    }
+    LaunchedEffect(t.id, hot) { more() }
+    val ls = remember(t.id, hot) { androidx.compose.foundation.lazy.LazyListState() }
+    val nearEnd by remember(ls) { derivedStateOf { (ls.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= ls.layoutInfo.totalItemsCount - 4 } }
+    LaunchedEffect(nearEnd, list.size) { if (nearEnd && list.isNotEmpty()) more() }
+    fun send() {
+        val v = text.trim(); if (v.isEmpty() || sending) return
+        if (me == null) { nav.toast = "登录后才能评论"; return }
+        sending = true
+        val r = replyTo
+        scope.launch {
+            try {
+                Ncm.commentPost(t.id, v, r?.id)
+                text = ""; replyTo = null; fm.clearFocus()
+                nav.toast = if (r != null) "回复已发送" else "评论已发送"
+                if (!hot) list.add(0, Comment(System.currentTimeMillis(), me.name, me.uid, me.avatar, v, 0, System.currentTimeMillis(), r?.let { "@${it.user}：${it.content}" }))
+            } catch (e: Exception) { nav.toast = "发送失败：${e.message}" }
+            sending = false
+        }
+    }
+    Column(Modifier.fillMaxSize().background(p.sheet).statusBarsPadding().drawBehind { if (!Look.flat) drawRect(p.k, size = Size(size.width, 3.dp.toPx())) }) {
+        Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { TagRow("COMMENTS" + if (total > 0) " · $total" else "", 8.dp) }
+            Box(Modifier.size(44.dp).press { fm.clearFocus(); onClose() }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 14.dp) }
+        }
+        Row(Modifier.padding(horizontal = 18.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(true to "热门", false to "最新").forEach { (k, l) ->
+                Box(Modifier.press { hot = k }.background(if (hot == k) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(l, 13, if (hot == k) p.tagFg else p.k, 700) }
+            }
+            Spacer(Modifier.weight(1f)); T(t.title, 13, p.s, modifier = Modifier.align(Alignment.CenterVertically).widthIn(max = 180.dp))
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(if (Look.flat) Color.Transparent else p.l2))
+        LazyColumn(Modifier.fillMaxWidth().weight(1f), ls, contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 16.dp)) {
+            itemsIndexed(list, key = { _, x -> x.id }) { _, x ->
+                CommentRow(x, t.id, onReply = { if (me == null) nav.toast = "登录后才能回复" else { replyTo = x; fr.requestFocus() } }) {
+                    fm.clearFocus(); nav.comments = null; nav.player = false; nav.push(Page.User(x.uid, x.user))
+                }
+            }
+            item {
+                T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; list.isEmpty() -> "NO COMMENTS"; end -> "END"; else -> "" },
+                    12, p.s, mono = true, ls = .08f, lines = 3, modifier = Modifier.padding(vertical = 20.dp))
             }
         }
-        LaunchedEffect(t.id, hot) { more() }
-        val ls = remember(t.id, hot) { androidx.compose.foundation.lazy.LazyListState() }
-        val nearEnd by remember(ls) { derivedStateOf { (ls.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= ls.layoutInfo.totalItemsCount - 4 } }
-        LaunchedEffect(nearEnd, list.size) { if (nearEnd && list.isNotEmpty()) more() }
-        fun send() {
-            val v = text.trim(); if (v.isEmpty() || sending) return
-            if (me == null) { nav.toast = "登录后才能评论"; return }
-            sending = true
-            val r = replyTo
-            scope.launch {
-                try {
-                    Ncm.commentPost(t.id, v, r?.id)
-                    text = ""; replyTo = null; fm.clearFocus()
-                    nav.toast = if (r != null) "回复已发送" else "评论已发送"
-                    if (!hot) list.add(0, Comment(System.currentTimeMillis(), me.name, me.uid, me.avatar, v, 0, System.currentTimeMillis(), r?.let { "@${it.user}：${it.content}" }))
-                } catch (e: Exception) { nav.toast = "发送失败：${e.message}" }
-                sending = false
-            }
-        }
-        Column(Modifier.fillMaxSize().background(p.sheet).statusBarsPadding().drawBehind { if (!Look.flat) drawRect(p.k, size = Size(size.width, 3.dp.toPx())) }) {
-            Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { TagRow("COMMENTS" + if (total > 0) " · $total" else "", 8.dp) }
-                Box(Modifier.size(44.dp).press { fm.clearFocus(); nav.comments = null }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 14.dp) }
-            }
-            Row(Modifier.padding(horizontal = 18.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(true to "热门", false to "最新").forEach { (k, l) ->
-                    Box(Modifier.press { hot = k }.background(if (hot == k) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(l, 13, if (hot == k) p.tagFg else p.k, 700) }
-                }
-                Spacer(Modifier.weight(1f)); T(t.title, 13, p.s, modifier = Modifier.align(Alignment.CenterVertically).widthIn(max = 180.dp))
-            }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(if (Look.flat) Color.Transparent else p.l2))
-            LazyColumn(Modifier.fillMaxWidth().weight(1f), ls, contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 16.dp)) {
-                itemsIndexed(list, key = { _, x -> x.id }) { _, x ->
-                    CommentRow(x, t.id, onReply = { if (me == null) nav.toast = "登录后才能回复" else { replyTo = x; fr.requestFocus() } }) {
-                        fm.clearFocus(); nav.comments = null; nav.player = false; nav.push(Page.User(x.uid, x.user))
-                    }
-                }
-                item {
-                    T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; list.isEmpty() -> "NO COMMENTS"; end -> "END"; else -> "" },
-                        12, p.s, mono = true, ls = .08f, lines = 3, modifier = Modifier.padding(vertical = 20.dp))
+        // 聊天式输入栏：贴在键盘上
+        Column(Modifier.fillMaxWidth().background(p.bar).drawBehind { if (!Look.flat) drawRect(p.k, size = Size(size.width, 2.dp.toPx())) }) {
+            replyTo?.let { r ->
+                Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.width(3.dp).height(30.dp).background(p.p)); Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) { T("回复 @${r.user}", 12, p.p, 700); T(r.content, 12, p.s) }
+                    Box(Modifier.size(40.dp).press { replyTo = null }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp) }
                 }
             }
-            // 聊天式输入栏：贴在键盘上
-            Column(Modifier.fillMaxWidth().background(p.bar).drawBehind { if (!Look.flat) drawRect(p.k, size = Size(size.width, 2.dp.toPx())) }) {
-                replyTo?.let { r ->
-                    Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.width(3.dp).height(30.dp).background(p.p)); Spacer(Modifier.width(8.dp))
-                        Column(Modifier.weight(1f)) { T("回复 @${r.user}", 12, p.p, 700); T(r.content, 12, p.s) }
-                        Box(Modifier.size(40.dp).press { replyTo = null }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp) }
-                    }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
+                Box(Modifier.weight(1f).heightIn(min = 44.dp).nbf(1.dp, p.k).background(p.page).padding(horizontal = 12.dp, vertical = 11.dp), contentAlignment = Alignment.CenterStart) {
+                    if (text.isEmpty()) T(if (me == null) "登录后才能评论" else if (replyTo != null) "回复 @${replyTo!!.user}…" else "说点什么…", 15, p.s)
+                    androidx.compose.foundation.text.BasicTextField(text, { text = it }, Modifier.fillMaxWidth().focusRequester(fr), enabled = me != null, maxLines = 5,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = p.k, fontSize = 15.sp, fontFamily = Typo.family, lineHeight = 21.sp),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(p.p))
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
-                    Box(Modifier.weight(1f).heightIn(min = 44.dp).nbf(1.dp, p.k).background(p.page).padding(horizontal = 12.dp, vertical = 11.dp), contentAlignment = Alignment.CenterStart) {
-                        if (text.isEmpty()) T(if (me == null) "登录后才能评论" else if (replyTo != null) "回复 @${replyTo!!.user}…" else "说点什么…", 15, p.s)
-                        androidx.compose.foundation.text.BasicTextField(text, { text = it }, Modifier.fillMaxWidth().focusRequester(fr), enabled = me != null, maxLines = 5,
-                            textStyle = androidx.compose.ui.text.TextStyle(color = p.k, fontSize = 15.sp, fontFamily = Typo.family, lineHeight = 21.sp),
-                            cursorBrush = androidx.compose.ui.graphics.SolidColor(p.p))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    val can = text.isNotBlank() && !sending
-                    Box(Modifier.size(44.dp).press(.92f, true) { send() }.background(if (can) p.p else p.l3), contentAlignment = Alignment.Center) {
-                        if (sending) T("…", 16, Color.White, 800) else NIcon(NIcons.send, 20.dp, Color.White)
-                    }
+                Spacer(Modifier.width(8.dp))
+                val can = text.isNotBlank() && !sending
+                Box(Modifier.size(44.dp).press(.92f, true) { send() }.background(if (can) p.p else p.l3), contentAlignment = Alignment.Center) {
+                    if (sending) T("…", 16, Color.White, 800) else NIcon(NIcons.send, 20.dp, Color.White)
                 }
-                Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime.union(WindowInsets.navigationBars)))
             }
+            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime.union(WindowInsets.navigationBars)))
         }
     }
 }
@@ -542,6 +549,20 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
                 Box(Modifier.width(maxOf(cover, 420.dp) + 44.dp)) { Controls(t, st) }
             }
         }
-        Box(Modifier.weight(1f).fillMaxHeight().padding(top = 24.dp, end = 24.dp)) { Lyrics(t, showTr) }
+        // 右栏：歌词；打开评论时换成评论
+        Box(Modifier.weight(1f).fillMaxHeight().padding(top = if (nav.comments != null) 0.dp else 24.dp, end = if (nav.side == 2) 0.dp else 24.dp)) {
+            val ct = nav.comments
+            if (ct != null) CommentsBody(ct) { nav.comments = null } else Lyrics(t, showTr)
+        }
+        // 第三栏：播放队列（看歌词的同时打开）
+        if (nav.side == 2) Column(Modifier.width(360.dp).fillMaxHeight().drawBehind {
+            if (!Look.flat) drawRect(p.k, Offset.Zero, Size(3.dp.toPx(), size.height))
+        }.padding(start = 3.dp)) {
+            Row(Modifier.fillMaxWidth().height(48.dp).padding(start = 18.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                T("QUEUE", 12, p.k, 700, mono = true, ls = .1f, modifier = Modifier.weight(1f))
+                Box(Modifier.size(40.dp).press { nav.side = 1 }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp) }
+            }
+            Box(Modifier.weight(1f)) { QueueList(st) }
+        }
     }
 }
