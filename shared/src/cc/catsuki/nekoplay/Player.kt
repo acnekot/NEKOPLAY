@@ -529,7 +529,8 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
     Row(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
             // 封面宽度 = 进度条宽度（控制区左右各留 22 的内边距，所以外框比封面宽 44）
-            val cover = minOf(maxWidth - 140.dp, maxHeight - 290.dp, 520.dp).coerceAtLeast(300.dp)
+            // 左栏变窄（开了评论 / 队列）时封面跟着缩，保证外框放得下，封面始终和进度条等宽
+            val cover = minOf(maxWidth - 44.dp - 48.dp, maxHeight - 290.dp, 520.dp).coerceAtLeast(160.dp)
             Column(Modifier.width(cover + 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Cover(t.cover, cover, t.title)
                 Spacer(Modifier.height(22.dp))
@@ -561,7 +562,7 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
             Box(Modifier.align(Alignment.TopStart).padding(8.dp).size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp, p.s) }
         }
         // 右栏：歌词；打开评论时换成评论
-        Box(Modifier.weight(1f).fillMaxHeight().padding(top = if (nav.comments != null) 0.dp else 24.dp, end = if (nav.side == 2) 0.dp else 24.dp)) {
+        Box(Modifier.weight(1f).fillMaxHeight().padding(top = if (nav.comments != null) 0.dp else 24.dp, end = if (nav.side == 2 || nav.comments != null) 0.dp else 24.dp)) {
             val ct = nav.comments
             if (ct != null) CommentsBody(ct) { nav.comments = null } else Lyrics(t, showTr)
         }
