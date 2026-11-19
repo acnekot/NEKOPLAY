@@ -496,15 +496,37 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
             }
         }
         item { Group("APPEARANCE") }
+        item { SwitchRow("跟随系统", "跟随系统的深浅色设置", ThemePref.mode == 0) { ThemePref.set(if (it) 0 else if (sysDark) 2 else 1) } }
         item { SwitchRow("深色模式", "切换为暗色界面", if (ThemePref.mode == 0) sysDark else ThemePref.mode == 2, ThemePref.mode != 0) { ThemePref.set(if (it) 2 else 1) } }
-        item { NavRow("字体", "默认 Inter 无衬线；也可以改用系统字体", if (Typo.sans == 0) "系统字体" else "Inter") { Typo.set(1 - Typo.sans) } }
         item { NavRow("主题", "界面风格：BenchLab 粗线框 / 无边框", Look.NAMES[Look.style]) { nav.sheet = SheetSpec("选择主题", null, Look.NAMES.mapIndexed { i, n -> SheetItem((if (i == Look.style) "✓  " else "    ") + n) { Look.set(i) } }) } }
+        item { NavRow("字体", "默认 Inter 无衬线；也可以改用系统字体", if (Typo.sans == 0) "系统字体" else "Inter") { Typo.set(1 - Typo.sans) } }
         item { NavRow("首页布局", "调整首页模块的顺序，或关掉不需要的", "${HomeLayout.visible.size}/${HomeLayout.ALL.size}") { nav.push(Page.HomeLayout) } }
         item { NavRow("自定义背景", "选一张图片，可调模糊、透明度、位置和大小", if (Bg.on) "已设置" else "未设置") { nav.push(Page.Background) } }
-        item { SwitchRow("跟随系统", "跟随手机的深浅色设置", ThemePref.mode == 0) { ThemePref.set(if (it) 0 else if (sysDark) 2 else 1) } }
+        if (Bg.on) item {
+            SetLine("栏位不透明度", "有自定义背景时，侧边栏、顶栏、播放条的不透明度") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { NSlider(UiPref.barAlpha, 0f..1f, onDone = { UiPref.save() }) { UiPref.barAlpha = it } }
+                    Spacer(Modifier.width(10.dp)); T("%.0f%%".format(UiPref.barAlpha * 100), 14, p.p, 700, mono = true)
+                }
+            }
+        }
+        item { NavRow("动效", "动画形式和速度", "${AnimStyle.labels[AnimStyle.style]} · ${Anim.labels[Anim.level]}") { nav.push(Page.Tuning) } }
+        item { Group("LYRICS") }
+        item {
+            SetLine("歌词字号", "歌词页、播放页右栏") {
+                T("今も頭上を回って輝く", LyricPref.size.toFloat(), p.k, 800)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { NSlider(LyricPref.size.toFloat(), 16f..40f, onDone = { LyricPref.set(LyricPref.size) }) { LyricPref.size = it.toInt() } }
+                    Spacer(Modifier.width(10.dp)); T("${LyricPref.size}", 14, p.p, 700, mono = true)
+                }
+            }
+        }
+        item { SwitchRow("逐字高亮", "有逐字歌词的歌，当前句一个字一个字亮起来", UiPref.karaoke) { UiPref.karaoke = it; UiPref.save() } }
+        item { SwitchRow("远处歌词模糊", "离当前句较远的行轻微模糊（更有层次，略耗性能）", UiPref.lyricBlur) { UiPref.lyricBlur = it; UiPref.save() } }
         item { Group("PLAYBACK") }
-        item { NavRow("效果器", "10 段均衡器、低音增强、环绕、响度", if (FxStore.fx.on) FxStore.fx.preset else "关") { nav.push(Page.Effects) } }
         item { NavRow("音质", "在线播放的档位，拿不到时自动降一档", Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav) } }
+        item { NavRow("效果器", "10 段均衡器、低音增强、环绕、响度", if (FxStore.fx.on) FxStore.fx.preset else "关") { nav.push(Page.Effects) } }
+        item { SwitchRow("进度条显示缓存", "进度条上用深一点的颜色标出已经下载好的部分", UiPref.showBuffer) { UiPref.showBuffer = it; UiPref.save() } }
         item {
             NavRow("播放缓存", "听过的歌存在本地，再听不用重新下载（上限 1GB）", "%.0f MB".format(cacheSize / 1048576.0)) {
                 nav.sheet = SheetSpec("播放缓存", "已用 %.0f MB / 1024 MB".format(cacheSize / 1048576.0), listOf(SheetItem("清空播放缓存", danger = true) {
@@ -512,13 +534,15 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                 }))
             }
         }
+        if (Plat.isDesktop) {
+            item { Group("DESKTOP") }
+            item { SwitchRow("后台留存", "关闭窗口时缩到系统托盘继续播放；托盘图标可以播放 / 暂停、切歌、退出", UiPref.tray) { UiPref.tray = it; UiPref.save() } }
+            item { NavRow("快捷键", "播放、切歌、音量等键盘操作", "${Keys.HELP.size} 个") { nav.push(Page.KeyMap) } }
+        }
         item { Group("PERFORMANCE") }
         item { val ps by Perf.stat.collectAsState(); T(Perf.line(ps), 11, p.s, mono = true, lines = 3, lh = 1.5f, modifier = Modifier.padding(vertical = 10.dp)) }
         item { val po by Perf.overlay.collectAsState(); SwitchRow("性能浮窗", "在所有页面左下角显示 CPU、帧率和 GPU", po) { Perf.overlay.value = it; prefs.edit().putBoolean("perf", it).apply() } }
-        item { Group("MOTION") }
-        item { NavRow("详细调整", "动效形式和速度、歌词字号与效果、进度条缓存显示、背景下的栏位透明度", "${AnimStyle.labels[AnimStyle.style]} · ${Anim.labels[Anim.level]}") { nav.push(Page.Tuning) } }
-        item { Group("ABOUT") }
-        item { NavRow("版本", null, "原生版 0.2.0", clickable = false) {} }
+        item { SwitchRow("省内存模式", "图片缓存变小、头像不播放动画、逐字高亮降到约 20 帧${if (Plat.isDesktop) "、最小化时释放内存" else ""}；图片缓存大小重启后生效", UiPref.lowMem) { UiPref.lowMem = it; UiPref.save() } }
         item {
             Row(Modifier.fillMaxWidth().padding(vertical = 10.dp).bottomLine().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -532,6 +556,8 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                 }
             }
         }
+        item { Group("ABOUT") }
+        item { NavRow("版本", null, "原生版 0.2.0", clickable = false) {} }
     }
 }
 
