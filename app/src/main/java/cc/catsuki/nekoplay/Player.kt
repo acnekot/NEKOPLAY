@@ -1,0 +1,512 @@
+package cc.catsuki.nekoplay
+
+import androidx.compose.animation.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.blur
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.withFrameMillis
+
+// ======================= 迷你播放条 =======================
+@Composable fun MiniBar() {
+    val nav = LocalNav.current
+    val st by Engine.state.collectAsState()
+    val t = st.current ?: return
+    val p = c
+    Box(Modifier.fillMaxWidth().height(60.dp)) {
+        Row(Modifier.fillMaxSize().background(p.bar).drawBehind { if (!Look.flat) drawRect(p.l2, size = Size(size.width, 1.dp.toPx())) }
+            .press { nav.lyrics = false; nav.player = true }.padding(start = 14.dp, end = 6.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Cover(t.cover, 40.dp, t.title)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) { T(t.title, 15, w = 700, lh = 1.3f); T(t.artist, 12, p.s, lh = 1.3f) }
+            Box(Modifier.size(48.dp).press(haptic = true) { Engine.toggle() }, contentAlignment = Alignment.Center) { NIcon(if (st.playing) NIcons.pause else NIcons.play, 22.dp) }
+            Box(Modifier.size(44.dp, 48.dp).press(haptic = true) { Engine.next() }, contentAlignment = Alignment.Center) { NIcon(NIcons.next, 20.dp) }
+        }
+        var scrub by remember { mutableStateOf<Float?>(null) }
+        Box(Modifier.offset(y = (-7).dp)) { ScrubBar(t.durationMs) { scrub = it } }
+        // 拖动时，时间气泡跟着手指
+        scrub?.let { f ->
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val w = maxWidth
+                val x = (w * f - 26.dp).coerceIn(4.dp, w - 56.dp)
+                Box(Modifier.offset(x = x, y = (-38).dp).size(52.dp, 26.dp).background(p.k), contentAlignment = Alignment.Center) {
+                    T(fmt((f * t.durationMs).toLong()), 12, p.tagFg, mono = true)
+                }
+            }
+        }
+    }
+}
+
+private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
+
+// ======================= 播放页（封面 ⇄ 歌词 共用一个舞台） =======================
+@Composable fun PlayerOverlay() {
+    val nav = LocalNav.current
+    val drag = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    AnimatedVisibility(nav.player, enter = slideInVertically(sp) { it }, exit = slideOutVertically(sp) { it }) {
+        LaunchedEffect(Unit) { drag.snapTo(0f) }
+        val st by Engine.state.collectAsState()
+        val t = st.current
+        val lt by animateFloatAsState(if (nav.lyrics) 1f else 0f, spF, label = "ly")
+        var showTr by remember { mutableStateOf(true) }
+        val p = c
+        BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer { translationY = drag.value }.background(p.page)) {
+            BgLayer()
+            val h = constraints.maxHeight.toFloat()
+            Column(Modifier.fillMaxSize()) {
+                // 顶栏：按住下拉可以跟手收起
+                Row(Modifier.fillMaxWidth().height(48.dp).pointerInput(Unit) {
+                    detectVerticalDragGestures(onDragEnd = {
+                        scope.launch { if (drag.value > h * .18f) nav.player = false else drag.animateTo(0f, spring(1f, Anim.stiff(Spring.StiffnessMediumLow))) }
+                    }) { _, dy -> scope.launch { drag.snapTo((drag.value + dy).coerceAtLeast(0f)) } }
+                }.drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp) }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { T(if (lt > .5f) "LYRICS" else if (st.fm) "PERSONAL FM" else "NOW PLAYING", 12, p.k.copy(alpha = .5f), 700, mono = true, ls = .14f) }
+                    Box(Modifier.size(44.dp).graphicsLayer { alpha = lt }.press { if (lt > .9f) showTr = !showTr }, contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(28.dp).background(if (showTr) p.k else Color.Transparent).nbf(1.dp, p.k), contentAlignment = Alignment.Center) {
+                            T("译", 13, if (showTr) p.tagFg else p.k, 700)
+                        }
+                    }
+                }
+                if (t == null) { Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { T("NO TRACK", 12, p.s, mono = true, ls = .08f) }; return@Column }
+                BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+                    val d = LocalDensity.current
+                    val w = with(d) { maxWidth.toPx() }
+                    val bottomPad = with(d) { WindowInsets.navigationBars.getBottom(d).toFloat() }
+                    val ctrlH = with(d) { 156.dp.toPx() } + bottomPad
+                    val free = with(d) { maxHeight.toPx() } - ctrlH
+                    val dp = with(d) { 1.dp.toPx() }
+                    val coverNow = (free - 96 * dp).coerceIn(120 * dp, w - 56 * dp)
+                    val nowTop = ((free - coverNow - 84 * dp) / 2).coerceIn(8 * dp, 40 * dp)
+                    val cs = lerp(coverNow, 48 * dp, lt)
+                    val cl = lerp((w - coverNow) / 2, 18 * dp, lt)
+                    val ct = lerp(nowTop, 8 * dp, lt)
+                    val coverDp = with(d) { coverNow.toDp() }
+                    // 歌词列
+                    if (lt > .7f) Box(Modifier.fillMaxWidth().height(with(d) { (free - 68 * dp).coerceAtLeast(0f).toDp() }).offset(y = 68.dp)
+                        .graphicsLayer { alpha = ((lt - .7f) / .3f).coerceIn(0f, 1f).let { it * it } }) { Lyrics(t, showTr) }
+                    // 封面：始终按大尺寸解码，只做位移和缩放
+                    Box(Modifier.graphicsLayer {
+                        transformOrigin = TransformOrigin(0f, 0f); translationX = cl; translationY = ct; scaleX = cs / coverNow; scaleY = cs / coverNow
+                    }.press(.97f) { nav.lyrics = !nav.lyrics }) { Cover(t.cover, coverDp, t.title) }
+                    // 标题：两套各在自己的位置淡入淡出
+                    // 信息块：和封面左边对齐，宽度等于封面；爱心在歌名同一行最右，对齐封面右边缘
+                    if (lt < .45f) Column(Modifier.width(coverDp).graphicsLayer {
+                        translationX = (w - coverNow) / 2; translationY = nowTop + coverNow + 18 * dp - 12 * dp * lt; alpha = (1 - lt / .45f).coerceIn(0f, 1f)
+                    }) {
+                        val liked by Store.likedIds.collectAsState()
+                        val on = t.id in liked
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            T(t.title, 24, w = 800, lh = 1.25f, modifier = Modifier.weight(1f))
+                            Box(Modifier.size(44.dp).offset(x = 10.dp).press(.85f, true) { Store.toggleLike(t) { nav.toast = it } }, contentAlignment = Alignment.Center) {
+                                NIcon(if (on) NIcons.heart else NIcons.heartLine, 24.dp, if (on) p.p else p.k)
+                            }
+                        }
+                        T(t.artist, 15, p.s, lh = 1.3f, modifier = Modifier.press { openArtists(nav, t) })
+                        // 点音质这一行可以换音质
+                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                        T(if (st.format.isEmpty()) Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)] + " ▾"
+                          else "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}${if (st.cached) " · 已缓存" else ""} ▾",
+                            11, p.s, mono = true, ls = .06f, modifier = Modifier.padding(top = 6.dp).press { qualitySheet(nav, ctx) })
+                    }
+                    if (lt > .75f) Column(Modifier.width(with(d) { (w - cl - cs - 30 * dp).coerceAtLeast(40 * dp).toDp() }).graphicsLayer {
+                        translationX = cl + cs + 12 * dp; translationY = ct + (cs - 38 * dp) / 2; alpha = ((lt - .75f) / .25f).coerceIn(0f, 1f)
+                    }) { T(t.title, 16, w = 800, lh = 1.25f); T(t.artist, 13, p.s, lh = 1.3f, modifier = Modifier.press { openArtists(nav, t) }) }
+                    // 控制组（两页位置完全一致）
+                    Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(with(d) { ctrlH.toDp() })) { Controls(t, st) }
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun Controls(t: Track, st: PlayState) {
+    val nav = LocalNav.current
+    val liked by Store.likedIds.collectAsState()
+    var scrub by remember { mutableStateOf<Float?>(null) }
+    val on = t.id in liked
+    Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).navigationBarsPadding()) {
+        ScrubBar(t.durationMs) { scrub = it }
+        Spacer(Modifier.height(2.dp)); TimeRow(t.durationMs, scrub)
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            if (st.fm) SquareBtn(NIcons.trash) { Engine.fmTrash(); nav.toast = "不再推荐这首" } else SquareBtn(NIcons.prev) { Engine.prev() }
+            Spacer(Modifier.width(26.dp))
+            Box(Modifier.press(.96f, true) { Engine.toggle() }.size(48.dp).background(c.p), contentAlignment = Alignment.Center) {
+                if (st.loading && !st.playing) LoadingDots() else NIcon(if (st.playing) NIcons.pause else NIcons.play, 22.dp, Color.White)
+            }
+            Spacer(Modifier.width(26.dp))
+            SquareBtn(NIcons.next) { Engine.next() }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(44.dp).press(haptic = true) { Engine.cycleMode(); nav.toast = listOf("列表循环", "单曲循环", "随机播放")[Engine.state.value.mode.ordinal] }, contentAlignment = Alignment.Center) {
+                NIcon(when (st.mode) { Mode.LOOP_ALL -> NIcons.modeSeq; Mode.LOOP_ONE -> NIcons.modeOne; Mode.SHUFFLE -> NIcons.modeShuffle }, 22.dp)
+            }
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.size(44.dp).press(haptic = true) { trackActions(nav, t) }, contentAlignment = Alignment.Center) { NIcon(NIcons.more, 22.dp) }
+            Spacer(Modifier.width(6.dp))
+            Box(Modifier.size(44.dp).press(haptic = true) { nav.comments = t }, contentAlignment = Alignment.Center) { NIcon(NIcons.comment, 22.dp) }
+            Spacer(Modifier.width(6.dp))
+            Box(Modifier.size(44.dp).press(haptic = true) { nav.queue = true }, contentAlignment = Alignment.Center) { NIcon(NIcons.queue, 22.dp) }
+        }
+    }
+}
+
+/** 缓冲超过 0.4 秒才显示加载点 */
+@Composable private fun LoadingDots() {
+    var show by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(400); show = true }
+    if (!show) NIcon(NIcons.play, 22.dp, Color.White)
+    else {
+        val a by androidx.compose.animation.core.rememberInfiniteTransition(label = "ld").animateFloat(.3f, 1f, androidx.compose.animation.core.infiniteRepeatable(tween(500), androidx.compose.animation.core.RepeatMode.Reverse), label = "a")
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { repeat(3) { Box(Modifier.size(5.dp).graphicsLayer { alpha = if (it == 1) 1.3f - a else a }.background(Color.White)) } }
+    }
+}
+
+// ======================= 歌词 =======================
+@Composable fun Lyrics(t: Track, showTr: Boolean) {
+    val lines by produceState<List<LyricLine>?>(null, t.id) {
+        value = try {
+            val d = Ncm.lyricFull(t.id)
+            // 有逐字歌词就用逐字的，没有退回普通 LRC
+            d.yrc?.let { Lrc.parseYrc(it, d.tr) }?.takeIf { it.isNotEmpty() } ?: Lrc.parse(d.lrc, d.tr)
+        } catch (e: Exception) { emptyList() }
+    }
+    DisposableEffect(Unit) { Engine.fastPos++; onDispose { Engine.fastPos-- } }
+    val pos by Engine.position.collectAsState()
+    val l = lines
+    val p = c
+    if (l == null || l.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { T(if (l == null) "LOADING" else "NO LYRICS", 12, p.s, mono = true, ls = .08f) }
+        return
+    }
+    val cur = Lrc.indexAt(l, pos)
+    LyricsFlow(l, cur, showTr, pos)
+}
+
+/**
+ * 方案 B「大字流动」：大号粗体左对齐，当前句全亮、其它按距离渐淡（远处轻微模糊）；
+ * 换句时每一行各自用弹簧滚到新位置，从上往下错开约 35ms，形成「流动」感。
+ */
+@Composable private fun LyricsFlow(l: List<LyricLine>, cur: Int, showTr: Boolean, pos: Long) {
+    val p = c
+    val tops = remember(l) { FloatArray(l.size) { -1f } }
+    var measured by remember(l) { mutableStateOf(0) }
+    val offs = remember(l) { List(l.size) { Animatable(0f) } }
+    var settled by remember(l) { mutableStateOf(false) }
+    val gap = with(LocalDensity.current) { 26.dp.toPx() }
+    // 当前句停在第 2 行的位置：整体上移到「上一句」的顶部
+    LaunchedEffect(cur, measured) {
+        if (measured < l.size) return@LaunchedEffect
+        val target = -(if (cur > 0) tops[cur - 1] else 0f)
+        val first = (cur - 2).coerceAtLeast(0)
+        val jump = !settled // 刚打开歌词页：直接到位，不从顶部滚下来
+        settled = true
+        l.indices.forEach { i ->
+            if (jump || i < first || i > cur + 10) launch { offs[i].snapTo(target) }
+            else launch {
+                kotlinx.coroutines.delay(((i - first) * 35L / Anim.f).toLong())
+                offs[i].animateTo(target, spring(.86f, Anim.stiff(140f)))
+            }
+        }
+    }
+    // 手动拖动浏览：拖动时暂停自动滚动、所有行变清晰；松手带惯性，停 3 秒后回到当前句
+    val scope = rememberCoroutineScope()
+    val manual = remember(l) { Animatable(0f) }
+    var browsing by remember(l) { mutableStateOf(false) }
+    var backJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    fun bounds() {
+        val s0 = offs.getOrNull(cur)?.targetValue ?: 0f
+        val maxTop = tops.maxOrNull() ?: 0f
+        manual.updateBounds(-maxTop - s0, -s0)
+    }
+    fun scheduleBack() {
+        backJob?.cancel()
+        backJob = scope.launch { kotlinx.coroutines.delay(3000); browsing = false; manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessLow))) }
+    }
+    val drag = androidx.compose.foundation.gestures.rememberDraggableState { dy -> scope.launch { manual.snapTo(manual.value + dy) } }
+    Box(Modifier.fillMaxSize().clipToBounds().draggable(drag, androidx.compose.foundation.gestures.Orientation.Vertical,
+        onDragStarted = { backJob?.cancel(); browsing = true; bounds(); manual.stop() },
+        onDragStopped = { v -> scope.launch { manual.animateDecay(v, androidx.compose.animation.core.exponentialDecay(.6f)) }; scheduleBack() })) {
+        Column(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).padding(start = 22.dp, end = 30.dp, top = 8.dp)) {
+            l.forEachIndexed { i, line ->
+                val dist = kotlin.math.abs(i - cur)
+                val a by animateFloatAsState(if (browsing) (if (dist == 0) 1f else .7f) else when (dist) { 0 -> 1f; 1 -> .5f; 2 -> .36f; else -> .26f }, spring(1f, Anim.stiff(Spring.StiffnessLow)), label = "la")
+                Box(Modifier.fillMaxWidth()
+                    .onPlaced { val y = it.positionInParent().y; if (tops[i] != y) { tops[i] = y; measured++ } }
+                    .graphicsLayer { translationY = offs[i].value + manual.value; alpha = a }
+                    .then(if (!browsing && dist in 2..8 && android.os.Build.VERSION.SDK_INT >= 31) Modifier.blur(1.2.dp) else Modifier)
+                    .press { Engine.seek(line.t); backJob?.cancel(); browsing = false; scope.launch { manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessMediumLow))) } }
+                    .padding(bottom = with(LocalDensity.current) { gap.toDp() })) {
+                    if (line.text.isEmpty()) {
+                        val next = l.getOrNull(i + 1)?.t ?: (line.t + 5000)
+                        val prog = if (i == cur) ((pos - line.t).toFloat() / (next - line.t).coerceAtLeast(300)).coerceIn(0f, 1f) else 0f
+                        Row(Modifier.height(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            repeat(3) { k -> Box(Modifier.size(8.dp).background(if (i == cur && prog > k / 3f) p.k else p.k.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape)) }
+                        }
+                    } else Column {
+                        if (i == cur && line.words != null && !browsing) KaraokeLine(line, pos) else T(line.text, Fs.PAGE, p.k, 800, lines = 6, lh = 1.25f)
+                        if (showTr && line.tr != null) T(line.tr, Fs.SUB, p.s, lines = 4, lh = 1.45f, modifier = Modifier.padding(top = 4.dp))
+                    }
+                }
+            }
+            Spacer(Modifier.height(400.dp))
+        }
+    }
+}
+
+// ======================= 播放队列 =======================
+@Composable fun QueueSheet() {
+    val nav = LocalNav.current
+    val p = c
+    AnimatedVisibility(nav.queue, enter = fadeIn(tween(220)), exit = fadeOut(tween(220))) {
+        Box(Modifier.fillMaxSize().background(Color(0x80000000)).pointerInput(Unit) { detectTapGestures { nav.queue = false } })
+    }
+    AnimatedVisibility(nav.queue, Modifier.fillMaxSize(), enter = slideInVertically(sp) { it }, exit = slideOutVertically(sp) { it }) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            val st by Engine.state.collectAsState()
+            val ls = rememberLazyListState((st.index - 2).coerceAtLeast(0))
+            Column(Modifier.fillMaxWidth().fillMaxHeight(.75f).background(p.sheet).drawBehind { if (!Look.flat) drawRect(p.k, size = Size(size.width, 3.dp.toPx())) }
+                .pointerInput(Unit) { detectTapGestures { } }) {
+                Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { TagRow("QUEUE · ${st.queue.size}", 8.dp) }
+                    LinkBtn("清空待播", 14) { Engine.clearUpcoming() }
+                    Box(Modifier.size(44.dp).press { nav.queue = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 14.dp) }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(if (Look.flat) Color.Transparent else p.l2))
+                LazyColumn(Modifier.fillMaxSize(), ls, contentPadding = PaddingValues(start = 18.dp, end = 6.dp, bottom = 12.dp)) {
+                    itemsIndexed(st.queue, key = { i, t -> "$i${t.id}" }) { i, t ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) { TrackRow(t, i == st.index, st.format.uppercase().takeIf { i == st.index && it.isNotEmpty() }, onLong = { trackActions(nav, t) }) { Engine.playAt(i) } }
+                            Box(Modifier.size(44.dp).press { Engine.removeAt(i) }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp, p.s) }
+                        }
+                    }
+                }
+                Spacer(Modifier.navigationBarsPadding())
+            }
+        }
+    }
+}
+
+
+/** 逐字高亮：底下一层半透明文字，上面一层实色文字按字的进度裁出来；进度用帧时钟在两次位置更新之间插值，扫过去是连续的 */
+@Composable private fun KaraokeLine(line: LyricLine, pos: Long) {
+    val p = c
+    val words = line.words ?: return
+    val playing = Engine.state.collectAsState().value.playing
+    var now by remember { mutableLongStateOf(pos) }
+    LaunchedEffect(pos, playing) {
+        val base = pos; now = base
+        if (playing) { val start = withFrameMillis { it }; while (true) withFrameMillis { f -> now = base + (f - start) } }
+    }
+    var lay by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+    val st = androidx.compose.ui.text.TextStyle(fontSize = Fs.PAGE.sp, fontWeight = androidx.compose.ui.text.font.FontWeight(800), fontFamily = Typo.family, lineHeight = (Fs.PAGE * 1.25f).sp)
+    Box {
+        androidx.compose.foundation.text.BasicText(line.text, style = st.copy(color = p.k.copy(alpha = .32f)), maxLines = 6, onTextLayout = { lay = it })
+        androidx.compose.foundation.text.BasicText(line.text, style = st.copy(color = p.k), maxLines = 6, modifier = Modifier.drawWithContent {
+            val l = lay ?: return@drawWithContent
+            val n = l.layoutInput.text.length
+            val path = androidx.compose.ui.graphics.Path()
+            var ci = 0
+            for (w in words) {
+                val len = w.s.length
+                val f = ((now - w.t).toFloat() / w.d.coerceAtLeast(1)).coerceIn(0f, 1f)
+                if (f > 0f) for (k in 0 until len) {
+                    val idx = ci + k; if (idx >= n) break
+                    val cf = (f * len - k).coerceIn(0f, 1f); if (cf <= 0f) break
+                    val b = l.getBoundingBox(idx); val ln = l.getLineForOffset(idx)
+                    path.addRect(androidx.compose.ui.geometry.Rect(b.left, l.getLineTop(ln), b.left + b.width * cf, l.getLineBottom(ln)))
+                }
+                ci += len
+            }
+            clipPath(path) { this@drawWithContent.drawContent() }
+        })
+    }
+}
+
+// ======================= 评论 =======================
+/** 评论列表保持原样；写评论 / 回复用底部的聊天式输入栏（跟着键盘上移，点评论内容就是回复那条） */
+@Composable fun CommentSheet() {
+    val nav = LocalNav.current
+    val p = c
+    var last by remember { mutableStateOf<Track?>(null) }
+    nav.comments?.let { last = it }
+    AnimatedVisibility(nav.comments != null, Modifier.fillMaxSize(), enter = slideInVertically(sp) { it }, exit = slideOutVertically(sp) { it }) {
+        val t = last ?: return@AnimatedVisibility
+        val me = Store.profile.collectAsState().value
+        var hot by remember(t.id) { mutableStateOf(true) }
+        val list = remember(t.id, hot) { mutableStateListOf<Comment>() }
+        var total by remember(t.id, hot) { mutableIntStateOf(-1) }
+        var busy by remember(t.id, hot) { mutableStateOf(false) }
+        var end by remember(t.id, hot) { mutableStateOf(false) }
+        var err by remember(t.id, hot) { mutableStateOf<String?>(null) }
+        var text by remember(t.id) { mutableStateOf("") }
+        var replyTo by remember(t.id) { mutableStateOf<Comment?>(null) }
+        var sending by remember { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
+        val fm = androidx.compose.ui.platform.LocalFocusManager.current
+        val fr = remember { androidx.compose.ui.focus.FocusRequester() }
+        fun more() {
+            if (busy || end) return
+            busy = true
+            scope.launch {
+                try {
+                    val (l, n) = Ncm.comments(t.id, hot, list.size, if (!hot) list.lastOrNull()?.time ?: 0 else 0)
+                    list += l.filter { x -> list.none { it.id == x.id } }; total = n; if (l.isEmpty() || (total in 0..list.size)) end = true
+                } catch (e: Exception) { err = e.message; end = true }
+                busy = false
+            }
+        }
+        LaunchedEffect(t.id, hot) { more() }
+        val ls = remember(t.id, hot) { androidx.compose.foundation.lazy.LazyListState() }
+        val nearEnd by remember(ls) { derivedStateOf { (ls.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= ls.layoutInfo.totalItemsCount - 4 } }
+        LaunchedEffect(nearEnd, list.size) { if (nearEnd && list.isNotEmpty()) more() }
+        fun send() {
+            val v = text.trim(); if (v.isEmpty() || sending) return
+            if (me == null) { nav.toast = "登录后才能评论"; return }
+            sending = true
+            val r = replyTo
+            scope.launch {
+                try {
+                    Ncm.commentPost(t.id, v, r?.id)
+                    text = ""; replyTo = null; fm.clearFocus()
+                    nav.toast = if (r != null) "回复已发送" else "评论已发送"
+                    if (!hot) list.add(0, Comment(System.currentTimeMillis(), me.name, me.uid, me.avatar, v, 0, System.currentTimeMillis(), r?.let { "@${it.user}：${it.content}" }))
+                } catch (e: Exception) { nav.toast = "发送失败：${e.message}" }
+                sending = false
+            }
+        }
+        Column(Modifier.fillMaxSize().background(p.sheet).statusBarsPadding().drawBehind { if (!Look.flat) drawRect(p.k, size = Size(size.width, 3.dp.toPx())) }) {
+            Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { TagRow("COMMENTS" + if (total > 0) " · $total" else "", 8.dp) }
+                Box(Modifier.size(44.dp).press { fm.clearFocus(); nav.comments = null }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 14.dp) }
+            }
+            Row(Modifier.padding(horizontal = 18.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(true to "热门", false to "最新").forEach { (k, l) ->
+                    Box(Modifier.press { hot = k }.background(if (hot == k) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(l, 13, if (hot == k) p.tagFg else p.k, 700) }
+                }
+                Spacer(Modifier.weight(1f)); T(t.title, 13, p.s, modifier = Modifier.align(Alignment.CenterVertically).widthIn(max = 180.dp))
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(if (Look.flat) Color.Transparent else p.l2))
+            LazyColumn(Modifier.fillMaxWidth().weight(1f), ls, contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 16.dp)) {
+                itemsIndexed(list, key = { _, x -> x.id }) { _, x ->
+                    CommentRow(x, t.id, onReply = { if (me == null) nav.toast = "登录后才能回复" else { replyTo = x; fr.requestFocus() } }) {
+                        fm.clearFocus(); nav.comments = null; nav.player = false; nav.push(Page.User(x.uid, x.user))
+                    }
+                }
+                item {
+                    T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; list.isEmpty() -> "NO COMMENTS"; end -> "END"; else -> "" },
+                        12, p.s, mono = true, ls = .08f, lines = 3, modifier = Modifier.padding(vertical = 20.dp))
+                }
+            }
+            // 聊天式输入栏：贴在键盘上
+            Column(Modifier.fillMaxWidth().background(p.bar).drawBehind { if (!Look.flat) drawRect(p.k, size = Size(size.width, 2.dp.toPx())) }) {
+                replyTo?.let { r ->
+                    Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.width(3.dp).height(30.dp).background(p.p)); Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) { T("回复 @${r.user}", 12, p.p, 700); T(r.content, 12, p.s) }
+                        Box(Modifier.size(40.dp).press { replyTo = null }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp) }
+                    }
+                }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
+                    Box(Modifier.weight(1f).heightIn(min = 44.dp).nbf(1.dp, p.k).background(p.page).padding(horizontal = 12.dp, vertical = 11.dp), contentAlignment = Alignment.CenterStart) {
+                        if (text.isEmpty()) T(if (me == null) "登录后才能评论" else if (replyTo != null) "回复 @${replyTo!!.user}…" else "说点什么…", 15, p.s)
+                        androidx.compose.foundation.text.BasicTextField(text, { text = it }, Modifier.fillMaxWidth().focusRequester(fr), enabled = me != null, maxLines = 5,
+                            textStyle = androidx.compose.ui.text.TextStyle(color = p.k, fontSize = 15.sp, fontFamily = Typo.family, lineHeight = 21.sp),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(p.p))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    val can = text.isNotBlank() && !sending
+                    Box(Modifier.size(44.dp).press(.92f, true) { send() }.background(if (can) p.p else p.l3), contentAlignment = Alignment.Center) {
+                        if (sending) T("…", 16, Color.White, 800) else NIcon(NIcons.send, 20.dp, Color.White)
+                    }
+                }
+                Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime.union(WindowInsets.navigationBars)))
+            }
+        }
+    }
+}
+
+@Composable private fun CommentRow(x: Comment, songId: String, onReply: () -> Unit, onUser: () -> Unit) {
+    val p = c
+    val nav = LocalNav.current
+    var liked by remember(x.id) { mutableStateOf(false) }
+    val n = x.liked + if (liked) 1 else 0
+    Row(Modifier.fillMaxWidth().drawBehind { if (!Look.flat) drawRect(p.l1, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }.padding(vertical = 14.dp)) {
+        Box(Modifier.size(36.dp).background(p.ph).nb(1.dp, p.k).press(onClick = onUser)) {
+            if (x.avatar != null) coil3.compose.AsyncImage(img(x.avatar, 96), null, Modifier.matchParentSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                T(x.user, 13, p.s, 600, modifier = Modifier.weight(1f).press(onClick = onUser))
+                T("♥ " + likeNum(n), 12, if (liked) p.p else p.s, mono = true, modifier = Modifier.press {
+                    if (!Ncm.loggedIn) { nav.toast = "登录后才能点赞"; return@press }
+                    val on = !liked; liked = on
+                    Store.run { try { Ncm.commentLike(songId, x.id, on) } catch (e: Exception) { liked = !on; nav.toast = "点赞失败：${e.message}" } }
+                }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
+            }
+            Spacer(Modifier.height(4.dp))
+            T(x.content, 15, p.k, lines = 40, lh = 1.5f, modifier = Modifier.press(onClick = onReply))
+            if (x.reply != null) T(x.reply, 13, p.s, lines = 4, lh = 1.5f, modifier = Modifier.padding(top = 6.dp).fillMaxWidth().background(p.hl).padding(8.dp))
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                T(timeAgo(x.time), 11, p.s, mono = true, modifier = Modifier.weight(1f))
+                T("回复", 12, p.s, 600, modifier = Modifier.press(onClick = onReply).padding(vertical = 4.dp, horizontal = 2.dp))
+            }
+        }
+    }
+}
+
+/** 像聊天软件那样的时间：刚刚 / 5 分钟前 / 今天 13:20 / 昨天 / 2024-03-01 */
+fun timeAgo(ms: Long): String {
+    val d = System.currentTimeMillis() - ms
+    val now = java.util.Calendar.getInstance(); val c0 = java.util.Calendar.getInstance().apply { timeInMillis = ms }
+    val sameDay = now.get(java.util.Calendar.YEAR) == c0.get(java.util.Calendar.YEAR) && now.get(java.util.Calendar.DAY_OF_YEAR) == c0.get(java.util.Calendar.DAY_OF_YEAR)
+    return when {
+        d < 60_000 -> "刚刚"
+        d < 3_600_000 -> "${d / 60_000} 分钟前"
+        sameDay -> java.text.SimpleDateFormat("今天 HH:mm", java.util.Locale.CHINA).format(java.util.Date(ms))
+        d < 172_800_000 -> java.text.SimpleDateFormat("昨天 HH:mm", java.util.Locale.CHINA).format(java.util.Date(ms))
+        now.get(java.util.Calendar.YEAR) == c0.get(java.util.Calendar.YEAR) -> java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(ms))
+        else -> java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.CHINA).format(java.util.Date(ms))
+    }
+}
+
+fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString()
