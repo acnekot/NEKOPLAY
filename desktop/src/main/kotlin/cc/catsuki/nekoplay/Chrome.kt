@@ -1,0 +1,113 @@
+package cc.catsuki.nekoplay
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.window.WindowDraggableArea
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.FrameWindowScope
+import androidx.compose.ui.window.WindowPlacement
+import androidx.compose.ui.window.WindowState
+import java.awt.Cursor
+import java.awt.MouseInfo
+
+/** 自绘标题栏：左边可拖动（双击最大化 / 还原），右边 最小化 · 最大化 · 关闭 */
+@Composable fun FrameWindowScope.TitleBar(state: WindowState, onClose: () -> Unit) {
+    val p = c
+    val max = state.placement == WindowPlacement.Maximized
+    fun toggleMax() { state.placement = if (max) WindowPlacement.Floating else WindowPlacement.Maximized }
+    Row(Modifier.fillMaxWidth().height(34.dp).background(p.bar).drawBehind {
+        if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx()))
+    }, verticalAlignment = Alignment.CenterVertically) {
+        WindowDraggableArea(Modifier.weight(1f).fillMaxHeight().pointerInput(max) { detectTapGestures(onDoubleTap = { toggleMax() }) }) {
+            Row(Modifier.fillMaxSize().padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(10.dp).background(p.p)); Spacer(Modifier.width(8.dp))
+                T("NEKOPLAY", 11, p.s, 700, mono = true, ls = .14f)
+            }
+        }
+        CaptionClick(hoverBg = p.l1, onClick = { state.isMinimized = true }) { col -> line(col, -5f, 0f, 5f, 0f) }
+        CaptionClick(hoverBg = p.l1, onClick = { toggleMax() }) { col ->
+            if (!max) square(col, 0f, 0f, 10f)
+            else { square(col, -1.5f, 1.5f, 8f); line(col, -2f, -4f, 4f, -4f); line(col, 4f, -4f, 4f, 2f) }
+        }
+        CaptionClick(hoverBg = Color(0xFFE81123), hoverFg = Color.White, onClick = onClose) { col -> line(col, -5f, -5f, 5f, 5f); line(col, 5f, -5f, -5f, 5f) }
+    }
+}
+
+/** 标题栏按钮：46×34，悬停变色；图标以按钮中心为原点、单位 dp 画线 */
+@Composable private fun CaptionClick(hoverBg: Color, hoverFg: Color? = null, onClick: () -> Unit, icon: DrawScope.(Color) -> Unit) {
+    val src = remember { MutableInteractionSource() }
+    val hover by src.collectIsHoveredAsState()
+    val fg = if (hover && hoverFg != null) hoverFg else c.k
+    Box(Modifier.width(46.dp).fillMaxHeight().hoverable(src).background(if (hover) hoverBg else Color.Transparent)
+        .pointerInput(Unit) { detectTapGestures { onClick() } }.drawBehind { icon(fg) })
+}
+
+private fun DrawScope.line(col: Color, x1: Float, y1: Float, x2: Float, y2: Float) {
+    val cx = size.width / 2; val cy = size.height / 2; val d = 1.dp.toPx()
+    drawLine(col, Offset(cx + x1 * d, cy + y1 * d), Offset(cx + x2 * d, cy + y2 * d), 1.2f * d)
+}
+private fun DrawScope.square(col: Color, ox: Float, oy: Float, s: Float) {
+    val d = 1.dp.toPx(); val cx = size.width / 2 + ox * d; val cy = size.height / 2 + oy * d
+    drawRect(col, Offset(cx - s / 2 * d, cy - s / 2 * d), Size(s * d, s * d), style = Stroke(1.2f * d))
+}
+
+/** 无边框窗口拖边 / 拖角改大小（最大化时不生效） */
+@Composable fun FrameWindowScope.ResizeEdges(state: WindowState) {
+    if (state.placement != WindowPlacement.Floating) return
+    val e = 5.dp
+    Box(Modifier.fillMaxSize()) {
+        Edge(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(e), Cursor.N_RESIZE_CURSOR, top = true)
+        Edge(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(e), Cursor.S_RESIZE_CURSOR, bottom = true)
+        Edge(Modifier.align(Alignment.CenterStart).fillMaxHeight().width(e), Cursor.W_RESIZE_CURSOR, left = true)
+        Edge(Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(e), Cursor.E_RESIZE_CURSOR, right = true)
+        val k = 10.dp
+        Edge(Modifier.align(Alignment.TopStart).size(k), Cursor.NW_RESIZE_CURSOR, top = true, left = true)
+        Edge(Modifier.align(Alignment.TopEnd).size(k), Cursor.NE_RESIZE_CURSOR, top = true, right = true)
+        Edge(Modifier.align(Alignment.BottomStart).size(k), Cursor.SW_RESIZE_CURSOR, bottom = true, left = true)
+        Edge(Modifier.align(Alignment.BottomEnd).size(k), Cursor.SE_RESIZE_CURSOR, bottom = true, right = true)
+    }
+}
+
+@Composable private fun FrameWindowScope.Edge(m: Modifier, cursor: Int, top: Boolean = false, bottom: Boolean = false, left: Boolean = false, right: Boolean = false) {
+    Box(m.pointerHoverIcon(PointerIcon(Cursor(cursor))).pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) {
+                val down = awaitPointerEvent()
+                if (down.changes.none { it.pressed }) continue
+                val start = MouseInfo.getPointerInfo().location
+                val b0 = window.bounds
+                val minW = window.minimumSize.width; val minH = window.minimumSize.height
+                while (true) {
+                    val ev = awaitPointerEvent()
+                    if (ev.changes.none { it.pressed }) break
+                    ev.changes.forEach { it.consume() }
+                    val now = MouseInfo.getPointerInfo().location
+                    val dx = now.x - start.x; val dy = now.y - start.y
+                    var x = b0.x; var y = b0.y; var w = b0.width; var h = b0.height
+                    if (right) w = maxOf(minW, b0.width + dx)
+                    if (bottom) h = maxOf(minH, b0.height + dy)
+                    if (left) { w = maxOf(minW, b0.width - dx); x = b0.x + b0.width - w }
+                    if (top) { h = maxOf(minH, b0.height - dy); y = b0.y + b0.height - h }
+                    window.setBounds(x, y, w, h)
+                }
+            }
+        }
+    })
+}

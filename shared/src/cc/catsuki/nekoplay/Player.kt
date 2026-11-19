@@ -88,6 +88,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
         BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer { translationY = drag.value }.background(p.page)) {
             BgLayer()
             val h = constraints.maxHeight.toFloat()
+            val wideP = maxWidth >= 900.dp
             Column(Modifier.fillMaxSize()) {
                 // 顶栏：按住下拉可以跟手收起
                 Row(Modifier.fillMaxWidth().height(48.dp).pointerInput(Unit) {
@@ -96,14 +97,16 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     }) { _, dy -> scope.launch { drag.snapTo((drag.value + dy).coerceAtLeast(0f)) } }
                 }.drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp) }
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { T(if (lt > .5f) "LYRICS" else if (st.fm) "PERSONAL FM" else "NOW PLAYING", 12, p.k.copy(alpha = .5f), 700, mono = true, ls = .14f) }
-                    Box(Modifier.size(44.dp).graphicsLayer { alpha = lt }.press { if (lt > .9f) showTr = !showTr }, contentAlignment = Alignment.Center) {
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { T(if (lt > .5f && !wideP) "LYRICS" else if (st.fm) "PERSONAL FM" else "NOW PLAYING", 12, p.k.copy(alpha = .5f), 700, mono = true, ls = .14f) }
+                    Box(Modifier.size(44.dp).graphicsLayer { alpha = if (wideP) 1f else lt }.press { if (lt > .9f || wideP) showTr = !showTr }, contentAlignment = Alignment.Center) {
                         Box(Modifier.size(28.dp).background(if (showTr) p.k else Color.Transparent).nbf(1.dp, p.k), contentAlignment = Alignment.Center) {
                             T("译", 13, if (showTr) p.tagFg else p.k, 700)
                         }
                     }
                 }
                 if (t == null) { Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { T("NO TRACK", 12, p.s, mono = true, ls = .08f) }; return@Column }
+                // 宽窗口（PC / 平板横屏）：左边封面 + 信息 + 控制，右边歌词
+                if (wideP) { Box(Modifier.weight(1f).fillMaxWidth()) { WidePlayerBody(t, st, showTr) }; return@Column }
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
                     val d = LocalDensity.current
                     val w = with(d) { maxWidth.toPx() }
@@ -111,7 +114,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     val ctrlH = with(d) { 156.dp.toPx() } + bottomPad
                     val free = with(d) { maxHeight.toPx() } - ctrlH
                     val dp = with(d) { 1.dp.toPx() }
-                    val coverNow = (free - 96 * dp).coerceIn(120 * dp, w - 56 * dp)
+                    val coverNow = (free - 150 * dp).coerceIn(120 * dp, w - 56 * dp) // 下面要留给歌名、歌手、音质三行
                     val nowTop = ((free - coverNow - 84 * dp) / 2).coerceIn(8 * dp, 40 * dp)
                     val cs = lerp(coverNow, 48 * dp, lt)
                     val cl = lerp((w - coverNow) / 2, 18 * dp, lt)
@@ -509,3 +512,36 @@ fun timeAgo(ms: Long): String {
 }
 
 fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString()
+
+
+/** 宽屏播放页：左栏封面、歌名、控制（限制宽度居中），右栏歌词 */
+@Composable private fun WidePlayerBody(t: Track, st: PlayState, showTr: Boolean) {
+    val nav = LocalNav.current
+    val p = c
+    val liked by Store.likedIds.collectAsState()
+    Row(Modifier.fillMaxSize()) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+            val cover = minOf(maxWidth - 96.dp, maxHeight - 300.dp, 520.dp).coerceAtLeast(160.dp)
+            Column(Modifier.width(maxOf(cover, 420.dp)), horizontalAlignment = Alignment.CenterHorizontally) {
+                Cover(t.cover, cover, t.title)
+                Spacer(Modifier.height(22.dp))
+                Column(Modifier.width(cover)) {
+                    val on = t.id in liked
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        T(t.title, Fs.PAGE, w = 800, lh = 1.25f, lines = 2, modifier = Modifier.weight(1f))
+                        Box(Modifier.size(44.dp).offset(x = 10.dp).press(.85f, true) { Store.toggleLike(t) { nav.toast = it } }, contentAlignment = Alignment.Center) {
+                            NIcon(if (on) NIcons.heart else NIcons.heartLine, 24.dp, if (on) p.p else p.k)
+                        }
+                    }
+                    T(t.artist, 15, p.s, lh = 1.3f, modifier = Modifier.press { openArtists(nav, t) })
+                    T(if (st.format.isEmpty()) Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)] + " ▾"
+                      else "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}${if (st.cached) " · 已缓存" else ""} ▾",
+                        11, p.s, mono = true, ls = .06f, modifier = Modifier.padding(top = 6.dp).press { qualitySheet(nav) })
+                }
+                Spacer(Modifier.height(18.dp))
+                Box(Modifier.width(maxOf(cover, 420.dp) + 44.dp)) { Controls(t, st) }
+            }
+        }
+        Box(Modifier.weight(1f).fillMaxHeight().padding(top = 24.dp, end = 24.dp)) { Lyrics(t, showTr) }
+    }
+}

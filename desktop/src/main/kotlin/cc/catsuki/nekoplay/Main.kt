@@ -6,6 +6,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -39,7 +40,9 @@ fun main() {
     val h = (System.getenv("NEKOPLAY_H") ?: System.getProperty("nekoplay.height"))?.toIntOrNull() ?: 800
     application {
         val state = rememberWindowState(size = DpSize(w.dp, h.dp), position = if (System.getenv("NEKOPLAY_W") != null) androidx.compose.ui.window.WindowPosition(0.dp, 0.dp) else androidx.compose.ui.window.WindowPosition.PlatformDefault)
-        Window(onCloseRequest = { Engine.savePosition(); exitApplication() }, state = state, title = "NEKOPLAY",
+        val quit = { Engine.savePosition(); exitApplication() }
+        // 无边框窗口：标题栏、最小化 / 最大化 / 关闭按钮和拖边改大小都自己画
+        Window(onCloseRequest = quit, state = state, title = "NEKOPLAY", undecorated = true,
             onPreviewKeyEvent = { e ->
                 if (e.type != KeyEventType.KeyDown) false
                 else when (e.key) {
@@ -48,7 +51,15 @@ fun main() {
                 }
             }) {
             window.minimumSize = java.awt.Dimension(360, 560)
-            NekoTheme { Root() }
+            NekoTheme {
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+                    androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize()) {
+                        TitleBar(state, quit)
+                        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.weight(1f)) { Root() }
+                    }
+                    ResizeEdges(state)
+                }
+            }
         }
     }
 }
