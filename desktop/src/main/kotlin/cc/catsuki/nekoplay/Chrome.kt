@@ -35,7 +35,7 @@ import java.awt.MouseInfo
 
 /**
  * 自绘标题栏（参考 Hydrogen 的样式）：和窗口同底色、不画分隔线；
- * 左边粗体 NEKOPLAY + 方括号角标的搜索框，右边细线条的 最小化 / 最大化 / 关闭。
+ * 左边粗体 NEKOPLAY，右边头像（账号菜单：主页 / 设置 / 登录）和细线条的 最小化 / 最大化 / 关闭。
  * 空白处可以拖动窗口，双击最大化 / 还原。
  */
 @Composable fun FrameWindowScope.TitleBar(state: WindowState, onClose: () -> Unit) {
@@ -47,8 +47,6 @@ import java.awt.MouseInfo
         Row(Modifier.fillMaxSize().pointerInput(max) { detectTapGestures(onDoubleTap = { toggleMax() }) }.padding(start = 26.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             T("NEKOPLAY", Fs.HEAD + 2, w = 900, ls = .01f, modifier = Modifier.press { nav.player = false; nav.stack.clear(); nav.tab = 0 })
-            Spacer(Modifier.width(22.dp))
-            BracketSearch()
             Spacer(Modifier.weight(1f))
             Box(Modifier.size(40.dp).press { nav.menu = !nav.menu }, contentAlignment = Alignment.Center) { Avatar(28.dp, 13) }
             Spacer(Modifier.width(10.dp))
@@ -59,33 +57,6 @@ import java.awt.MouseInfo
             }
             CaptionClick(hoverFg = Color(0xFFE81123), onClick = onClose) { col -> line(col, -8f, -8f, 8f, 8f); line(col, 8f, -8f, -8f, 8f) }
         }
-    }
-}
-
-/** 方括号角标的搜索框：只画四个角；回车跳到搜索页并直接搜 */
-@Composable private fun BracketSearch() {
-    val nav = LocalNav.current
-    val p = c
-    var q by remember { mutableStateOf("") }
-    var focused by remember { mutableStateOf(false) }
-    val fm = androidx.compose.ui.platform.LocalFocusManager.current
-    Box(Modifier.width(230.dp).height(36.dp).drawBehind {
-        val a = 7.dp.toPx(); val w = 2.dp.toPx(); val col = if (focused) p.p else p.k
-        // 左上 / 左下 / 右上 / 右下 四个角
-        drawRect(col, Offset(0f, 0f), Size(a, w)); drawRect(col, Offset(0f, 0f), Size(w, a))
-        drawRect(col, Offset(0f, size.height - w), Size(a, w)); drawRect(col, Offset(0f, size.height - a), Size(w, a))
-        drawRect(col, Offset(size.width - a, 0f), Size(a, w)); drawRect(col, Offset(size.width - w, 0f), Size(w, a))
-        drawRect(col, Offset(size.width - a, size.height - w), Size(a, w)); drawRect(col, Offset(size.width - w, size.height - a), Size(w, a))
-    }.padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
-        if (q.isEmpty()) T("SEARCH", 12, p.s, 700, mono = true, ls = .1f)
-        androidx.compose.foundation.text.BasicTextField(q, { q = it },
-            Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.onPreviewKeyEvent { e ->
-                if (e.type == KeyEventType.KeyDown && e.key == Key.Enter && q.isNotBlank()) {
-                    nav.player = false; nav.stack.clear(); SearchBus.query = q.trim(); nav.push(Page.Search); q = ""; fm.clearFocus(); true
-                } else false
-            }, singleLine = true,
-            textStyle = androidx.compose.ui.text.TextStyle(color = p.k, fontSize = androidx.compose.ui.unit.TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp), fontFamily = Typo.family),
-            cursorBrush = androidx.compose.ui.graphics.SolidColor(p.p))
     }
 }
 

@@ -80,8 +80,8 @@ import androidx.compose.ui.unit.dp
                 SideList(pl.name, (top as? Page.Detail)?.id == pl.id, { Cover(pl.cover, 32.dp, pl.name, decodeSize = 64.dp) }) { nav.stack.clear(); nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
             }
         }
-        // 账号
-        Row(Modifier.fillMaxWidth().height(64.dp).press { nav.stack.clear(); nav.push(if (prof != null) Page.User(prof!!.uid, prof!!.name) else Page.Login) }.padding(horizontal = 14.dp),
+        // 账号（桌面版在右上角标题栏里，这里不重复）
+        if (!Plat.isDesktop) Row(Modifier.fillMaxWidth().height(64.dp).press { nav.stack.clear(); nav.push(if (prof != null) Page.User(prof!!.uid, prof!!.name) else Page.Login) }.padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Avatar(36.dp, 16); Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) { T(prof?.name ?: "好奇猫a", 14, w = 700); T(if (prof == null) "点击登录网易云" else "NETEASE", 11, p.s, mono = true) }
