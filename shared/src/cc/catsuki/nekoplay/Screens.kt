@@ -371,7 +371,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
     val fr = remember { FocusRequester() }
     val fm = LocalFocusManager.current
     var job by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    LaunchedEffect(Unit) { fr.requestFocus() }
+    LaunchedEffect(Unit) { if (SearchBus.query == null) fr.requestFocus() }
     // 输入时 250ms 防抖取联想词
     LaunchedEffect(q, res) {
         if (res != null || q.isBlank()) { sugg = emptyList(); return@LaunchedEffect }
@@ -397,6 +397,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         saveHistory((listOf(k) + history.filter { it != k }).take(10))
         run(k, type)
     }
+    LaunchedEffect(SearchBus.query) { val k = SearchBus.query ?: return@LaunchedEffect; SearchBus.query = null; go(k) }
     val p = c
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {

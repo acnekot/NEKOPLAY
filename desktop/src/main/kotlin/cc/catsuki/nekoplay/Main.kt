@@ -53,10 +53,7 @@ fun main() {
             window.minimumSize = java.awt.Dimension(360, 560)
             NekoTheme {
                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
-                    androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize()) {
-                        TitleBar(state, quit)
-                        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.weight(1f)) { Root() }
-                    }
+                    Root(chrome = { TitleBar(state, quit) })
                     ResizeEdges(state)
                 }
             }

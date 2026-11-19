@@ -101,7 +101,8 @@ object Anim {
 val sp get() = spring<IntOffset>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.StiffnessMediumLow))
 val spF get() = spring<Float>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.StiffnessMediumLow))
 
-@Composable fun Root() {
+/** chrome：桌面版的自绘标题栏（放在最上面，能用 LocalNav）；手机传 null */
+@Composable fun Root(chrome: (@Composable () -> Unit)? = null) {
     val nav = remember { Nav() }
     val st by Engine.state.collectAsState()
     val err by Engine.error.collectAsState()
@@ -115,8 +116,11 @@ val spF get() = spring<Float>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.S
             // 窗口宽度 ≥ 900dp：PC 三栏布局；否则就是手机布局（拖动窗口大小会实时切换）
             val wide = maxWidth >= 900.dp
             BgLayer()
+            Column(Modifier.fillMaxSize()) {
+            chrome?.invoke()
+            Box(Modifier.weight(1f).fillMaxWidth()) {
             if (wide) WideLayout() else Column(Modifier.fillMaxSize()) {
-                TopBar()
+                if (chrome == null) TopBar()
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
                     val w = constraints.maxWidth.toFloat()
                     val sub = remember { Animatable(0f) }
@@ -133,9 +137,11 @@ val spF get() = spring<Float>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.S
                     PlayerOverlay()
                 }
             }
+            }
+            }
             if (nav.menu) {
                 Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { nav.menu = false } })
-                AccountMenu(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 59.dp, end = 12.dp))
+                AccountMenu(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = if (chrome != null) 54.dp else 59.dp, end = 12.dp))
             }
             if (!wide) QueueSheet()
             CommentSheet()
@@ -279,3 +285,6 @@ val spF get() = spring<Float>(dampingRatio = 1f, stiffness = Anim.stiff(Spring.S
     }
 }
 }
+
+/** 标题栏搜索框 → 搜索页：把要搜的词交给搜索页 */
+object SearchBus { var query by mutableStateOf<String?>(null) }

@@ -61,9 +61,10 @@ import androidx.compose.ui.unit.dp
     Column(Modifier.width(232.dp).fillMaxHeight().background(p.bar).drawBehind {
         if (!Look.flat) drawRect(p.k, Offset(size.width - 3.dp.toPx(), 0f), Size(3.dp.toPx(), size.height))
     }.padding(end = 3.dp)) {
-        Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+        // 桌面版的名字在标题栏里，侧边栏就不重复了
+        if (!Plat.isDesktop) Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             T("NEKOPLAY", Fs.HEAD, w = 900, ls = .02f, modifier = Modifier.press { nav.player = false; nav.stack.clear(); nav.tab = 0 })
-        }
+        } else Spacer(Modifier.height(10.dp))
         SideItem(NIcons.home, "主页", nav.stack.isEmpty() && nav.tab == 0) { nav.player = false; nav.stack.clear(); nav.tab = 0 }
         SideItem(NIcons.library, "曲库", nav.stack.isEmpty() && nav.tab == 1) { nav.player = false; nav.stack.clear(); nav.tab = 1 }
         SideItem(NIcons.search, "搜索", top is Page.Search) { nav.player = false; nav.stack.clear(); nav.push(Page.Search) }
