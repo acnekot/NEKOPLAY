@@ -70,8 +70,8 @@ object Look {
     val NAMES = listOf("BenchLab", "无边框")
     var style by mutableIntStateOf(0)
     val flat get() = style == 1
-    fun load(c: android.content.Context) { style = c.getSharedPreferences("ui", 0).getInt("look", 0) }
-    fun set(c: android.content.Context, v: Int) { style = v; c.getSharedPreferences("ui", 0).edit().putInt("look", v).apply() }
+    fun load() { style = Plat.prefs("ui").getInt("look", 0) }
+    fun set(v: Int) { style = v; Plat.prefs("ui").edit().putInt("look", v).apply() }
 }
 
 /** 边框：无边框主题下不画 */
@@ -83,8 +83,8 @@ object Look {
 
 object ThemePref {
     var mode by mutableIntStateOf(0)
-    fun load(c: android.content.Context) { mode = c.getSharedPreferences("ui", 0).getInt("theme", 0) }
-    fun set(c: android.content.Context, m: Int) { mode = m; c.getSharedPreferences("ui", 0).edit().putInt("theme", m).apply() }
+    fun load() { mode = Plat.prefs("ui").getInt("theme", 0) }
+    fun set(m: Int) { mode = m; Plat.prefs("ui").edit().putInt("theme", m).apply() }
 }
 
 @Composable fun NekoTheme(content: @Composable () -> Unit) {
@@ -104,11 +104,8 @@ object ThemePref {
 
 // ---------------- 字体：Inter（西文数字）+ JetBrains Mono（等宽），中文跟系统 ----------------
 // 可变字体在安卓上按粗细切换不可靠，改为预先生成好的各粗细静态字体（只含西文和常用符号）
-val Inter = FontFamily(
-    Font(R.font.inter_400, FontWeight.W400), Font(R.font.inter_500, FontWeight.W500), Font(R.font.inter_600, FontWeight.W600),
-    Font(R.font.inter_700, FontWeight.W700), Font(R.font.inter_800, FontWeight.W800), Font(R.font.inter_900, FontWeight.W900),
-)
-val Mono = FontFamily(Font(R.font.mono_400, FontWeight.W400), Font(R.font.mono_500, FontWeight.W500), Font(R.font.mono_600, FontWeight.W600), Font(R.font.mono_700, FontWeight.W700))
+val Inter: FontFamily get() = Plat.impl.inter
+val Mono: FontFamily get() = Plat.impl.mono
 
 /**
  * 字号规范（全局只用这几档，T() 会把其它数值自动对齐到最近一档）：
@@ -125,8 +122,8 @@ object Fs {
 /** 字体：1 Inter 无衬线（默认，英文数字用 Inter，中文跟系统）/ 0 系统字体 */
 object Typo {
     var sans by mutableIntStateOf(1)
-    fun load(c: android.content.Context) { sans = c.getSharedPreferences("ui", 0).getInt("font2", 1) }
-    fun set(c: android.content.Context, v: Int) { sans = v; c.getSharedPreferences("ui", 0).edit().putInt("font2", v).apply() }
+    fun load() { sans = Plat.prefs("ui").getInt("font2", 1) }
+    fun set(v: Int) { sans = v; Plat.prefs("ui").edit().putInt("font2", v).apply() }
     val family: FontFamily get() = if (sans == 1) Inter else FontFamily.Default
 }
 
@@ -181,6 +178,7 @@ object NIcons {
     const val user = "s|M8 8a4 4 0 1 0 8 0a4 4 0 1 0 -8 0M4 21c0-4 4-6 8-6s8 2 8 6"
     const val plus = "s|M12 5v14M5 12h14"
     const val send = "f|M3 11l18-8-6 18-3-7z"
+    const val gear = "s|M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"
     const val up = "s|M5 15l7-7 7 7"
     const val down = "s|M5 9l7 7 7-7"
     const val trash = "s|M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"
@@ -348,3 +346,12 @@ fun listMeta(l: List<Track>) = "${two(l.size)} 首 · ${fmt(l.sumOf { it.duratio
 
 /** 「最近播放」：最后播放那首的封面 + 时钟角标 */
 @Composable fun RecentCover(url: String?, size: Dp) = BadgeCover(url, size, NIcons.clock, false)
+
+/** 网易云图片按显示尺寸取小图 */
+fun img(url: String?, px: Int): String? {
+    if (url == null) return null
+    val b = when { px <= 160 -> 160; px <= 256 -> 256; px <= 512 -> 512; else -> 768 }
+    val base = url.substringBefore('?')
+    return if (base.contains("/obj/")) "$base?imageView=1&thumbnail=${b}x$b&type=webp" else "$base?param=${b}y$b"
+}
+

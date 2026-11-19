@@ -1,6 +1,5 @@
 package cc.catsuki.nekoplay
 
-import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,7 +13,7 @@ import java.io.File
 /** 列表数据：先读本地缓存立即显示，再联网刷新。 */
 object Store {
     private lateinit var dir: File
-    private lateinit var prefs: android.content.SharedPreferences
+    private lateinit var prefs: KV
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val profile = MutableStateFlow<Profile?>(null)
@@ -33,9 +32,9 @@ object Store {
     /** 在主线程跑一个联网操作（给菜单、按钮这类非 Compose 代码用） */
     fun run(block: suspend () -> Unit) = main.launch { block() }
 
-    fun init(c: Context) {
-        dir = File(c.filesDir, "cache").apply { mkdirs() }
-        prefs = c.getSharedPreferences("store", Context.MODE_PRIVATE)
+    fun init() {
+        dir = File(Plat.impl.filesDir, "cache").apply { mkdirs() }
+        prefs = Plat.prefs("store")
         prefs.getString("profile", null)?.let { val o = JSONObject(it); profile.value = Profile(o.getString("u"), o.getString("n"), o.getString("a")) }
         likedIds.value = prefs.getStringSet("liked", emptySet())!!
         recents.value = readTracks("recents") ?: emptyList()

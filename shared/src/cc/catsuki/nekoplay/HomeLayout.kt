@@ -1,6 +1,5 @@
 package cc.catsuki.nekoplay
 
-import android.content.Context
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -10,7 +9,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 /** 首页布局：模块的顺序和开关，存成 "id:1,id:0,…" */
@@ -23,10 +21,10 @@ object HomeLayout {
     fun label(id: String) = names[id] ?: id
     val items = mutableStateListOf<Pair<String, Boolean>>()
     val visible: List<String> get() = items.filter { it.second }.map { it.first }
-    private var prefs: android.content.SharedPreferences? = null
+    private var prefs: KV? = null
 
-    fun init(c: Context) {
-        prefs = c.getSharedPreferences("ui", 0)
+    fun init() {
+        prefs = Plat.prefs("ui")
         val saved = prefs!!.getString("home_layout", "")!!.split(',').mapNotNull { e -> e.split(':').takeIf { it.size == 2 && it[0] in names }?.let { it[0] to (it[1] == "1") } }
         items.clear(); items += saved
         ALL.forEach { (id, _) -> if (items.none { it.first == id }) items += id to true } // 新增的模块默认打开、排在最后

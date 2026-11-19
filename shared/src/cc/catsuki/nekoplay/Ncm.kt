@@ -1,7 +1,5 @@
 package cc.catsuki.nekoplay
 
-import android.content.Context
-import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -61,8 +59,8 @@ object Ncm {
     val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build()
 
-    private lateinit var prefs: android.content.SharedPreferences
-    fun init(c: Context) { prefs = c.getSharedPreferences("ncm", Context.MODE_PRIVATE) }
+    private lateinit var prefs: KV
+    fun init() { prefs = Plat.prefs("ncm") }
 
     var cookie: String
         get() = prefs.getString("cookie", "") ?: ""
@@ -73,7 +71,7 @@ object Ncm {
     private fun aes(text: String, key: String): String {
         val c = Cipher.getInstance("AES/CBC/PKCS5Padding")
         c.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key.toByteArray(), "AES"), IvParameterSpec(IV.toByteArray()))
-        return Base64.encodeToString(c.doFinal(text.toByteArray()), Base64.NO_WRAP)
+        return java.util.Base64.getEncoder().encodeToString(c.doFinal(text.toByteArray()))
     }
 
     private class Raw(val j: JSONObject, val setCookie: List<String>)

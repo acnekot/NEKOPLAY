@@ -342,9 +342,9 @@ private fun Modifier.drawBehindLines(col: Color, left: Boolean, top: Boolean) = 
     }
 
 /** 音质选择菜单（设置页和播放页共用） */
-fun qualitySheet(nav: Nav, ctx: android.content.Context) {
+fun qualitySheet(nav: Nav) {
     nav.sheet = SheetSpec("选择音质", "选中的档位拿不到时会自动降一档；无损和 Hi-Res 需要会员", Ncm.LEVEL_LABELS.mapIndexed { i, l ->
-        SheetItem((if (i == Engine.quality) "✓  " else "    ") + l) { Engine.setQuality(i, ctx); nav.toast = "音质：$l" }
+        SheetItem((if (i == Engine.quality) "✓  " else "    ") + l) { Engine.changeQuality(i); nav.toast = "音质：$l" }
     }.reversed())
 }
 
@@ -592,40 +592,28 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
     }
 }
 
-/** MV 播放页：单独的 ExoPlayer 播视频，进来时把音乐暂停，离开时释放 */
+/** MV 播放页：视频交给平台播放器（安卓 ExoPlayer / 桌面 mpv），进来时把音乐暂停 */
 @Composable fun MvPage(pg: Page.Mv) {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
     val p = c
     var err by remember { mutableStateOf<String?>(null) }
-    val player = remember {
-        androidx.media3.exoplayer.ExoPlayer.Builder(ctx).setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
-            androidx.media3.datasource.DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0").setDefaultRequestProperties(mapOf("Referer" to "https://music.163.com/")))).build()
-    }
+    var url by remember { mutableStateOf<String?>(null) }
     var playing by remember { mutableStateOf(false) }
     var pos by remember { mutableLongStateOf(0L) }
     var dur by remember { mutableLongStateOf(0L) }
-    DisposableEffect(Unit) {
-        if (Engine.exo.isPlaying) Engine.exo.pause()
-        val l = object : androidx.media3.common.Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
-            override fun onPlayerError(e: androidx.media3.common.PlaybackException) { err = "播放失败：${e.errorCodeName}" }
-        }
-        player.addListener(l)
-        onDispose { player.removeListener(l); player.release() }
-    }
+    val ctl = remember { VideoControl() }
     LaunchedEffect(pg.id) {
-        try { player.setMediaItem(androidx.media3.common.MediaItem.fromUri(Ncm.mvUrl(pg.id))); player.prepare(); player.play() } catch (e: Exception) { err = e.message }
+        if (Engine.isPlaying) Engine.pause()
+        try { url = Ncm.mvUrl(pg.id) } catch (e: Exception) { err = e.message }
     }
-    LaunchedEffect(Unit) { while (true) { pos = player.currentPosition; dur = player.duration.coerceAtLeast(0); kotlinx.coroutines.delay(250) } }
     Column(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxWidth().aspectRatio(16 / 9f).background(Color.Black).press { if (player.isPlaying) player.pause() else player.play() }, contentAlignment = Alignment.Center) {
-            androidx.compose.ui.viewinterop.AndroidView({ android.view.SurfaceView(it).also { v -> player.setVideoSurfaceView(v) } }, Modifier.matchParentSize())
+        Box(Modifier.fillMaxWidth().aspectRatio(16 / 9f).background(Color.Black).press { ctl.toggle() }, contentAlignment = Alignment.Center) {
+            Plat.impl.VideoPlayer(url, Modifier.matchParentSize(), { pl, ps, d, e -> playing = pl; pos = ps; dur = d; if (e != null) err = e }, ctl)
             if (err != null) T(err!!, 13, Color.White, lines = 3, modifier = Modifier.padding(18.dp))
             else if (!playing) NIcon(NIcons.play, 40.dp, Color.White)
         }
-        // 进度：点按或拖动跳转
+        // 进度：点按跳转
         Box(Modifier.fillMaxWidth().height(20.dp).pointerInput(dur) {
-            detectTapGestures { o -> if (dur > 0) player.seekTo((o.x / size.width * dur).toLong()) }
+            detectTapGestures { o -> if (dur > 0) ctl.seek((o.x / size.width * dur).toLong()) }
         }.drawBehind {
             val y = size.height / 2
             drawRect(p.l3, androidx.compose.ui.geometry.Offset(0f, y - 2.dp.toPx()), androidx.compose.ui.geometry.Size(size.width, 4.dp.toPx()))
@@ -636,7 +624,7 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
             Spacer(Modifier.height(14.dp)); Tag("MV"); Spacer(Modifier.height(8.dp))
             T(pg.name, Fs.PAGE, w = 800, lines = 3, lh = 1.25f); T(pg.artist, 15, p.s)
             Spacer(Modifier.height(16.dp))
-            Row { PrimaryBar(if (playing) "暂停" else "播放", if (playing) NIcons.pause else NIcons.play, Modifier.weight(1f)) { if (player.isPlaying) player.pause() else player.play() } }
+            Row { PrimaryBar(if (playing) "暂停" else "播放", if (playing) NIcons.pause else NIcons.play, Modifier.weight(1f)) { ctl.toggle() } }
         }
     }
 }

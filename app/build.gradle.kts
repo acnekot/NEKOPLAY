@@ -21,6 +21,8 @@ android {
         }
     }
     buildFeatures { compose = true }
+    // 共用代码（界面、接口、播放队列）在 ../shared，桌面版也用同一份
+    sourceSets["main"].kotlin.srcDir("../shared/src")
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     splits { abi { isEnable = true; reset(); include("arm64-v8a", "armeabi-v7a"); isUniversalApk = false } }
 }

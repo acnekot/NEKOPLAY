@@ -1,6 +1,5 @@
 package cc.catsuki.nekoplay
 
-import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,7 +24,6 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -361,8 +359,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
 @Composable fun SearchPage() {
     val nav = LocalNav.current
     val st by Engine.state.collectAsState()
-    val ctx = LocalContext.current
-    val prefs = remember { ctx.getSharedPreferences("ui", 0) }
+    val prefs = remember { Plat.prefs("ui") }
     var history by remember { mutableStateOf(prefs.getString("history", "")!!.split('\n').filter { it.isNotBlank() }) }
     var q by remember { mutableStateOf("") }
     var type by remember { mutableIntStateOf(0) }
@@ -466,14 +463,14 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
 @Composable fun SettingsPage() {
     val nav = LocalNav.current
     val prof by Store.profile.collectAsState()
-    val ctx = LocalContext.current
-    val prefs = remember { ctx.getSharedPreferences("ui", 0) }
+    val prefs = remember { Plat.prefs("ui") }
+    val pctx = coil3.compose.LocalPlatformContext.current
     var cacheSize by remember { mutableStateOf(0L) }
     LaunchedEffect(nav.sheet) { cacheSize = withContext(Dispatchers.IO) { Engine.cacheBytes() } }
     var mem by remember { mutableStateOf("") }
     var analysis by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { while (isActive) { mem = withContext(Dispatchers.IO) { memLine() }; delay(2000) } }
+    LaunchedEffect(Unit) { while (isActive) { mem = withContext(Dispatchers.IO) { Plat.impl.memInfo() }; delay(2000) } }
     val sysDark = androidx.compose.foundation.isSystemInDarkTheme()
     val p = c
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp)) {
@@ -493,14 +490,14 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
             }
         }
         item { Group("APPEARANCE") }
-        item { SwitchRow("深色模式", "切换为暗色界面", if (ThemePref.mode == 0) sysDark else ThemePref.mode == 2, ThemePref.mode != 0) { ThemePref.set(ctx, if (it) 2 else 1) } }
-        item { NavRow("字体", "默认 Inter 无衬线；也可以改用系统字体", if (Typo.sans == 0) "系统字体" else "Inter") { Typo.set(ctx, 1 - Typo.sans) } }
-        item { NavRow("主题", "界面风格：BenchLab 粗线框 / 无边框", Look.NAMES[Look.style]) { nav.sheet = SheetSpec("选择主题", null, Look.NAMES.mapIndexed { i, n -> SheetItem((if (i == Look.style) "✓  " else "    ") + n) { Look.set(ctx, i) } }) } }
+        item { SwitchRow("深色模式", "切换为暗色界面", if (ThemePref.mode == 0) sysDark else ThemePref.mode == 2, ThemePref.mode != 0) { ThemePref.set(if (it) 2 else 1) } }
+        item { NavRow("字体", "默认 Inter 无衬线；也可以改用系统字体", if (Typo.sans == 0) "系统字体" else "Inter") { Typo.set(1 - Typo.sans) } }
+        item { NavRow("主题", "界面风格：BenchLab 粗线框 / 无边框", Look.NAMES[Look.style]) { nav.sheet = SheetSpec("选择主题", null, Look.NAMES.mapIndexed { i, n -> SheetItem((if (i == Look.style) "✓  " else "    ") + n) { Look.set(i) } }) } }
         item { NavRow("首页布局", "调整首页模块的顺序，或关掉不需要的", "${HomeLayout.visible.size}/${HomeLayout.ALL.size}") { nav.push(Page.HomeLayout) } }
         item { NavRow("自定义背景", "选一张图片，可调模糊、透明度、位置和大小", if (Bg.on) "已设置" else "未设置") { nav.push(Page.Background) } }
-        item { SwitchRow("跟随系统", "跟随手机的深浅色设置", ThemePref.mode == 0) { ThemePref.set(ctx, if (it) 0 else if (sysDark) 2 else 1) } }
+        item { SwitchRow("跟随系统", "跟随手机的深浅色设置", ThemePref.mode == 0) { ThemePref.set(if (it) 0 else if (sysDark) 2 else 1) } }
         item { Group("PLAYBACK") }
-        item { NavRow("音质", "在线播放的档位，拿不到时自动降一档", Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav, ctx) } }
+        item { NavRow("音质", "在线播放的档位，拿不到时自动降一档", Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav) } }
         item {
             NavRow("播放缓存", "听过的歌存在本地，再听不用重新下载（上限 1GB）", "%.0f MB".format(cacheSize / 1048576.0)) {
                 nav.sheet = SheetSpec("播放缓存", "已用 %.0f MB / 1024 MB".format(cacheSize / 1048576.0), listOf(SheetItem("清空播放缓存", danger = true) {
@@ -523,8 +520,8 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                     if (analysis.isNotEmpty()) T(analysis, 11, p.k, mono = true, lines = 8, lh = 1.4f)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    LinkBtn("分析", 14) { scope.launch { analysis = withContext(Dispatchers.IO) { smapsBreakdown() } } }
-                    LinkBtn("清理缓存", 14) { SingletonImageLoader.get(ctx).memoryCache?.clear(); SingletonImageLoader.get(ctx).diskCache?.clear(); nav.toast = "已清理图片缓存" }
+                    LinkBtn("分析", 14) { scope.launch { analysis = withContext(Dispatchers.IO) { Plat.impl.memAnalysis() } } }
+                    LinkBtn("清理缓存", 14) { SingletonImageLoader.get(pctx).memoryCache?.clear(); SingletonImageLoader.get(pctx).diskCache?.clear(); nav.toast = "已清理图片缓存" }
                 }
             }
         }
@@ -548,40 +545,12 @@ private fun Modifier.graphicsAlpha(a: Float) = this.graphicsLayer { alpha = a }
         if (clickable) { Spacer(Modifier.width(6.dp)); NIcon(NIcons.chevronRight, 16.dp, c.s) }
     }
 
-/** 实占内存（PSS，和系统设置里一致）+ 分项 */
-fun memLine(): String = try {
-    val m = HashMap<String, Long>()
-    File("/proc/self/smaps_rollup").readLines().forEach { l -> val p = l.split(Regex("\\s+")); if (p.size >= 2) p[1].toLongOrNull()?.let { m[p[0]] = it } }
-    val rt = Runtime.getRuntime()
-    "实占(PSS) ${m["Pss:"]!! / 1024}M · 匿名 ${(m["Pss_Anon:"] ?: 0) / 1024}M · 文件 ${(m["Pss_File:"] ?: 0) / 1024}M\nJava 堆 ${(rt.totalMemory() - rt.freeMemory()) / 1048576}M · 原生堆 ${android.os.Debug.getNativeHeapAllocatedSize() / 1048576}M"
-} catch (e: Exception) { "读取失败" }
-
-/** 逐段读取 /proc/self/smaps，按用途汇总 PSS */
-fun smapsBreakdown(): String {
-    val sum = HashMap<String, Long>(); var cat = "其他"
-    val head = Regex("^[0-9a-f]+-[0-9a-f]+ ")
-    File("/proc/self/smaps").forEachLine { l ->
-        if (head.containsMatchIn(l)) {
-            val parts = l.split(Regex("\\s+")); val n = if (parts.size >= 6) parts.subList(5, parts.size).joinToString(" ").lowercase() else ""
-            cat = when {
-                n.contains("dalvik") || n.contains(".art") || n.contains("jit") -> "Java/ART"
-                n.contains("kgsl") || n.contains("mali") || n.contains("dmabuf") || n.contains("gpu") || n.startsWith("/dev/") -> "显存/驱动"
-                n.contains("scudo") || n.contains("malloc") || n.contains("jemalloc") -> "原生堆(绘制/解码)"
-                n.contains("stack") -> "线程栈"
-                n.startsWith("/") -> "文件映射"
-                n.isEmpty() -> "匿名(未命名)"
-                else -> "其他"
-            }
-        } else if (l.startsWith("Pss:")) sum[cat] = (sum[cat] ?: 0) + (l.split(Regex("\\s+"))[1].toLongOrNull() ?: 0)
-    }
-    return sum.entries.sortedByDescending { it.value }.take(7).joinToString("\n") { "${it.key} ${it.value / 1024}M" }
-}
 
 // ======================= 登录 =======================
 @Composable fun LoginPage() {
     val nav = LocalNav.current
     var status by remember { mutableStateOf("正在获取二维码…") }
-    var qr by remember { mutableStateOf<Bitmap?>(null) }
+    var qr by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var ck by remember { mutableStateOf("") }
     var round by remember { mutableIntStateOf(0) }
     LaunchedEffect(round) {
@@ -603,7 +572,7 @@ fun smapsBreakdown(): String {
     Column(Modifier.fillMaxSize().padding(18.dp)) {
         TagRow("SCAN"); Spacer(Modifier.height(16.dp))
         Box(Modifier.size(240.dp).align(Alignment.CenterHorizontally).nb(1.dp, p.k).background(Color.White).press { round++ }, contentAlignment = Alignment.Center) {
-            qr?.let { Image(it.asImageBitmap(), "二维码", Modifier.size(220.dp)) } ?: T("…", 20, Color.Black)
+            qr?.let { Image(it, "二维码", Modifier.size(220.dp)) } ?: T("…", 20, Color.Black)
         }
         Spacer(Modifier.height(14.dp)); T(status, 13, p.s, lines = 3, lh = 1.5f)
         Spacer(Modifier.height(28.dp)); TagRow("COOKIE"); Spacer(Modifier.height(12.dp))
@@ -618,9 +587,14 @@ fun smapsBreakdown(): String {
     }
 }
 
-fun qrBitmap(text: String): Bitmap {
+/** 二维码画成 ImageBitmap（两端通用） */
+fun qrBitmap(text: String): androidx.compose.ui.graphics.ImageBitmap {
     val m = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 440, 440)
-    val b = Bitmap.createBitmap(m.width, m.height, Bitmap.Config.RGB_565)
-    for (x in 0 until m.width) for (y in 0 until m.height) b.setPixel(x, y, if (m[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt())
+    val b = androidx.compose.ui.graphics.ImageBitmap(m.width, m.height)
+    val cv = androidx.compose.ui.graphics.Canvas(b)
+    val white = androidx.compose.ui.graphics.Paint().apply { color = Color.White }
+    val black = androidx.compose.ui.graphics.Paint().apply { color = Color.Black }
+    cv.drawRect(0f, 0f, m.width.toFloat(), m.height.toFloat(), white)
+    for (x in 0 until m.width) for (y in 0 until m.height) if (m[x, y]) cv.drawRect(x.toFloat(), y.toFloat(), x + 1f, y + 1f, black)
     return b
 }

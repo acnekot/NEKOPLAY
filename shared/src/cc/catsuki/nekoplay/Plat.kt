@@ -1,0 +1,97 @@
+package cc.catsuki.nekoplay
+
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.text.font.FontFamily
+import java.io.File
+
+/**
+ * 平台接口：共用代码只通过这里碰平台相关的东西。
+ * 安卓（app/）和桌面（desktop/）各自实现一份，启动时赋给 Plat.impl。
+ */
+
+/** 键值存储（安卓 SharedPreferences / 桌面 properties 文件），方法名照 SharedPreferences 取，迁移最省事 */
+interface KV {
+    fun getString(k: String, d: String?): String?
+    fun getInt(k: String, d: Int): Int
+    fun getLong(k: String, d: Long): Long
+    fun getFloat(k: String, d: Float): Float
+    fun getBoolean(k: String, d: Boolean): Boolean
+    fun getStringSet(k: String, d: Set<String>?): Set<String>?
+    fun edit(): Ed
+    interface Ed {
+        fun putString(k: String, v: String?): Ed
+        fun putInt(k: String, v: Int): Ed
+        fun putLong(k: String, v: Long): Ed
+        fun putFloat(k: String, v: Float): Ed
+        fun putBoolean(k: String, v: Boolean): Ed
+        fun putStringSet(k: String, v: Set<String>?): Ed
+        fun remove(k: String): Ed
+        fun clear(): Ed
+        fun apply()
+    }
+}
+
+/** 播放内核：一次只放一首，队列由 Engine 管 */
+interface Audio {
+    interface Listener {
+        fun onPlaying(p: Boolean)
+        fun onBuffering(b: Boolean)
+        fun onEnded()
+        fun onError(msg: String)
+    }
+    var listener: Listener?
+    /** url 为空表示读本地缓存（cacheKey 对应的那份）；meta 给通知栏 / 系统媒体控制用 */
+    fun open(url: String?, cacheKey: String, startMs: Long, autoplay: Boolean, meta: Track)
+    fun play()
+    fun pause()
+    fun seek(ms: Long)
+    val isPlaying: Boolean
+    val idle: Boolean
+    val position: Long
+    /** 某个缓存键是否已经完整缓存 */
+    fun isCached(key: String): Boolean
+    fun cacheBytes(): Long
+    fun clearCache()
+    /** 音量 0..1（桌面用） */
+    var volume: Float
+}
+
+interface PlatImpl {
+    val name: String               // "android" / "desktop"
+    val filesDir: File
+    val cacheDir: File
+    fun prefs(name: String): KV
+    val inter: FontFamily
+    val mono: FontFamily
+    /** 系统是否支持实时模糊（歌词远处的轻微模糊用） */
+    val liveBlur: Boolean
+    val audio: Audio
+    /** 解码图片文件，长边不超过 maxSide */
+    fun decodeImage(path: String, maxSide: Int): ImageBitmap?
+    /** 读像素 / 用像素造图（背景模糊用） */
+    fun pixels(img: ImageBitmap): IntArray
+    fun fromPixels(px: IntArray, w: Int, h: Int): ImageBitmap
+    fun scaled(img: ImageBitmap, w: Int, h: Int): ImageBitmap
+    fun saveJpeg(img: ImageBitmap, file: File)
+    /** 选图片：返回一个「打开选择器」的函数，选好后回调图片的字节 */
+    @Composable fun imagePicker(onPick: (ByteArray) -> Unit): () -> Unit
+    @Composable fun BackHandler(enabled: Boolean, onBack: () -> Unit)
+    /** MV 播放区域 */
+    @Composable fun VideoPlayer(url: String?, modifier: Modifier, onState: (playing: Boolean, pos: Long, dur: Long, err: String?) -> Unit, control: VideoControl)
+    fun memInfo(): String
+    fun memAnalysis(): String
+}
+
+/** MV 播放控制（由平台实现填充） */
+class VideoControl {
+    var toggle: () -> Unit = {}
+    var seek: (Long) -> Unit = {}
+}
+
+object Plat {
+    lateinit var impl: PlatImpl
+    val isDesktop get() = impl.name == "desktop"
+    fun prefs(name: String) = impl.prefs(name)
+}

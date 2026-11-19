@@ -1,0 +1,201 @@
+package cc.catsuki.nekoplay
+
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asComposeImageBitmap
+import androidx.compose.ui.graphics.asSkiaBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.platform.Font
+import com.sun.jna.Library
+import com.sun.jna.Native
+import com.sun.jna.Pointer
+import com.sun.jna.ptr.DoubleByReference
+import kotlinx.coroutines.delay
+import java.io.File
+import java.util.Properties
+
+/** 桌面平台实现（Windows / macOS / Linux） */
+class DesktopPlat : PlatImpl {
+    companion object {
+        private var backStack = ArrayList<Pair<() -> Boolean, () -> Unit>>()
+        /** Esc：交给当前启用的返回处理 */
+        fun back(): Boolean { val h = backStack.lastOrNull { it.first() } ?: return false; h.second(); return true }
+    }
+
+    override val name = "desktop"
+    private val home: File = File(System.getProperty("user.home"), if (System.getProperty("os.name").lowercase().contains("win")) "AppData/Roaming/NEKOPLAY" else ".nekoplay").apply { mkdirs() }
+    override val filesDir: File = File(home, "files").apply { mkdirs() }
+    override val cacheDir: File = File(home, "cache").apply { mkdirs() }
+    private val kvs = HashMap<String, KV>()
+    override fun prefs(name: String): KV = kvs.getOrPut(name) { FileKV(File(home, "$name.properties")) }
+
+    private fun font(n: String, w: FontWeight) = Font("nekoplay-$n", javaClass.getResourceAsStream("/font/$n.ttf")!!.readBytes(), w)
+    override val inter = FontFamily(font("inter_400", FontWeight.W400), font("inter_500", FontWeight.W500), font("inter_600", FontWeight.W600),
+        font("inter_700", FontWeight.W700), font("inter_800", FontWeight.W800), font("inter_900", FontWeight.W900))
+    override val mono = FontFamily(font("mono_400", FontWeight.W400), font("mono_500", FontWeight.W500), font("mono_600", FontWeight.W600), font("mono_700", FontWeight.W700))
+    override val liveBlur = true
+    override val audio: Audio = MpvAudio()
+
+    override fun decodeImage(path: String, maxSide: Int): ImageBitmap? {
+        val img = org.jetbrains.skia.Image.makeFromEncoded(File(path).readBytes()).toComposeImageBitmap()
+        val m = maxOf(img.width, img.height)
+        return if (m <= maxSide) img else scaled(img, img.width * maxSide / m, img.height * maxSide / m)
+    }
+    override fun pixels(img: ImageBitmap): IntArray { val px = IntArray(img.width * img.height); img.readPixels(px); return px }
+    override fun fromPixels(px: IntArray, w: Int, h: Int): ImageBitmap {
+        val b = org.jetbrains.skia.Bitmap()
+        b.allocPixels(org.jetbrains.skia.ImageInfo.makeN32(w, h, org.jetbrains.skia.ColorAlphaType.PREMUL))
+        val bytes = ByteArray(w * h * 4)
+        for (i in px.indices) { val c = px[i]; bytes[i * 4] = (c and 255).toByte(); bytes[i * 4 + 1] = ((c shr 8) and 255).toByte(); bytes[i * 4 + 2] = ((c shr 16) and 255).toByte(); bytes[i * 4 + 3] = (c ushr 24).toByte() }
+        b.installPixels(bytes)
+        return b.asComposeImageBitmap()
+    }
+    override fun scaled(img: ImageBitmap, w: Int, h: Int): ImageBitmap {
+        val src = org.jetbrains.skia.Image.makeFromBitmap(img.asSkiaBitmap())
+        val surf = org.jetbrains.skia.Surface.makeRasterN32Premul(w, h)
+        surf.canvas.drawImageRect(src, org.jetbrains.skia.Rect.makeWH(src.width.toFloat(), src.height.toFloat()), org.jetbrains.skia.Rect.makeWH(w.toFloat(), h.toFloat()), org.jetbrains.skia.SamplingMode.LINEAR, null, true)
+        return surf.makeImageSnapshot().toComposeImageBitmap()
+    }
+    override fun saveJpeg(img: ImageBitmap, file: File) {
+        val data = org.jetbrains.skia.Image.makeFromBitmap(img.asSkiaBitmap()).encodeToData(org.jetbrains.skia.EncodedImageFormat.JPEG, 90) ?: return
+        file.writeBytes(data.bytes)
+    }
+
+    @Composable override fun imagePicker(onPick: (ByteArray) -> Unit): () -> Unit = {
+        val d = java.awt.FileDialog(null as java.awt.Frame?, "选择背景图片", java.awt.FileDialog.LOAD)
+        d.setFilenameFilter { _, n -> n.lowercase().let { it.endsWith(".jpg") || it.endsWith(".jpeg") || it.endsWith(".png") || it.endsWith(".webp") } }
+        d.isVisible = true
+        if (d.file != null) onPick(File(d.directory, d.file).readBytes())
+    }
+
+    @Composable override fun BackHandler(enabled: Boolean, onBack: () -> Unit) {
+        val en by rememberUpdatedState(enabled); val cb by rememberUpdatedState(onBack)
+        DisposableEffect(Unit) {
+            val h: Pair<() -> Boolean, () -> Unit> = { en } to { cb() }
+            backStack.add(h); onDispose { backStack.remove(h) }
+        }
+    }
+
+    /** MV：另开一个 mpv 窗口播放（嵌入播放以后再做） */
+    @Composable override fun VideoPlayer(url: String?, modifier: Modifier, onState: (Boolean, Long, Long, String?) -> Unit, control: VideoControl) {
+        LaunchedEffect(url) {
+            if (url == null) return@LaunchedEffect
+            val ok = runCatching { ProcessBuilder("mpv", "--force-window=yes", "--title=NEKOPLAY MV", "--referrer=https://music.163.com/", url).start() }.isSuccess
+            onState(false, 0, 0, if (ok) "已在 mpv 窗口中播放" else "需要安装 mpv 才能播放 MV")
+        }
+    }
+
+    override fun memInfo(): String {
+        val rt = Runtime.getRuntime()
+        val rss = runCatching { File("/proc/self/status").readLines().first { it.startsWith("VmRSS") }.split(Regex("\\s+"))[1].toLong() / 1024 }.getOrNull()
+        return "${if (rss != null) "常驻内存 ${rss}M · " else ""}Java 堆 ${(rt.totalMemory() - rt.freeMemory()) / 1048576}M / 上限 ${rt.maxMemory() / 1048576}M"
+    }
+    override fun memAnalysis(): String = memInfo()
+}
+
+/** 简单的 properties 文件存储 */
+private class FileKV(val f: File) : KV {
+    private val p = Properties().apply { if (f.exists()) runCatching { f.inputStream().use { load(it) } } }
+    private fun save() = synchronized(p) { runCatching { f.outputStream().use { p.store(it, null) } } }
+    override fun getString(k: String, d: String?) = p.getProperty(k) ?: d
+    override fun getInt(k: String, d: Int) = p.getProperty(k)?.toIntOrNull() ?: d
+    override fun getLong(k: String, d: Long) = p.getProperty(k)?.toLongOrNull() ?: d
+    override fun getFloat(k: String, d: Float) = p.getProperty(k)?.toFloatOrNull() ?: d
+    override fun getBoolean(k: String, d: Boolean) = p.getProperty(k)?.toBooleanStrictOrNull() ?: d
+    override fun getStringSet(k: String, d: Set<String>?): Set<String>? = p.getProperty(k)?.let { if (it.isEmpty()) emptySet() else it.split('\u0001').toSet() } ?: d
+    override fun edit(): KV.Ed = object : KV.Ed {
+        val ops = ArrayList<() -> Unit>()
+        override fun putString(k: String, v: String?) = apply { ops += { if (v == null) p.remove(k) else p.setProperty(k, v) } }
+        override fun putInt(k: String, v: Int) = putString(k, v.toString())
+        override fun putLong(k: String, v: Long) = putString(k, v.toString())
+        override fun putFloat(k: String, v: Float) = putString(k, v.toString())
+        override fun putBoolean(k: String, v: Boolean) = putString(k, v.toString())
+        override fun putStringSet(k: String, v: Set<String>?) = putString(k, v?.joinToString("\u0001"))
+        override fun remove(k: String) = apply { ops += { p.remove(k) } }
+        override fun clear() = apply { ops += { p.clear() } }
+        override fun apply() { synchronized(p) { ops.forEach { it() } }; save() }
+    }
+}
+
+/** libmpv 的最小绑定 */
+private interface Mpv : Library {
+    fun mpv_create(): Pointer?
+    fun mpv_initialize(h: Pointer): Int
+    fun mpv_set_option_string(h: Pointer, name: String, v: String): Int
+    fun mpv_command(h: Pointer, args: Array<String?>): Int
+    fun mpv_set_property_string(h: Pointer, name: String, v: String): Int
+    fun mpv_get_property_string(h: Pointer, name: String): Pointer?
+    fun mpv_get_property(h: Pointer, name: String, format: Int, out: DoubleByReference): Int
+    fun mpv_free(p: Pointer)
+}
+
+/**
+ * 桌面播放内核：libmpv（支持 FLAC / 边下边播，占用低）。
+ * Windows 需要把 libmpv-2.dll 放在程序目录；macOS / Linux 装 mpv 即可。
+ * 加载失败时界面照常可用，只是播放会提示错误。
+ */
+private class MpvAudio : Audio {
+    override var listener: Audio.Listener? = null
+    private val lib: Mpv? = listOf("mpv", "libmpv-2", "mpv-2", "libmpv").firstNotNullOfOrNull { n -> runCatching { Native.load(n, Mpv::class.java) }.getOrNull() }
+    private val h: Pointer? = lib?.mpv_create()?.also { h ->
+        lib.mpv_set_option_string(h, "vid", "no")
+        lib.mpv_set_option_string(h, "keep-open", "yes")
+        lib.mpv_set_option_string(h, "idle", "yes")
+        lib.mpv_set_option_string(h, "user-agent", "Mozilla/5.0")
+        lib.mpv_set_option_string(h, "referrer", "https://music.163.com/")
+        lib.mpv_set_option_string(h, "cache", "yes")
+        lib.mpv_initialize(h)
+    }
+    @Volatile private var opened = false
+    @Volatile private var playing = false
+    @Volatile private var ended = false
+    @Volatile private var pos = 0L
+
+    init {
+        // 每 200ms 读一次状态，转成回调（在界面线程里发）
+        Thread {
+            var lastPlaying = false; var lastBuf = false
+            while (true) {
+                Thread.sleep(200)
+                if (lib == null || h == null || !opened) continue
+                val paused = str("pause") == "yes"
+                val eof = str("eof-reached") == "yes"
+                val buf = str("paused-for-cache") == "yes"
+                pos = (num("time-pos") * 1000).toLong()
+                playing = !paused && !eof
+                java.awt.EventQueue.invokeLater {
+                    if (playing != lastPlaying) { lastPlaying = playing; listener?.onPlaying(playing) }
+                    if (buf != lastBuf) { lastBuf = buf; listener?.onBuffering(buf) }
+                    if (eof && !ended) { ended = true; listener?.onEnded() }
+                }
+            }
+        }.apply { isDaemon = true; name = "mpv-poll" }.start()
+    }
+
+    private fun str(n: String): String? { val p = lib!!.mpv_get_property_string(h!!, n) ?: return null; val s = p.getString(0, "UTF-8"); lib.mpv_free(p); return s }
+    private fun num(n: String): Double { val r = DoubleByReference(); return if (lib!!.mpv_get_property(h!!, n, 5, r) >= 0) r.value else 0.0 }
+    private fun cmd(vararg a: String) { lib?.mpv_command(h!!, arrayOf(*a, null)) }
+
+    override fun open(url: String?, cacheKey: String, startMs: Long, autoplay: Boolean, meta: Track) {
+        // 抛异常由 Engine 显示提示，不会自动跳下一首（避免整个队列连环报错）
+        if (lib == null || h == null) throw Exception("没有找到 libmpv，请先安装 mpv")
+        if (url == null) throw Exception("桌面版暂无本地缓存")
+        ended = false; opened = true
+        lib.mpv_set_property_string(h, "pause", if (autoplay) "no" else "yes")
+        cmd("loadfile", url, "replace", "-1", "start=${startMs / 1000.0}")
+    }
+    override fun play() { h?.let { lib!!.mpv_set_property_string(it, "pause", "no") } }
+    override fun pause() { h?.let { lib!!.mpv_set_property_string(it, "pause", "yes") } }
+    override fun seek(ms: Long) { cmd("seek", (ms / 1000.0).toString(), "absolute"); pos = ms; ended = false }
+    override val isPlaying get() = playing
+    override val idle get() = !opened
+    override val position get() = pos
+    override fun isCached(key: String) = false
+    override fun cacheBytes() = 0L
+    override fun clearCache() {}
+    override var volume: Float = 1f
+        set(v) { field = v; h?.let { lib!!.mpv_set_property_string(it, "volume", (v * 100).toInt().toString()) } }
+}

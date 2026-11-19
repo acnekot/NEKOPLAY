@@ -1,10 +1,5 @@
 package cc.catsuki.nekoplay
 
-import android.os.Build
-import android.os.Handler
-import android.os.HandlerThread
-import android.view.FrameMetrics
-import android.view.Window
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,18 +19,9 @@ object Perf {
     private val cores = Runtime.getRuntime().availableProcessors()
     private val lock = Any()
 
-    fun attach(w: Window) {
-        val t = HandlerThread("perf").apply { start() }
-        w.addOnFrameMetricsAvailableListener({ _, m, _ ->
-            synchronized(lock) {
-                frames++
-                val total = m.getMetric(FrameMetrics.TOTAL_DURATION)
-                totalNs += total
-                if (Build.VERSION.SDK_INT >= 31) gpuNs += m.getMetric(FrameMetrics.GPU_DURATION)
-                val deadline = if (Build.VERSION.SDK_INT >= 31) m.getMetric(FrameMetrics.DEADLINE) else 16_666_667L
-                if (total > deadline) jank++
-            }
-        }, Handler(t.looper))
+    /** 平台每渲染一帧调用一次：总耗时、GPU 耗时、是否超时（卡顿） */
+    fun frame(totalNs: Long, gpuNs: Long, late: Boolean) {
+        synchronized(lock) { frames++; this.totalNs += totalNs; this.gpuNs += gpuNs; if (late) jank++ }
     }
 
     fun start() = CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {

@@ -139,10 +139,9 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                         }
                         T(t.artist, 15, p.s, lh = 1.3f, modifier = Modifier.press { openArtists(nav, t) })
                         // 点音质这一行可以换音质
-                        val ctx = androidx.compose.ui.platform.LocalContext.current
                         T(if (st.format.isEmpty()) Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)] + " ▾"
                           else "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}${if (st.cached) " · 已缓存" else ""} ▾",
-                            11, p.s, mono = true, ls = .06f, modifier = Modifier.padding(top = 6.dp).press { qualitySheet(nav, ctx) })
+                            11, p.s, mono = true, ls = .06f, modifier = Modifier.padding(top = 6.dp).press { qualitySheet(nav) })
                     }
                     if (lt > .75f) Column(Modifier.width(with(d) { (w - cl - cs - 30 * dp).coerceAtLeast(40 * dp).toDp() }).graphicsLayer {
                         translationX = cl + cs + 12 * dp; translationY = ct + (cs - 38 * dp) / 2; alpha = ((lt - .75f) / .25f).coerceIn(0f, 1f)
@@ -271,7 +270,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                 Box(Modifier.fillMaxWidth()
                     .onPlaced { val y = it.positionInParent().y; if (tops[i] != y) { tops[i] = y; measured++ } }
                     .graphicsLayer { translationY = offs[i].value + manual.value; alpha = a }
-                    .then(if (!browsing && dist in 2..8 && android.os.Build.VERSION.SDK_INT >= 31) Modifier.blur(1.2.dp) else Modifier)
+                    .then(if (!browsing && dist in 2..8 && Plat.impl.liveBlur) Modifier.blur(1.2.dp) else Modifier)
                     .press { Engine.seek(line.t); backJob?.cancel(); browsing = false; scope.launch { manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessMediumLow))) } }
                     .padding(bottom = with(LocalDensity.current) { gap.toDp() })) {
                     if (line.text.isEmpty()) {

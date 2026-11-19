@@ -15,11 +15,8 @@ import okio.Path.Companion.toOkioPath
 class App : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
-        Ncm.init(this)
-        Store.init(this)
-        Engine.init(this)
-        Bg.init(this)
-        HomeLayout.init(this)
+        Plat.impl = AndroidPlat(this)
+        Boot.init()
     }
 
     // 图片：内存缓存 24MB，磁盘缓存 200MB；网易云图片带浏览器请求头，避免 403
@@ -43,25 +40,17 @@ class App : Application(), SingletonImageLoader.Factory {
     }
 }
 
-/** 网易云图片按显示尺寸取小图 */
-fun img(url: String?, px: Int): String? {
-    if (url == null) return null
-    val b = when { px <= 160 -> 160; px <= 256 -> 256; px <= 512 -> 512; else -> 768 }
-    val base = url.substringBefore('?')
-    return if (base.contains("/obj/")) "$base?imageView=1&thumbnail=${b}x$b&type=webp" else "$base?param=${b}y$b"
-}
-
 /** 通知栏 / 锁屏 / 耳机按键的播放控制 */
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     override fun onCreate() {
         super.onCreate()
-        session = MediaSession.Builder(this, Engine.player).build()
+        session = MediaSession.Builder(this, AndroidPlat.exoAudio.player).build()
     }
     override fun onGetSession(info: MediaSession.ControllerInfo) = session
     override fun onTaskRemoved(rootIntent: Intent?) {
         Engine.savePosition()
-        if (!Engine.exo.isPlaying) stopSelf()
+        if (!Engine.isPlaying) stopSelf()
     }
     override fun onDestroy() { session?.release(); session = null; super.onDestroy() }
 }

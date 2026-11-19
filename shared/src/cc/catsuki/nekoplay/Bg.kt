@@ -1,11 +1,5 @@
 package cc.catsuki.nekoplay
 
-import android.content.Context
-import android.graphics.BitmapFactory
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,15 +16,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -43,7 +34,7 @@ import java.io.File
 object Bg {
     /** 显示用的图（已经按模糊值处理好）；src 是原图 */
     var image by mutableStateOf<ImageBitmap?>(null)
-    private var src: android.graphics.Bitmap? = null
+    private var src: ImageBitmap? = null
     private var job: kotlinx.coroutines.Job? = null
     private val bgScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main)
     var blur by mutableFloatStateOf(0f)      // 0..30 dp
@@ -53,14 +44,14 @@ object Bg {
     var oy by mutableFloatStateOf(0f)        // 相对高度
     val on get() = image != null
     private lateinit var file: File
-    private lateinit var prefs: android.content.SharedPreferences
+    private lateinit var prefs: KV
 
-    fun init(c: Context) {
-        file = File(c.filesDir, "bg.jpg")
-        prefs = c.getSharedPreferences("bg", 0)
+    fun init() {
+        file = File(Plat.impl.filesDir, "bg.jpg")
+        prefs = Plat.prefs("bg")
         blur = prefs.getFloat("blur", 0f); alpha = prefs.getFloat("alpha", .6f); scale = prefs.getFloat("scale", 1f)
         ox = prefs.getFloat("ox", 0f); oy = prefs.getFloat("oy", 0f)
-        if (file.exists()) runCatching { src = decode(file.path); image = src?.asImageBitmap(); if (blur > .5f) reblur() }
+        if (file.exists()) runCatching { src = Plat.impl.decodeImage(file.path, 1600); image = src; if (blur > .5f) reblur() }
     }
 
     /**
@@ -74,18 +65,17 @@ object Bg {
         job = bgScope.launch {
             kotlinx.coroutines.delay(60)
             val out = withContext(Dispatchers.Default) { if (b < .5f) s0 else blurred(s0, b) }
-            image = out.asImageBitmap()
+            image = out
         }
     }
 
-    private fun blurred(s0: android.graphics.Bitmap, b: Float): android.graphics.Bitmap {
+    private fun blurred(s0: ImageBitmap, b: Float): ImageBitmap {
         val w = 360; val h = (s0.height * w / s0.width.toFloat()).toInt().coerceAtLeast(1)
-        val sm = android.graphics.Bitmap.createScaledBitmap(s0, w, h, true)
-        val px = IntArray(w * h); sm.getPixels(px, 0, w, 0, 0, w, h)
+        val px = Plat.impl.pixels(Plat.impl.scaled(s0, w, h))
         val r = (b * .6f).toInt().coerceAtLeast(1)
         val tmp = IntArray(w * h)
         repeat(3) { boxPass(px, tmp, w, h, r, true); boxPass(tmp, px, w, h, r, false) }
-        return android.graphics.Bitmap.createBitmap(px, w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        return Plat.impl.fromPixels(px, w, h)
     }
 
     /** 一遍盒式模糊（水平或垂直），滑动窗口求和，O(像素数) */
@@ -108,21 +98,14 @@ object Bg {
     fun save() { prefs.edit().putFloat("blur", blur).putFloat("alpha", alpha).putFloat("scale", scale).putFloat("ox", ox).putFloat("oy", oy).apply() }
     fun resetTransform() { scale = 1f; ox = 0f; oy = 0f; save() }
 
-    /** 长边缩到 1600 以内再存，省内存 */
-    private fun decode(path: String): android.graphics.Bitmap? {
-        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(path, o)
-        var s = 1; while (maxOf(o.outWidth, o.outHeight) / s > 1600) s *= 2
-        return BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = s })
-    }
-
-    suspend fun set(c: Context, uri: Uri) = withContext(Dispatchers.IO) {
-        val tmp = File(c.cacheDir, "bg_in")
-        c.contentResolver.openInputStream(uri)?.use { i -> tmp.outputStream().use { i.copyTo(it) } }
-        val bm = decode(tmp.path) ?: throw Exception("读不了这张图片")
-        file.outputStream().use { bm.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }
+    /** 存一份（长边缩到 1600 以内），再按当前模糊值处理 */
+    suspend fun set(bytes: ByteArray) = withContext(Dispatchers.IO) {
+        val tmp = File(Plat.impl.cacheDir, "bg_in")
+        tmp.writeBytes(bytes)
+        val bm = Plat.impl.decodeImage(tmp.path, 1600) ?: throw Exception("读不了这张图片")
+        Plat.impl.saveJpeg(bm, file)
         tmp.delete()
-        withContext(Dispatchers.Main) { src = bm; image = bm.asImageBitmap(); resetTransform(); reblur() }
+        withContext(Dispatchers.Main) { src = bm; image = bm; resetTransform(); reblur() }
     }
 
     fun clear() { job?.cancel(); image = null; src = null; runCatching { file.delete() } }
@@ -165,15 +148,14 @@ object Bg {
 
 @Composable fun BgEditorPage() {
     val nav = LocalNav.current
-    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val p = c
-    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) scope.launch { try { Bg.set(ctx, uri); nav.toast = "背景已更换" } catch (e: Exception) { nav.toast = "设置失败：${e.message}" } }
+    val pick = Plat.impl.imagePicker { bytes ->
+        scope.launch { try { Bg.set(bytes); nav.toast = "背景已更换" } catch (e: Exception) { nav.toast = "设置失败：${e.message}" } }
     }
-    fun choose() = pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-    val cfg = LocalConfiguration.current
-    val ratio = cfg.screenWidthDp.toFloat() / cfg.screenHeightDp.coerceAtLeast(1)
+    fun choose() = pick()
+    val win = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
+    val ratio = win.width.toFloat() / win.height.coerceAtLeast(1)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 24.dp)) {
         item {
             Column {

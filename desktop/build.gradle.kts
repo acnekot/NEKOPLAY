@@ -1,0 +1,43 @@
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+
+plugins {
+    kotlin("jvm") version "2.4.20"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.20"
+    id("org.jetbrains.compose") version "1.12.2"
+}
+
+kotlin {
+    jvmToolchain(21)
+    // 和安卓版共用同一份代码
+    sourceSets["main"].kotlin.srcDir("../shared/src")
+}
+
+dependencies {
+    implementation(compose.desktop.currentOs)
+    implementation(compose.foundation)
+    implementation(compose.ui)
+    implementation(compose.runtime)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
+    implementation("io.coil-kt.coil3:coil-compose:3.3.0")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.json:json:20250517")
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("net.java.dev.jna:jna:5.17.0")
+}
+
+compose.desktop {
+    application {
+        mainClass = "cc.catsuki.nekoplay.MainKt"
+        jvmArgs += listOf("-Xmx256m", "-XX:+UseSerialGC", "-XX:TieredStopAtLevel=1")
+        nativeDistributions {
+            targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb, TargetFormat.AppImage)
+            packageName = "NEKOPLAY"
+            packageVersion = "0.3.0"
+            description = "NEKOPLAY 音乐播放器"
+            vendor = "好奇猫a"
+            modules("java.sql", "jdk.unsupported")
+            windows { menuGroup = "NEKOPLAY"; shortcut = true; upgradeUuid = "8f2a6c3e-5b1d-4e7a-9c40-3d2f1a6b7e91" }
+        }
+    }
+}
