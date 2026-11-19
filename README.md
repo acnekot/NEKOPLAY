@@ -1,4 +1,7 @@
-# NEKOPLAY（原生版）
+# NEKOPLAY
+
+> 旧的 Tauri 网页版在 `tauri-web` 分支。
+
 
 BenchLab 风格的网易云音乐播放器，Kotlin + Jetpack Compose + Media3。
 

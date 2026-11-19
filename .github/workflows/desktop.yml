@@ -1,4 +1,4 @@
-name: desktop
+name: 打包 PC 版（Windows / macOS / Linux）
 on:
   workflow_dispatch:
   push:
@@ -6,6 +6,7 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
@@ -16,7 +17,7 @@ jobs:
       - name: 打包
         working-directory: desktop
         shell: bash
-        run: ./gradlew packageDistributionForCurrentOS
+        run: chmod +x gradlew && ./gradlew packageDistributionForCurrentOS --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: NEKOPLAY-${{ matrix.os }}
