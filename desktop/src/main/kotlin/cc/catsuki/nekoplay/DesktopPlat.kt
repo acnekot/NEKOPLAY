@@ -204,4 +204,19 @@ private class MpvAudio : Audio {
     override fun clearCache() {}
     override var volume: Float = 1f
         set(v) { field = v; h?.let { lib!!.mpv_set_property_string(it, "volume", (v * 100).toInt().toString()) } }
+
+    /** 效果器：拼成 ffmpeg 滤镜链交给 mpv（10 个 equalizer + bass + extrastereo + volume） */
+    override fun applyFx(fx: Fx) {
+        val hh = h ?: return
+        val f = ArrayList<String>()
+        if (fx.on) {
+            Fx.FREQS.forEachIndexed { i, hz -> if (fx.bands[i] != 0f) f += "equalizer=f=$hz:t=o:w=1:g=${fx.bands[i]}" }
+            if (fx.bass > 0) f += "bass=g=${"%.1f".format(java.util.Locale.US, fx.bass * 12)}:f=100"
+            if (fx.surround > 0) f += "extrastereo=m=${"%.2f".format(java.util.Locale.US, 1 + fx.surround * 1.5f)}"
+            if (fx.loud > 0) f += "volume=${"%.1f".format(java.util.Locale.US, fx.loud * 10)}dB"
+            // 有增益时防削波
+            if (f.isNotEmpty()) f += "alimiter=limit=0.95"
+        }
+        lib!!.mpv_set_property_string(hh, "af", if (f.isEmpty()) "" else "lavfi=[${f.joinToString(",")}]")
+    }
 }

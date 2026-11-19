@@ -41,6 +41,7 @@ fun trackActions(nav: Nav, t: Track, fromPl: String? = null) {
             Store.run { try { Ncm.playlistTracks(fromPl, "del", listOf(t.id)); nav.toast = "已从歌单删除"; Store.refreshPlaylists(fromPl) } catch (e: Exception) { nav.toast = "删除失败：${e.message}" } }
         })
         add(SheetItem("查看评论") { nav.comments = t })
+        add(SheetItem("效果器 / 均衡器") { nav.player = false; nav.push(Page.Effects) })
         add(SheetItem("相似歌曲") { nav.player = false; nav.push(Page.Detail("simi", t.id, "相似：${t.title}", t.cover)) })
         add(SheetItem("包含这首歌的歌单") { nav.player = false; nav.push(Page.Playlists("simi", t.id, "相关歌单")) })
     })

@@ -56,6 +56,8 @@ interface Audio {
     fun clearCache()
     /** 音量 0..1（桌面用） */
     var volume: Float
+    /** 效果器 / 均衡器 */
+    fun applyFx(fx: Fx)
 }
 
 interface PlatImpl {

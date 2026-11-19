@@ -165,6 +165,13 @@ private class SpKV(val sp: android.content.SharedPreferences) : KV {
 /** ExoPlayer + 1GB 播放缓存；player 给通知栏 / 锁屏用（上一首下一首走 Engine 的队列） */
 class ExoAudio(c: Context) : Audio {
     override var listener: Audio.Listener? = null
+    // 固定一个音频会话，效果器都挂在这个会话上
+    private val sessionId = (c.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager).generateAudioSessionId()
+    private var dyn: android.media.audiofx.DynamicsProcessing? = null
+    private var eqOld: android.media.audiofx.Equalizer? = null
+    private var bassFx: android.media.audiofx.BassBoost? = null
+    private var virtFx: android.media.audiofx.Virtualizer? = null
+    private var loudFx: android.media.audiofx.LoudnessEnhancer? = null
     val exo: ExoPlayer
     val player: Player
     private val cache = SimpleCache(File(c.cacheDir, "audio"), LeastRecentlyUsedCacheEvictor(1024L * 1024 * 1024), StandaloneDatabaseProvider(c))
@@ -175,6 +182,7 @@ class ExoAudio(c: Context) : Audio {
         exo = ExoPlayer.Builder(c).setLoadControl(lc).setMediaSourceFactory(DefaultMediaSourceFactory(ds))
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
             .setHandleAudioBecomingNoisy(true).setLooper(Looper.getMainLooper()).build()
+        exo.setAudioSessionId(sessionId)
         exo.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(p: Boolean) { listener?.onPlaying(p) }
             override fun onPlaybackStateChanged(s: Int) {
@@ -215,4 +223,37 @@ class ExoAudio(c: Context) : Audio {
     override fun cacheBytes() = cache.cacheSpace
     override fun clearCache() { cache.keys.toList().forEach { cache.removeResource(it) } }
     override var volume: Float get() = exo.volume; set(v) { exo.volume = v }
+
+    /**
+     * 效果器：Android 9+ 用 DynamicsProcessing 做 10 段均衡（频段可以任意定）；更老的系统退回 Equalizer（按最接近的频段）。
+     * 每个效果单独 try，设备不支持就跳过。
+     */
+    override fun applyFx(fx: Fx) {
+        val on = fx.on
+        if (Build.VERSION.SDK_INT >= 28) runCatching {
+            val d = dyn ?: android.media.audiofx.DynamicsProcessing(0, sessionId,
+                android.media.audiofx.DynamicsProcessing.Config.Builder(android.media.audiofx.DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION, 2,
+                    true, 10, false, 0, false, 0, false).build()).also { dyn = it }
+            val eq = android.media.audiofx.DynamicsProcessing.Eq(true, true, 10)
+            for (i in 0 until 10) {
+                // 每段的上边界取到下一个中心频率的几何中点
+                val upper = if (i < 9) kotlin.math.sqrt(Fx.FREQS[i].toFloat() * Fx.FREQS[i + 1]) else 20000f
+                eq.getBand(i).apply { isEnabled = true; cutoffFrequency = upper; gain = fx.bands[i] }
+            }
+            d.setPreEqAllChannelsTo(eq)
+            d.enabled = on
+        } else runCatching {
+            val e = eqOld ?: android.media.audiofx.Equalizer(0, sessionId).also { eqOld = it }
+            val (lo, hi) = e.bandLevelRange.let { it[0] to it[1] }
+            for (b in 0 until e.numberOfBands) {
+                val center = e.getCenterFreq(b.toShort()) / 1000f
+                val i = Fx.FREQS.indices.minBy { kotlin.math.abs(kotlin.math.ln(Fx.FREQS[it] / center)) }
+                e.setBandLevel(b.toShort(), (fx.bands[i] * 100).toInt().coerceIn(lo.toInt(), hi.toInt()).toShort())
+            }
+            e.enabled = on
+        }
+        runCatching { (bassFx ?: android.media.audiofx.BassBoost(0, sessionId).also { bassFx = it }).apply { setStrength((fx.bass * 1000).toInt().toShort()); enabled = on && fx.bass > 0 } }
+        runCatching { (virtFx ?: android.media.audiofx.Virtualizer(0, sessionId).also { virtFx = it }).apply { setStrength((fx.surround * 1000).toInt().toShort()); enabled = on && fx.surround > 0 } }
+        runCatching { (loudFx ?: android.media.audiofx.LoudnessEnhancer(sessionId).also { loudFx = it }).apply { setTargetGain((fx.loud * 1000).toInt()); enabled = on && fx.loud > 0 } }
+    }
 }

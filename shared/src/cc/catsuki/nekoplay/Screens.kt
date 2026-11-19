@@ -498,6 +498,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { NavRow("自定义背景", "选一张图片，可调模糊、透明度、位置和大小", if (Bg.on) "已设置" else "未设置") { nav.push(Page.Background) } }
         item { SwitchRow("跟随系统", "跟随手机的深浅色设置", ThemePref.mode == 0) { ThemePref.set(if (it) 0 else if (sysDark) 2 else 1) } }
         item { Group("PLAYBACK") }
+        item { NavRow("效果器", "10 段均衡器、低音增强、环绕、响度", if (FxStore.fx.on) FxStore.fx.preset else "关") { nav.push(Page.Effects) } }
         item { NavRow("音质", "在线播放的档位，拿不到时自动降一档", Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav) } }
         item {
             NavRow("播放缓存", "听过的歌存在本地，再听不用重新下载（上限 1GB）", "%.0f MB".format(cacheSize / 1048576.0)) {
