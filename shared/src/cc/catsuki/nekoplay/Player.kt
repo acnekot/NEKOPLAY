@@ -126,6 +126,13 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     // 封面：始终按大尺寸解码，只做位移和缩放
                     Box(Modifier.graphicsLayer {
                         transformOrigin = TransformOrigin(0f, 0f); translationX = cl; translationY = ct; scaleX = cs / coverNow; scaleY = cs / coverNow
+                    }.pointerInput(nav.lyrics) {
+                        // 封面视图下往下拖封面 = 点 ⌄ 收起；歌词模式不拦，留给歌词滚动
+                        if (!nav.lyrics) detectVerticalDragGestures(onDragEnd = {
+                            scope.launch { if (drag.value > h * .18f) nav.player = false else drag.animateTo(0f, spring(1f, Anim.stiff(Spring.StiffnessMediumLow))) }
+                        }, onDragCancel = {
+                            scope.launch { drag.animateTo(0f, spring(1f, Anim.stiff(Spring.StiffnessMediumLow))) }
+                        }) { ch, dy -> ch.consume(); scope.launch { drag.snapTo((drag.value + dy).coerceAtLeast(0f)) } }
                     }.press(.97f) { nav.lyrics = !nav.lyrics }) { Cover(t.cover, coverDp, t.title) }
                     // 标题：两套各在自己的位置淡入淡出
                     // 信息块：和封面左边对齐，宽度等于封面；爱心在歌名同一行最右，对齐封面右边缘
