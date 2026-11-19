@@ -33,7 +33,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb, TargetFormat.AppImage)
             packageName = "NEKOPLAY"
-            packageVersion = "0.3.0"
+            packageVersion = "1.0.0" // Windows 安装包和 macOS 要求主版本号 ≥ 1
             description = "NEKOPLAY 音乐播放器"
             vendor = "好奇猫a"
             modules("java.sql", "jdk.unsupported")
