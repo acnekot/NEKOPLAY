@@ -1,0 +1,24 @@
+name: 打包 PC 版（Windows / macOS / Linux）
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # 原生版代码在 android-native 分支
+      - uses: actions/checkout@v4
+        with: { ref: android-native }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - name: 打包
+        working-directory: desktop
+        shell: bash
+        run: chmod +x gradlew && ./gradlew packageDistributionForCurrentOS --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NEKOPLAY-${{ matrix.os }}
+          path: desktop/build/compose/binaries/main/*/*
