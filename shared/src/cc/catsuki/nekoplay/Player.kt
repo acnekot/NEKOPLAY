@@ -211,22 +211,25 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
 // ======================= 歌词 =======================
 /** 解析好的歌词放内存里：切到歌词页、开关评论 / 队列时不用重新拉，也就不会闪 LOADING */
 object LyricCache {
-    private val map = object : LinkedHashMap<String, List<LyricLine>>(16, .75f, true) {
-        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, List<LyricLine>>?) = size > 30
+    // 最近用过的 30 首：读一次就挪到末尾，超出时丢掉最前面的（各平台通用写法）
+    private val map = LinkedHashMap<String, List<LyricLine>>()
+    private fun put(id: String, l: List<LyricLine>) = synchronized(this) {
+        map.remove(id); map[id] = l
+        while (map.size > 30) map.remove(map.keys.first())
     }
-    @Synchronized fun peek(id: String): List<LyricLine>? = map[id]
+    fun peek(id: String): List<LyricLine>? = synchronized(this) { map.remove(id)?.also { map[id] = it } }
     suspend fun get(id: String): List<LyricLine> = peek(id) ?: run {
         // 本地音乐：读同名 .lrc
         if (id.startsWith("local:")) {
             val src = LocalMusic.byId(id)?.src
             val l = runCatching { val f = java.io.File(java.net.URI(src)); java.io.File(f.parentFile, f.nameWithoutExtension + ".lrc").takeIf { it.exists() }?.readText() }.getOrNull()
                 ?.let { Lrc.parse(it, null) } ?: emptyList()
-            synchronized(this) { map[id] = l }; return@run l
+            put(id, l); return@run l
         }
         val d = Ncm.lyricFull(id)
         // 有逐字歌词就用逐字的，没有退回普通 LRC
         val l = d.yrc?.let { Lrc.parseYrc(it, d.tr) }?.takeIf { it.isNotEmpty() } ?: Lrc.parse(d.lrc, d.tr)
-        synchronized(this) { map[id] = l }; l
+        put(id, l); l
     }
 }
 

@@ -1,4 +1,4 @@
-name: 打包全部版本（安卓 / Windows / macOS / Linux）
+name: 打包全部版本（安卓 / iOS / Windows / macOS / Linux）
 on:
   workflow_dispatch:
   push:
@@ -101,10 +101,13 @@ jobs:
           path: out/*
           if-no-files-found: ignore
 
+  ios:
+    uses: ./.github/workflows/ios.yml
+
   # 推 v 开头的标签时：把所有版本放进同一个 GitHub Release
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [android, desktop]
+    needs: [android, ios, desktop]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
