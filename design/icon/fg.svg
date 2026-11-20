@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><defs>
+<linearGradient id="gBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#93A8FF"/><stop offset=".55" stop-color="#5F72DC"/><stop offset="1" stop-color="#232B66"/></linearGradient>
+<radialGradient id="gGlow" cx=".3" cy=".22" r=".7"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".35"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+<radialGradient id="gFadeR" cx="0.412" cy="0.677" r=".75"><stop offset="0" stop-color="#fff"/><stop offset=".55" stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<mask id="mFade"><rect width="1024" height="1024" fill="url(#gFadeR)"/></mask>
+<linearGradient id="gGlass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".26"/><stop offset="1" stop-color="#FFFFFF" stop-opacity=".06"/></linearGradient>
+<linearGradient id="gEdge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".9"/><stop offset=".4" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>
+<mask id="mCard"><rect x="222" y="222" width="580" height="580" rx="44" fill="#fff"/></mask>
+<linearGradient id="gNote" gradientUnits="userSpaceOnUse" x1="0" y1="220" x2="0" y2="800"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#DCE3FF"/></linearGradient>
+<linearGradient id="gTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".5" stop-color="#000"/></linearGradient>
+<mask id="mTop"><rect width="1024" height="1024" fill="url(#gTop)"/></mask>
+<filter id="fShadow" x="-30%" y="-30%" width="160%" height="160%">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="22"/><feOffset dx="18" dy="26"/><feComponentTransfer><feFuncA type="linear" slope=".55"/></feComponentTransfer>
+  <feFlood flood-color="#141A40"/><feComposite operator="in" in2="SourceAlpha" result="x"/>
+  <feGaussianBlur in="SourceAlpha" stdDeviation="22" result="b"/><feOffset in="b" dx="18" dy="26" result="o"/>
+  <feFlood flood-color="#141A40" flood-opacity=".55"/><feComposite in2="o" operator="in" result="s"/>
+  <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+</filter>
+</defs><g id="fg">
+<g filter="url(#fShadow)">
+  <polygon points="292.0,537.0 380.4,620.2 463.6,620.2 552.0,537.0 552.0,797.0 292.0,797.0" fill="url(#gNote)"/><polygon points="506.0,227.0 552.0,227.0 552.0,693.0 506.0,693.0" fill="url(#gNote)"/><polygon points="506.0,227.0 552.0,227.0 722.0,339.0 722.0,453.0 552.0,339.0" fill="url(#gNote)"/>
+</g>
+<rect x="349.2" y="680.0" width="31.2" height="40.3" fill="#1A2150"/><rect x="463.6" y="680.0" width="31.2" height="40.3" fill="#1A2150"/>
+</g></svg>
