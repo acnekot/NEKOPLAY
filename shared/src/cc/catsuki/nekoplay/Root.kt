@@ -90,7 +90,7 @@ object Boot {
         Ncm.init(); Store.init(); Engine.init(); Bg.init(); HomeLayout.init(); FxStore.init(); Downloads.init()
         val ui = Plat.prefs("ui")
         Anim.level = ui.getInt("anim", 1)
-        ThemePref.load(); Typo.load(); Look.load(); LyricPref.load(); AnimStyle.load(); UiPref.load(); Vol.load(); Monet.load(); Sleep.load()
+        ThemePref.load(); Typo.load(); Look.load(); LyricPref.load(); AnimStyle.load(); UiPref.load(); Vol.load(); Monet.load(); Sleep.load(); DeskLyric.load()
         Perf.overlay.value = ui.getBoolean("perf", false)
     }
 }

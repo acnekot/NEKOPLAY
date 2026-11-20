@@ -17,6 +17,8 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.Tray
 import androidx.compose.runtime.*
 import androidx.compose.ui.window.rememberWindowState
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.foundation.window.WindowDraggableArea
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
@@ -65,9 +67,13 @@ fun main() {
             Item("上一首") { Engine.prev() }
             Item("下一首") { Engine.next() }
             Separator()
+            Item(if (DeskLyric.on) "关闭桌面歌词" else "打开桌面歌词") { DeskLyric.on = !DeskLyric.on; DeskLyric.save() }
+            if (DeskLyric.on && DeskLyric.locked) Item("解锁桌面歌词") { DeskLyric.locked = false; DeskLyric.save() }
+            Separator()
             Item("退出") { quit() }
         }
         val close = { if (UiPref.tray && trayOk) visible = false else quit() }
+        if (DeskLyric.on) DeskLyricWindow()
         // 无边框窗口：标题栏、最小化 / 最大化 / 关闭按钮和拖边改大小都自己画
         Window(onCloseRequest = close, state = state, visible = visible, title = "NEKOPLAY", icon = appIcon, undecorated = true,
             onPreviewKeyEvent = { e ->
@@ -88,6 +94,53 @@ fun main() {
                     ResizeEdges(state)
                 }
             }
+        }
+    }
+}
+
+
+/** 桌面歌词悬浮窗：透明、置顶、不抢焦点；没锁时可以拖动，锁定后鼠标点击穿透（Windows） */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+@androidx.compose.runtime.Composable
+private fun androidx.compose.ui.window.ApplicationScope.DeskLyricWindow() {
+    val ws = rememberWindowState(size = DpSize(860.dp, 140.dp),
+        position = if (DeskLyric.x >= 0) androidx.compose.ui.window.WindowPosition(DeskLyric.x.dp, DeskLyric.y.dp) else androidx.compose.ui.window.WindowPosition(androidx.compose.ui.Alignment.BottomCenter))
+    Window(onCloseRequest = { DeskLyric.on = false; DeskLyric.save() }, state = ws, title = "NEKOPLAY Lyrics", undecorated = true, transparent = true,
+        alwaysOnTop = true, focusable = false, resizable = false) {
+        androidx.compose.runtime.LaunchedEffect(DeskLyric.locked) { ClickThrough.set(window, DeskLyric.locked) }
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            androidx.compose.runtime.snapshotFlow { ws.position }.collect { p ->
+                if (p is androidx.compose.ui.window.WindowPosition.Absolute) { DeskLyric.x = p.x.value.toInt(); DeskLyric.y = p.y.value.toInt(); DeskLyric.save() }
+            }
+        }
+        var hover by remember { mutableStateOf(false) }
+        NekoTheme {
+            val body = @androidx.compose.runtime.Composable {
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()
+                    .onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Enter) { hover = true }
+                    .onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Exit) { hover = false }) {
+                    DeskLyricView(hover) { DeskLyric.on = false; DeskLyric.save() }
+                }
+            }
+            if (DeskLyric.locked) body() else WindowDraggableArea { body() }
+        }
+    }
+}
+
+/** Windows：给窗口加 / 去掉 WS_EX_TRANSPARENT，让鼠标点击穿过歌词落到下面的窗口 */
+object ClickThrough {
+    private interface U32 : com.sun.jna.Library {
+        fun GetWindowLongW(h: com.sun.jna.Pointer, i: Int): Int
+        fun SetWindowLongW(h: com.sun.jna.Pointer, i: Int, v: Int): Int
+    }
+    private val u32 by lazy { runCatching { com.sun.jna.Native.load("user32", U32::class.java) }.getOrNull() }
+    fun set(w: java.awt.Window, on: Boolean) {
+        if (!System.getProperty("os.name").lowercase().contains("win")) return
+        runCatching {
+            val h = com.sun.jna.Native.getWindowPointer(w) ?: return
+            val u = u32 ?: return
+            val ex = u.GetWindowLongW(h, -20)
+            u.SetWindowLongW(h, -20, if (on) ex or 0x20 or 0x80000 else ex and 0x20.inv())
         }
     }
 }

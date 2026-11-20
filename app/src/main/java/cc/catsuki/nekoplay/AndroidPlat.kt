@@ -55,7 +55,7 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
         }
     }
 
-    init { exoAudio = ExoAudio(ctx) }
+    init { exoAudio = ExoAudio(ctx); LyricNotify.start(ctx, exoAudio) }
 
     override val name = "android"
     override val filesDir: File = ctx.filesDir
@@ -238,6 +238,15 @@ class ExoAudio(private val c: Context) : Audio {
     override fun cacheBytes() = cache.cacheSpace
     override fun clearCache() { cache.keys.toList().forEach { cache.removeResource(it) } }
     override var volume: Float get() = exo.volume; set(v) { exo.volume = v }
+
+    /** 通知栏歌词：把当前 MediaItem 的「歌手」那行换成歌词（null = 恢复原样）。同一个地址只改元数据，不会重新加载 */
+    fun setLyric(line: String?) {
+        val item = exo.currentMediaItem ?: return
+        val t = Engine.state.value.current ?: return
+        if (item.mediaId != t.id) return
+        val m = item.mediaMetadata.buildUpon().setArtist(line ?: t.artist).setSubtitle(line ?: t.artist).build()
+        runCatching { exo.replaceMediaItem(exo.currentMediaItemIndex, item.buildUpon().setMediaMetadata(m).build()) }
+    }
 
     override fun info(): AudioInfo? {
         val f = exo.audioFormat ?: return null
