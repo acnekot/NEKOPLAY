@@ -648,7 +648,22 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
                 Box(Modifier.fillMaxWidth()) { Controls(t, st, if (bottom.isEmpty()) null else ({ Spacer(Modifier.weight(1f)); SlotRow(true, "bottom", bx); Spacer(Modifier.weight(1f)) })) }
             }
             // 按钮竖栏：贴在封面区右边、和控制条底部对齐，往上排
-            if (sideKeys.isNotEmpty()) Column(Modifier.padding(start = 8.dp, bottom = 4.dp).width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) { SlotCol(true, "side", bx, 4.dp) }
+            // 自动隐藏：鼠标靠近（进入竖栏周围这块区域）才淡入，离开一会儿再淡出
+            if (sideKeys.isNotEmpty()) {
+                var near by remember { mutableStateOf(false) }
+                val show = near || !UiPref.autoHideSide
+                val a by animateFloatAsState(if (show) 1f else 0f, tween(if (show) 160 else 420, delayMillis = if (show) 0 else 900), label = "side")
+                Box(Modifier.width(76.dp).pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val e = awaitPointerEvent()
+                            when (e.type) { androidx.compose.ui.input.pointer.PointerEventType.Enter, androidx.compose.ui.input.pointer.PointerEventType.Move -> near = true; androidx.compose.ui.input.pointer.PointerEventType.Exit -> near = false }
+                        }
+                    }
+                }.padding(start = 8.dp, top = 80.dp, bottom = 4.dp, end = 24.dp).graphicsLayer { alpha = a }) {
+                    Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) { SlotCol(true, "side", bx, 4.dp) }
+                }
+            }
             }
             // 收起播放页（也可以按 Esc）
             Box(Modifier.align(Alignment.TopStart).padding(8.dp).size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp, p.s) }

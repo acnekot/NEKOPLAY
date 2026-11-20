@@ -384,6 +384,7 @@ object UiPref {
     var barAlpha by mutableFloatStateOf(.5f)    // 有背景时栏位的不透明度
     var lowMem by mutableStateOf(false)         // 省内存模式
     var tray by mutableStateOf(true)            // 桌面：关闭窗口时留在托盘继续播放
+    var autoHideSide by mutableStateOf(true)    // PC 播放页按钮竖栏：鼠标靠近才显示
     var coverPct by mutableIntStateOf(80)       // PC 播放页封面大小（占可用空间的百分比）
     /** 播放页底下那排按钮显示哪些 */
     val BTN_KEYS = listOf("mode", "sleep", "dl", "more", "comment", "queue")
@@ -391,8 +392,8 @@ object UiPref {
     var btns by mutableStateOf(setOf("mode", "sleep", "more", "comment", "queue"))
     fun toggleBtn(key: String) { btns = if (key in btns) btns - key else btns + key; k.edit().putStringSet("btns", btns).apply() }
     private val k get() = Plat.prefs("ui")
-    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true); coverPct = k.getInt("coverPct", 80) }
-    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).putInt("coverPct", coverPct).apply() }
+    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true); coverPct = k.getInt("coverPct", 80); autoHideSide = k.getBoolean("sideAuto", true) }
+    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).putInt("coverPct", coverPct).putBoolean("sideAuto", autoHideSide).apply() }
 }
 
 /** 歌词字号（设置里可调，歌词页 / 右栏 / 播放页都用它） */

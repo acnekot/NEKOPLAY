@@ -544,6 +544,9 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { NavRow("首页布局", "调整首页模块的顺序，或关掉不需要的", "${HomeLayout.visible.size}/${HomeLayout.ALL.size}") { nav.push(Page.HomeLayout) } }
         item { NavRow("播放页布局", "每个按钮放在哪、什么顺序；手机和 PC 各一套", null) { nav.push(Page.BtnLayout) } }
         item {
+            SwitchRow("PC 按钮竖栏自动隐藏", "歌词旁的按钮平时隐藏，鼠标靠近才显示", UiPref.autoHideSide) { UiPref.autoHideSide = it; UiPref.save() }
+        }
+        item {
             SetLine("PC 播放页封面大小", "宽屏播放页左边封面占可用空间的比例") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { NSlider(UiPref.coverPct.toFloat(), 50f..100f, onDone = { UiPref.save() }) { UiPref.coverPct = it.toInt() } }
