@@ -187,7 +187,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             if (st.fm) SquareBtn(NIcons.trash) { Engine.fmTrash(); nav.toast = "不再推荐这首" } else SquareBtn(NIcons.prev) { Engine.prev() }
             Spacer(Modifier.width(26.dp))
             Box(Modifier.press(.96f, true) { Engine.toggle() }.size(48.dp).background(c.p), contentAlignment = Alignment.Center) {
-                if (st.loading && !st.playing) LoadingDots() else NIcon(if (st.playing) NIcons.pause else NIcons.play, 22.dp, Color.White)
+                if (st.loading && st.want && !st.playing) LoadingDots() else NIcon(if (st.playing) NIcons.pause else NIcons.play, 22.dp, Color.White)
             }
             Spacer(Modifier.width(26.dp))
             SquareBtn(NIcons.next) { Engine.next() }

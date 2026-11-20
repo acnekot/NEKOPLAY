@@ -24,6 +24,7 @@ data class PlayState(
     val kbps: Int = 0,
     val cached: Boolean = false,
     val fm: Boolean = false, // 私人 FM：播到最后自动再要几首
+    val want: Boolean = false, // 加载完要不要自动播放（加载中点暂停会改成 false）
 ) { val current: Track? get() = queue.getOrNull(index) }
 
 /** 播放引擎：队列自己管，ExoPlayer 一次只放一首（网易云地址会过期，播到哪首才去取地址）。 */
@@ -53,6 +54,8 @@ object Engine {
     var fadeMs by androidx.compose.runtime.mutableIntStateOf(300)
     private var fadeJob: Job? = null
     private var rampOnPlay = false
+    /** 这次 load 已经把新歌交给播放器了 */
+    private var opened = false
     fun setFade(ms: Int) { fadeMs = ms; prefs?.edit()?.putInt("fade", ms)?.apply() }
 
     // ---------- 无缝播放 ----------
@@ -168,7 +171,9 @@ object Engine {
         reportId = t.id
         if (autoplay && Ncm.loggedIn && !t.local) scope.launch { Ncm.scrobbleStart(t.id) }
         dropNext()
-        state.value = state.value.copy(index = i, loading = true, format = "", kbps = 0)
+        state.value = state.value.copy(index = i, loading = true, format = "", kbps = 0, want = autoplay)
+        opened = false
+        audio.pause() // 换歌时先停掉上一首，避免取地址期间旧歌还在响
         info.value = null; localKbps = 0
         position.value = startMs
         Store.addRecent(t)
@@ -181,18 +186,18 @@ object Engine {
                 val hit = cachedLevel(t.id)
                 val dl = Downloads.file(t.id)
                 if (t.src != null) {
-                    audio.open(t.src, "loc_${t.id}", startMs, autoplay, t)
+                    audio.open(t.src, "loc_${t.id}", startMs, state.value.want, t); opened = true
                     state.value = state.value.copy(format = t.src.substringAfterLast('.', "").takeIf { it.length in 2..4 }?.lowercase() ?: "", kbps = 0, cached = true)
                 } else if (dl != null) {
                     if (t.durationMs > 0) localKbps = (dl.length() * 8 / t.durationMs).toInt()
-                    audio.open(dl.toURI().toString(), "dl_${t.id}", startMs, autoplay, t)
+                    audio.open(dl.toURI().toString(), "dl_${t.id}", startMs, state.value.want, t); opened = true
                     state.value = state.value.copy(format = dl.extension.lowercase(), kbps = 0, cached = true)
                 } else if (hit != null) {
-                    audio.open(null, cacheKey(t.id, hit.first), startMs, autoplay, t)
+                    audio.open(null, cacheKey(t.id, hit.first), startMs, state.value.want, t); opened = true
                     state.value = state.value.copy(format = hit.second, kbps = 0, cached = true)
                 } else {
                     val s = Ncm.stream(t.id, q)
-                    audio.open(s.url, cacheKey(t.id, s.level), startMs, autoplay, t)
+                    audio.open(s.url, cacheKey(t.id, s.level), startMs, state.value.want, t); opened = true
                     prefs?.edit()?.putString("fmt_${cacheKey(t.id, s.level)}", s.format)?.apply()
                     state.value = state.value.copy(format = s.format, kbps = s.kbps, cached = false)
                 }
@@ -205,7 +210,18 @@ object Engine {
         }
     }
 
-    fun toggle() { if (audio.idle) load(state.value.index, true) else if (audio.isPlaying) fadePause() else fadePlay() }
+    fun toggle() {
+        val s = state.value
+        // 加载中点一下 = 打断：取消「加载完自动播放」，已经在缓冲的也停下；再点一下恢复
+        if (s.loading) {
+            if (s.want) { state.value = s.copy(want = false); rampOnPlay = false; fadeJob?.cancel(); audio.pause(); audio.volume = Vol.v }
+            else { state.value = s.copy(want = true); if (opened) fadePlay() }   // 还在取地址：等打开时自动播
+            return
+        }
+        if (audio.idle) load(s.index, true)
+        else if (audio.isPlaying) { state.value = s.copy(want = false); fadePause() }
+        else { state.value = s.copy(want = true); fadePlay() }
+    }
     fun seek(ms: Long) { audio.seek(ms); position.value = ms }
 
     // ---------- 私人 FM ----------
