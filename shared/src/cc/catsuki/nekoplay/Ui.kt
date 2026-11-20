@@ -243,13 +243,22 @@ private fun vector(spec: String): ImageVector = iconCache.getOrPut(spec) {
     Box(Modifier.press(.96f, true, onClick = onClick).size(size).background(if (filled) c.p else Color.Transparent).then(if (filled) Modifier else Modifier.nbf(1.dp, c.k)),
         contentAlignment = Alignment.Center) { NIcon(icon, iconSize, if (filled) Color.White else c.k) }
 
-@Composable fun PrimaryBar(label: String, icon: String, modifier: Modifier = Modifier, onClick: () -> Unit) =
-    Row(modifier.press(.96f, true, onClick = onClick).height(48.dp).background(c.p).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-        T(label, 16, Color.White, 700, modifier = Modifier.weight(1f)); NIcon(icon, 22.dp, Color.White)
+@Composable fun PrimaryBar(label: String, icon: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    // 宽屏按钮行里：和「随机播放」一样大的方块按钮
+    val compact = LocalCompactAction.current
+    Row(modifier.then(if (compact) Modifier.width(ACTION_W) else Modifier).press(.96f, true, onClick = onClick).height(48.dp).background(c.p).padding(horizontal = if (compact) 14.dp else 18.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (compact) Arrangement.Center else Arrangement.Start) {
+        if (compact) { NIcon(icon, 16.dp, Color.White); Spacer(Modifier.width(6.dp)); T(label, 15, Color.White, 700) }
+        else { T(label, 16, Color.White, 700, modifier = Modifier.weight(1f)); NIcon(icon, 22.dp, Color.White) }
     }
+}
+
+/** 宽屏按钮行里主按钮和描边按钮统一的宽度 */
+val ACTION_W = 124.dp
+val LocalCompactAction = compositionLocalOf { false }
 
 @Composable fun OutlineBtn(label: String, height: Dp = 48.dp, size: Int = 15, pad: Dp = 18.dp, color: Color = c.k, onClick: () -> Unit) =
-    Box(Modifier.press(.96f, true, onClick = onClick).height(height).nbf(1.dp, color).padding(horizontal = pad), contentAlignment = Alignment.Center) { T(label, size, color) }
+    Box(Modifier.then(if (LocalCompactAction.current) Modifier.width(ACTION_W) else Modifier).press(.96f, true, onClick = onClick).height(height).nbf(1.dp, color).padding(horizontal = pad), contentAlignment = Alignment.Center) { T(label, size, color) }
 
 /** 小号文字按钮：细黑框方块（不再用下划线），外面留出 44 的点击热区 */
 @Composable fun LinkBtn(text: String, size: Int = 13, color: Color = c.k, onClick: () -> Unit) =
@@ -367,9 +376,12 @@ fun listMeta(l: List<Track>) = "${two(l.size)} 首 · ${fmt(l.sumOf { it.duratio
 /** 当前是不是宽屏（PC）布局，由 Root 按窗口宽度更新 */
 object Screen { var wide by mutableStateOf(false) }
 
-/** 操作按钮行：手机占满一行；宽屏固定 520 宽、靠右（和列表右侧的时长对齐），避免按钮拉得太长 */
+/** 操作按钮行：手机占满一行；宽屏靠右，播放全部和随机播放一样大（和列表右侧的时长对齐） */
 @Composable fun ActionRow(content: @Composable RowScope.() -> Unit) {
-    if (Screen.wide) Row(Modifier.fillMaxWidth()) { Spacer(Modifier.weight(1f)); Row(Modifier.width(520.dp), content = content) }
+    if (Screen.wide) Row(Modifier.fillMaxWidth()) {
+        Spacer(Modifier.weight(1f))
+        CompositionLocalProvider(LocalCompactAction provides true) { Row(Modifier.width(IntrinsicSize.Max), content = content) }
+    }
     else Row(Modifier.fillMaxWidth(), content = content)
 }
 
