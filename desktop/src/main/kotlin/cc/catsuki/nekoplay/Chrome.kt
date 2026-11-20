@@ -84,7 +84,7 @@ import java.awt.MouseInfo
             verticalAlignment = Alignment.CenterVertically) {
             T("NEKOPLAY", Fs.HEAD + 2, w = 900, ls = .01f, modifier = Modifier.press { nav.player = false; nav.stack.clear(); nav.tab = 0 })
             Spacer(Modifier.weight(1f))
-            Box(Modifier.size(40.dp).press { nav.menu = !nav.menu }, contentAlignment = Alignment.Center) { Avatar(28.dp, 13) }
+            TopActions(40.dp, 20.dp, 28.dp)
             Spacer(Modifier.width(10.dp))
             CaptionClick(onClick = { state.isMinimized = true }) { col -> line(col, -8f, 0f, 8f, 0f) }
             CaptionClick(onClick = { toggleMax() }) { col ->

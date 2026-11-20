@@ -353,7 +353,7 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                     }
                 }
                 Spacer(Modifier.height(12.dp)); Rule()
-                if (err != null) T("加载失败：$err", 13, c.bad, lines = 3, modifier = Modifier.padding(vertical = 28.dp))
+                if (err != null) T("加载失败：$err", 13, c.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 28.dp))
                 else if (tracks == null) T("LOADING", 13, c.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 28.dp))
                 else if (list.isEmpty()) T("NO TRACKS", 13, c.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 28.dp))
             }
@@ -594,6 +594,8 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { NavRow("WebDAV 备份", "设置、喜欢和最近播放备份到网盘，换设备一键恢复", if (Backup.last > 0) java.text.SimpleDateFormat("MM-dd HH:mm").format(java.util.Date(Backup.last)) else "未备份") { nav.push(Page.Backup) } }
         item { Group("ABOUT") }
         item { NavRow("版本", null, "原生版 0.3.0", clickable = false) {} }
+        item { SwitchRow("调试模式", "出错时显示接口的真实返回（状态码、内容开头），并记录最近的请求", Debug.on) { Debug.set(it) } }
+        if (Debug.on) item { NavRow("请求记录", "最近的接口请求和返回内容", "${Debug.reqs.collectAsState().value.size} 条") { nav.push(Page.DebugLog) } }
     }
 }
 

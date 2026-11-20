@@ -55,6 +55,8 @@ sealed interface Page {
     data object DlList : Page
     data object Local : Page
     data object Backup : Page
+    data object DebugLog : Page
+    data class ArtistAlbums(val id: String, val name: String) : Page
     data object Stats : Page
     data class LyricCard(val t: Track) : Page
 }
@@ -98,7 +100,7 @@ object Boot {
     fun reloadPrefs() {
         val ui = Plat.prefs("ui")
         Anim.level = ui.getInt("anim", 1)
-        ThemePref.load(); Typo.load(); Look.load(); LyricPref.load(); AnimStyle.load(); UiPref.load(); Vol.load(); Monet.load(); Sleep.load(); DeskLyric.load(); DiscordPref.load()
+        ThemePref.load(); Typo.load(); Look.load(); LyricPref.load(); AnimStyle.load(); UiPref.load(); Vol.load(); Monet.load(); Sleep.load(); DeskLyric.load(); DiscordPref.load(); Debug.load()
         Perf.overlay.value = ui.getBoolean("perf", false)
         Store.reloadLiked(); FxStore.init(); HomeLayout.init()
     }
@@ -207,9 +209,7 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     }.padding(start = 18.dp, end = 6.dp, bottom = 3.dp), verticalAlignment = Alignment.CenterVertically) {
         T("NEKOPLAY", Fs.PAGE, w = 900, ls = .02f, modifier = Modifier.press { nav.player = false; nav.stack.clear(); nav.tab = 0 })
         Spacer(Modifier.weight(1f))
-        Box(Modifier.size(44.dp).press(.92f, true) { nav.player = false; nav.push(Page.Search) }, contentAlignment = Alignment.Center) { NIcon(NIcons.search, 22.dp) }
-        Spacer(Modifier.width(8.dp))
-        Box(Modifier.size(44.dp).press { nav.menu = !nav.menu }, contentAlignment = Alignment.Center) { Avatar(34.dp, 16) }
+        TopActions(44.dp, 22.dp, 34.dp)
         Spacer(Modifier.width(6.dp))
     }
 }
@@ -296,7 +296,7 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     if (page !is Page.Search) Row(Modifier.fillMaxWidth().height(48.dp).drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx())) }.padding(start = 6.dp, end = 18.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(44.dp).press { nav.back() }, contentAlignment = Alignment.Center) { NIcon(NIcons.back, 20.dp) }
-        T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; Page.Local -> "LOCAL"; Page.Backup -> "BACKUP"; Page.Stats -> "STATS"; is Page.LyricCard -> "CARD"; else -> "" }, 12, p.s, mono = true, ls = .1f)
+        T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; Page.Local -> "LOCAL"; Page.Backup -> "BACKUP"; Page.DebugLog -> "DEBUG"; is Page.ArtistAlbums -> "ALBUMS"; Page.Stats -> "STATS"; is Page.LyricCard -> "CARD"; else -> "" }, 12, p.s, mono = true, ls = .1f)
     }
     Box(Modifier.weight(1f)) {
         when (page) {
@@ -325,6 +325,8 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     Page.DlList -> DownloadsPage()
     Page.Local -> LocalMusicPage()
     Page.Backup -> BackupPage()
+    Page.DebugLog -> DebugPage()
+    is Page.ArtistAlbums -> ArtistAlbumsPage(page)
     Page.Stats -> StatsPage()
     is Page.LyricCard -> LyricCardPage(page.t)
         }
@@ -382,3 +384,21 @@ object Keys {
 
 /** 标题栏搜索框 → 搜索页：把要搜的词交给搜索页 */
 object SearchBus { var query by mutableStateOf<String?>(null) }
+
+
+/**
+ * 顶栏右边的搜索 + 头像：在搜索页时搜索图标收起（淡出），播放页打开时不显示头像。两端共用。
+ */
+@Composable fun TopActions(box: androidx.compose.ui.unit.Dp, icon: androidx.compose.ui.unit.Dp, avatar: androidx.compose.ui.unit.Dp) {
+    val nav = LocalNav.current
+    val onSearch = nav.stack.lastOrNull() is Page.Search && !nav.player
+    androidx.compose.animation.AnimatedVisibility(!onSearch, enter = fadeIn(tween(160)) + androidx.compose.animation.expandHorizontally(tween(160)), exit = fadeOut(tween(120)) + androidx.compose.animation.shrinkHorizontally(tween(160))) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(box).press(.92f, true) { nav.player = false; nav.comments = null; if (nav.stack.lastOrNull() !is Page.Search) nav.push(Page.Search) }, contentAlignment = Alignment.Center) { NIcon(NIcons.search, icon) }
+            Spacer(Modifier.width(6.dp))
+        }
+    }
+    androidx.compose.animation.AnimatedVisibility(!nav.player, enter = fadeIn(tween(160)), exit = fadeOut(tween(120))) {
+        Box(Modifier.size(box).press { nav.menu = !nav.menu }, contentAlignment = Alignment.Center) { Avatar(avatar, (avatar.value * .45f).toInt()) }
+    }
+}

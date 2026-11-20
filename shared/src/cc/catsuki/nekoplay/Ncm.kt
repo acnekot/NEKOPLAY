@@ -86,11 +86,19 @@ object Ncm {
         val req = Request.Builder().url("https://music.163.com$path?csrf_token=${csrf()}").post(body)
             .header("Referer", "https://music.163.com/").header("Origin", "https://music.163.com")
             .header("User-Agent", UA).header("Cookie", "os=pc; appver=2.7.1.198277; $cookie").build()
-        http.newCall(req).execute().use { r ->
-            if (!r.isSuccessful) throw NcmError("服务返回 ${r.code}")
-            val t = r.body?.string() ?: ""
-            val j = try { JSONObject(t) } catch (e: Exception) { throw NcmError("返回的不是 JSON（可能被风控）") }
-            Raw(j, r.headers("Set-Cookie"))
+        val t0 = System.currentTimeMillis()
+        try {
+            http.newCall(req).execute().use { r ->
+                val t = r.body?.string() ?: ""
+                val ct = r.header("Content-Type") ?: ""
+                Debug.log(path, r.code, System.currentTimeMillis() - t0, ct, t)
+                if (!r.isSuccessful) throw NcmError("服务返回 ${r.code}" + Debug.detail(path, r.code, ct, t))
+                val j = try { JSONObject(t) } catch (e: Exception) { throw NcmError("返回的不是 JSON（可能被风控）" + Debug.detail(path, r.code, ct, t)) }
+                Raw(j, r.headers("Set-Cookie"))
+            }
+        } catch (e: java.io.IOException) {
+            Debug.log(path, -1, System.currentTimeMillis() - t0, "", "${e.javaClass.simpleName}: ${e.message}")
+            throw NcmError("网络错误：${e.message}" + if (Debug.on) "\n[$path]" else "")
         }
     }
 
@@ -104,7 +112,7 @@ object Ncm {
         val j = raw(path, data).j
         val c = j.optInt("code", 200)
         if (c == -460 || c == -462) throw NcmError("被网易云风控拦截（$c），稍后再试")
-        if (c != 200) throw NcmError("${j.optString("message", j.optString("msg", "接口错误"))}（$c）")
+        if (c != 200) throw NcmError("${j.optString("message", j.optString("msg", "接口错误"))}（$c）" + if (Debug.on) "\n[$path] " + j.toString().take(300) else "")
         return j
     }
 
@@ -205,7 +213,17 @@ object Ncm {
     }
 
     // ---------- 歌手 / 专辑 / 用户 ----------
-    suspend fun artist(id: String): Artist {
+    suspend fun artist(id: String): Artist = try { artistV1(id) } catch (e: Exception) {
+        // 老接口被拦（返回 HTML）时，换成 头部信息 + 热门 50 首 两个新接口拼起来
+        runCatching {
+            val d = api("/weapi/artist/head/info/get", JSONObject().put("id", id)).optJSONObject("data") ?: throw e
+            val a = d.optJSONObject("artist") ?: throw e
+            val hot = api("/weapi/artist/top/song", JSONObject().put("id", id)).optJSONArray("songs") ?: JSONArray()
+            Artist(id, a.optString("name"), pic(a.optString("cover").ifEmpty { a.optString("avatar") }), a.optString("briefDesc"), a.optInt("musicSize"), a.optInt("albumSize"),
+                (0 until hot.length()).map { song(hot.getJSONObject(it)) }, d.optJSONObject("user")?.optBoolean("followed") ?: false)
+        }.getOrElse { throw e }
+    }
+    private suspend fun artistV1(id: String): Artist {
         val j = api("/weapi/v1/artist/$id")
         val a = j.optJSONObject("artist") ?: throw NcmError("没有找到这位歌手")
         val hot = j.optJSONArray("hotSongs") ?: JSONArray()
@@ -217,9 +235,13 @@ object Ncm {
         o.optLong("publishTime").takeIf { it > 0 }?.let { java.util.Calendar.getInstance().apply { timeInMillis = it }.get(java.util.Calendar.YEAR).toString() } ?: "",
         o.optJSONObject("artist")?.optString("name") ?: "")
 
-    suspend fun artistAlbums(id: String): List<Album> {
-        val a = api("/weapi/artist/albums/$id", JSONObject().put("limit", 60).put("offset", 0).put("total", true)).optJSONArray("hotAlbums") ?: JSONArray()
-        return (0 until a.length()).map { albumOf(a.getJSONObject(it)) }
+    suspend fun artistAlbums(id: String): List<Album> = artistAlbumsPage(id, 0, 60).first
+
+    /** 歌手的专辑分页 → (这一页, 还有没有更多) */
+    suspend fun artistAlbumsPage(id: String, offset: Int, limit: Int = 60): Pair<List<Album>, Boolean> {
+        val j = api("/weapi/artist/albums/$id", JSONObject().put("limit", limit).put("offset", offset).put("total", true))
+        val a = j.optJSONArray("hotAlbums") ?: JSONArray()
+        return (0 until a.length()).map { albumOf(a.getJSONObject(it)) } to j.optBoolean("more")
     }
 
     suspend fun album(id: String): Pair<Album, List<Track>> {

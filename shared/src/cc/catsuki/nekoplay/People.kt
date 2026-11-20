@@ -226,9 +226,9 @@ fun openArtists(nav: Nav, t: Track) {
                         FollowBtn(a.followed, "关注", "已关注") { on -> Ncm.followArtist(pg.id, on) }
                     }
                 }
-                if (err != null) T("加载失败：$err", 13, p.bad, lines = 3, modifier = Modifier.padding(vertical = 24.dp))
+                if (err != null) T("加载失败：$err", 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 24.dp))
                 if (albums.isNotEmpty()) {
-                    Spacer(Modifier.height(26.dp)); TagRow("ALBUMS", 12.dp) { T("${two(albums.size)} 张", 13, p.s, mono = true) }; Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(26.dp)); TagRow("ALBUMS", 12.dp) { T(if (info?.albums ?: 0 > albums.size) "${two(info!!.albums)} 张" else "${two(albums.size)} 张", 13, p.s, mono = true); Spacer(Modifier.width(8.dp)); LinkBtn("全部", 13) { nav.push(Page.ArtistAlbums(pg.id, pg.name)) } }; Spacer(Modifier.height(12.dp))
                 }
             }
         }
@@ -299,7 +299,7 @@ fun openArtists(nav: Nav, t: Track) {
                     }
                 }
                 Spacer(Modifier.height(12.dp)); Rule()
-                if (err != null) T("加载失败：$err", 13, p.bad, lines = 3, modifier = Modifier.padding(vertical = 28.dp))
+                if (err != null) T("加载失败：$err", 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 28.dp))
                 else if (data == null) T("LOADING", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 28.dp))
             }
         }
@@ -338,7 +338,7 @@ fun openArtists(nav: Nav, t: Track) {
                         if (Ncm.loggedIn && u != null && pg.uid != Store.profile.value?.uid) FollowBtn(u!!.followed, "关注", "已关注") { on -> Ncm.followUser(pg.uid, on) }
                     }
                     if (!u?.signature.isNullOrBlank()) T(u!!.signature, 13, p.s, lines = 3, lh = 1.6f, modifier = Modifier.padding(top = 6.dp))
-                    if (err != null) T("加载失败：$err", 13, p.bad, lines = 3, modifier = Modifier.padding(top = 10.dp))
+                    if (err != null) T("加载失败：$err", 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(top = 10.dp))
                     Spacer(Modifier.height(16.dp))
                     Column(Modifier.topLine()) {
                         Row { UStat("关注", two(u?.follows ?: 0), false, false); UStat("粉丝", two(u?.fans ?: 0), true, false) }
@@ -410,7 +410,7 @@ fun qualitySheet(nav: Nav) {
                 Tag("PLAYLISTS"); Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) { T(pg.title, Fs.HERO, w = 800, lh = 1.3f, modifier = Modifier.weight(1f)); T("${two(list?.size ?: 0)} 个", 13, p.s, mono = true, modifier = Modifier.padding(bottom = 6.dp)) }
                 Spacer(Modifier.height(10.dp)); Rule()
-                when { err != null -> T("加载失败：$err", 13, p.bad, lines = 3, modifier = Modifier.padding(vertical = 24.dp))
+                when { err != null -> T("加载失败：$err", 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 24.dp))
                     list == null -> T("LOADING", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp))
                     list!!.isEmpty() -> T("EMPTY", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp)) }
             }
@@ -478,7 +478,7 @@ fun qualitySheet(nav: Nav) {
             }
         }
         items(list, key = { "sq" + it.id }) { pl -> ProfileRow({ Cover(pl.cover, 56.dp, pl.name) }, pl.name, "${two(pl.count)} 首") { nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) } }
-        item { T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; !more -> "END"; else -> "" }, 12, p.s, mono = true, ls = .08f, lines = 3, modifier = Modifier.padding(vertical = 20.dp)) }
+        item { T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; !more -> "END"; else -> "" }, 12, p.s, mono = true, ls = .08f, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 20.dp)) }
     }
 }
 
@@ -513,7 +513,7 @@ fun qualitySheet(nav: Nav) {
             }
         }
         items(list, key = { "na" + it.id }) { al -> ProfileRow({ Cover(al.pic, 56.dp, al.name) }, al.name, listOf(al.artist, al.year).filter { it.isNotEmpty() }.joinToString(" · ")) { nav.push(Page.Album(al.id, al.name, al.pic)) } }
-        item { T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; !more -> "END"; else -> "" }, 12, p.s, mono = true, ls = .08f, lines = 3, modifier = Modifier.padding(vertical = 20.dp)) }
+        item { T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; !more -> "END"; else -> "" }, 12, p.s, mono = true, ls = .08f, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 20.dp)) }
     }
 }
 
@@ -529,7 +529,7 @@ fun qualitySheet(nav: Nav) {
                 Tag("HISTORY"); Spacer(Modifier.height(4.dp))
                 T("历史日推", Fs.HERO, w = 800, lh = 1.3f); T("网易云只保留最近几天的每日推荐", 13, p.s)
                 Spacer(Modifier.height(12.dp)); Rule()
-                when { err != null -> T("加载失败：$err", 13, p.bad, lines = 3, modifier = Modifier.padding(vertical = 24.dp))
+                when { err != null -> T("加载失败：$err", 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 24.dp))
                     dates == null -> T("LOADING", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp))
                     dates!!.isEmpty() -> T("EMPTY", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp)) }
             }
@@ -581,7 +581,7 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
                 Tag(if (pg.kind == "album") "ALBUMS" else "ARTISTS"); Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) { T(if (pg.kind == "album") "收藏的专辑" else "关注的歌手", Fs.HERO, w = 800, lh = 1.3f, modifier = Modifier.weight(1f)); T("${two(n ?: 0)} 个", 13, p.s, mono = true, modifier = Modifier.padding(bottom = 6.dp)) }
                 Spacer(Modifier.height(10.dp)); Rule()
-                when { err != null -> T("加载失败：$err", 13, p.bad, lines = 3, modifier = Modifier.padding(vertical = 24.dp))
+                when { err != null -> T("加载失败：$err", 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 24.dp))
                     n == null -> T("LOADING", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp))
                     n == 0 -> T("EMPTY", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp)) }
             }
@@ -648,7 +648,7 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
                 Tag("MUSIC VIDEO"); Spacer(Modifier.height(4.dp)); T("MV 精选", Fs.HERO, w = 800, lh = 1.3f)
                 Spacer(Modifier.height(12.dp)); ChipRow(listOf("推荐", "排行榜"), sel) { sel = it }
                 Spacer(Modifier.height(12.dp)); Rule()
-                when { err != null -> T("加载失败：$err", 13, p.bad, lines = 3, modifier = Modifier.padding(top = 20.dp))
+                when { err != null -> T("加载失败：$err", 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(top = 20.dp))
                     list == null -> T("LOADING", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(top = 20.dp)) }
             }
         }
@@ -719,6 +719,46 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
             }
         }
         items(list, key = { "r" + it.id }) { r -> ProfileRow({ Cover(r.pic, 56.dp, r.name) }, r.name, "${two(r.count)} 期 · ${r.desc}") { nav.push(Page.Detail("radio", r.id, r.name, r.pic)) } }
-        item { T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; !more -> "END"; else -> "" }, 12, p.s, mono = true, ls = .08f, lines = 3, modifier = Modifier.padding(vertical = 20.dp)) }
+        item { T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; !more -> "END"; else -> "" }, 12, p.s, mono = true, ls = .08f, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 20.dp)) }
+    }
+}
+
+
+/** 歌手的全部专辑：网格，滚到底自动加载下一页 */
+@Composable fun ArtistAlbumsPage(pg: Page.ArtistAlbums) {
+    val nav = LocalNav.current
+    val p = c
+    var list by remember(pg.id) { mutableStateOf<List<Album>>(emptyList()) }
+    var more by remember(pg.id) { mutableStateOf(true) }
+    var busy by remember(pg.id) { mutableStateOf(false) }
+    var err by remember(pg.id) { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    fun load() {
+        if (busy || !more) return; busy = true
+        scope.launch {
+            try { val (l, m) = Ncm.artistAlbumsPage(pg.id, list.size, 60); list = list + l.filter { a -> list.none { it.id == a.id } }; more = m && l.isNotEmpty(); err = null }
+            catch (e: Exception) { err = e.message }
+            busy = false
+        }
+    }
+    LaunchedEffect(pg.id) { load() }
+    val gs = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    LaunchedEffect(gs) { snapshotFlow { gs.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { if (it >= list.size - 6) load() } }
+    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(androidx.compose.foundation.lazy.grid.GridCells.Adaptive(150.dp), Modifier.fillMaxSize(), gs,
+        contentPadding = PaddingValues(18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+            Column { Tag("ALBUMS"); Spacer(Modifier.height(4.dp)); T(pg.name, Fs.HERO, w = 800, lh = 1.3f); T("${two(list.size)} 张" + if (more) " · 继续加载中" else "", 12, p.s, mono = true); Spacer(Modifier.height(10.dp)); Rule() }
+        }
+        items(list.size, key = { list[it].id }) { i ->
+            val al = list[i]
+            Column(Modifier.press { nav.push(Page.Album(al.id, al.name, al.pic)) }) {
+                BoxWithConstraints(Modifier.fillMaxWidth()) { Cover(al.pic, maxWidth, al.name) }
+                Spacer(Modifier.height(8.dp))
+                T(al.name, 15, w = 700, lh = 1.35f, lines = 2); T(listOf(al.year, if (al.size > 0) "${al.size} 首" else "").filter { it.isNotEmpty() }.joinToString(" · "), 13, p.s)
+            }
+        }
+        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+            T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; !more -> "END"; else -> "" }, 12, if (err != null) p.bad else p.s, mono = true, ls = .08f, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 16.dp))
+        }
     }
 }
