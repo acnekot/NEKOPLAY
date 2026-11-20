@@ -86,7 +86,11 @@ object Engine {
             try {
                 // 已经完整缓存过（同档位或更高档位）：直接读本地，不联网
                 val hit = cachedLevel(t.id)
-                if (hit != null) {
+                val dl = Downloads.file(t.id)
+                if (dl != null) {
+                    audio.open(dl.toURI().toString(), "dl_${t.id}", startMs, autoplay, t)
+                    state.value = state.value.copy(format = dl.extension.lowercase(), kbps = 0, cached = true)
+                } else if (hit != null) {
                     audio.open(null, cacheKey(t.id, hit.first), startMs, autoplay, t)
                     state.value = state.value.copy(format = hit.second, kbps = 0, cached = true)
                 } else {

@@ -44,6 +44,8 @@ fun trackActions(nav: Nav, t: Track, fromPl: String? = null) {
         if (fromPl != null) add(SheetItem("从这个歌单删除", danger = true) {
             Store.run { try { Ncm.playlistTracks(fromPl, "del", listOf(t.id)); nav.toast = "已从歌单删除"; Store.refreshPlaylists(fromPl) } catch (e: Exception) { nav.toast = "删除失败：${e.message}" } }
         })
+        if (Downloads.has(t.id)) add(SheetItem("删除下载", danger = true) { Downloads.delete(t.id); nav.toast = "已删除下载" })
+        else add(SheetItem("下载") { Downloads.download(t); nav.toast = "已加入下载" })
         add(SheetItem("查看评论") { nav.comments = t })
         add(SheetItem("效果器 / 均衡器") { nav.player = false; nav.push(Page.Effects) })
         add(SheetItem("相似歌曲") { nav.player = false; nav.push(Page.Detail("simi", t.id, "相似：${t.title}", t.cover)) })

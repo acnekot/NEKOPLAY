@@ -60,6 +60,13 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
     override val name = "android"
     override val filesDir: File = ctx.filesDir
     override val cacheDir: File = ctx.cacheDir
+    /** 公共「音乐/NEKOPLAY」：Android 10 以下没写权限、或者写不进去时，退回 App 自己的音乐目录 */
+    override fun downloadDir(): File {
+        val pub = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MUSIC), "NEKOPLAY")
+        if (android.os.Build.VERSION.SDK_INT >= 30 && (pub.isDirectory || pub.mkdirs()) && runCatching { File(pub, ".probe").apply { writeText("") }.delete() }.getOrDefault(false)) return pub
+        return File(ctx.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) ?: ctx.filesDir, "NEKOPLAY")
+    }
+    override fun mediaScan(f: File) { android.media.MediaScannerConnection.scanFile(ctx, arrayOf(f.absolutePath), null, null) }
     private val kvs = HashMap<String, KV>()
     override fun prefs(name: String): KV = kvs.getOrPut(name) { SpKV(ctx.getSharedPreferences(name, Context.MODE_PRIVATE)) }
     override val inter = FontFamily(
@@ -166,7 +173,7 @@ private class SpKV(val sp: android.content.SharedPreferences) : KV {
 }
 
 /** ExoPlayer + 1GB 播放缓存；player 给通知栏 / 锁屏用（上一首下一首走 Engine 的队列） */
-class ExoAudio(c: Context) : Audio {
+class ExoAudio(private val c: Context) : Audio {
     override var listener: Audio.Listener? = null
     // 固定一个音频会话，效果器都挂在这个会话上
     private val sessionId = (c.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager).generateAudioSessionId()
@@ -210,7 +217,10 @@ class ExoAudio(c: Context) : Audio {
     override fun open(url: String?, cacheKey: String, startMs: Long, autoplay: Boolean, meta: Track) {
         val m = MediaMetadata.Builder().setTitle(meta.title).setArtist(meta.artist).setAlbumTitle(meta.album)
             .setArtworkUri(meta.cover?.let { android.net.Uri.parse("$it?param=512y512") }).build()
-        exo.setMediaItem(MediaItem.Builder().setUri(url ?: "cache://${meta.id}").setCustomCacheKey(cacheKey).setMediaId(meta.id).setMediaMetadata(m).build(), startMs)
+        val item = MediaItem.Builder().setUri(url ?: "cache://${meta.id}").setCustomCacheKey(cacheKey).setMediaId(meta.id).setMediaMetadata(m).build()
+        // 下载好的本地文件：直接读文件，不再往播放缓存里写一份
+        if (url?.startsWith("file:") == true) exo.setMediaSource(androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(c)).createMediaSource(item), startMs)
+        else exo.setMediaItem(item, startMs)
         exo.prepare(); exo.playWhenReady = autoplay
     }
     override fun play() = exo.play()

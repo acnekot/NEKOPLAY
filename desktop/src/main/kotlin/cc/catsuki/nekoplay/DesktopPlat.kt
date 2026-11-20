@@ -125,6 +125,7 @@ class DesktopPlat : PlatImpl {
     }
 
     /** CPU：JVM 报告的本进程占用；内存：已提交的内存（接近任务管理器里的值） */
+    override fun downloadDir(): File = File(System.getProperty("user.home"), "Music/NEKOPLAY")
     override fun cpuMem(): Pair<Float, Long>? = runCatching {
         val os = java.lang.management.ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean
         val cpu = (os.processCpuLoad * 100).toFloat().coerceAtLeast(0f)
@@ -241,7 +242,8 @@ private class MpvAudio : Audio {
         if (url == null) throw Exception("桌面版暂无本地缓存")
         ended = false; opened = true
         lib.mpv_set_property_string(h, "pause", if (autoplay) "no" else "yes")
-        cmd("loadfile", url, "replace", "-1", "start=${startMs / 1000.0}")
+        val src = if (url.startsWith("file:")) File(java.net.URI(url)).absolutePath else url
+        cmd("loadfile", src, "replace", "-1", "start=${startMs / 1000.0}")
     }
     override fun play() { h?.let { lib!!.mpv_set_property_string(it, "pause", "no") } }
     override fun pause() { h?.let { lib!!.mpv_set_property_string(it, "pause", "yes") } }

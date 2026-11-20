@@ -172,6 +172,7 @@ object NIcons {
     const val library = "s|M5 4v16M10 4v16M15 5l4 15"
     const val queue = "s|M4 6h16M4 12h16M4 18h16"
     const val close = "x|M3 3l18 18M21 3L3 21"
+    const val download = "s|M12 4v11M7 10l5 5 5-5M5 20h14"
     const val cloud = "s|M7 18h11a4 4 0 0 0 0-8 6 6 0 0 0-11.5 1.5A3.3 3.3 0 0 0 7 18z"
     const val chart = "s|M5 20V11M12 20V4M19 20v-8"
     const val disc = "s|M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"
@@ -249,7 +250,7 @@ private fun vector(spec: String): ImageVector = iconCache.getOrPut(spec) {
     Box(Modifier.size(size).background(if (filled) c.p else Color.Transparent).nbf(1.dp, c.k), contentAlignment = Alignment.Center) { NIcon(icon, iconSize, if (filled) Color.White else c.k) }
 
 /** 曲目行（高 64）：外层列表负责左右 18 的边距 */
-@Composable fun TrackRow(t: Track, current: Boolean, label: String? = "网易云", onLong: (() -> Unit)? = null, onClick: () -> Unit) {
+@Composable fun TrackRow(t: Track, current: Boolean, label: String? = null, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
     val p = c
     val fg = if (current) p.p else p.k
     Row(Modifier.fillMaxWidth().height(64.dp).press(onLong = onLong, onClick = onClick).drawBehind {
@@ -269,7 +270,10 @@ private fun vector(spec: String): ImageVector = iconCache.getOrPut(spec) {
         Spacer(Modifier.width(12.dp))
         Column(horizontalAlignment = Alignment.End) {
             T(if (t.durationMs > 0) fmt(t.durationMs) else "--:--", 12, fg, mono = true)
-            if (label != null) T(label, 11, p.s, mono = true, ls = .06f)
+            val dls by Downloads.items.collectAsState()
+            val act by Downloads.active.collectAsState()
+            val lab = label ?: act[t.id]?.let { if (it < 0) "等待下载" else "%.0f%%".format(it * 100) } ?: if (dls.any { it.track.id == t.id }) "已下载" else null
+            if (lab != null) T(lab, 11, p.s, mono = true, ls = .06f)
         }
     }
 }

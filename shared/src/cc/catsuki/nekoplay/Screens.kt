@@ -262,8 +262,9 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                 Spacer(Modifier.height(10.dp)); Rule()
             }
         }
-        if (liked != null) item { ListRow({ LikedCover(liked.cover, 56.dp) }, "我喜欢", "网易云 · ${two(liked.count)} 首") { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
+        if (liked != null) item { ListRow({ LikedCover(liked.cover, 56.dp) }, "我喜欢", "${two(liked.count)} 首") { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
         item { ListRow({ RecentCover(rec.firstOrNull()?.cover, 56.dp) }, "最近播放", listMeta(rec)) { nav.push(Page.Detail("recent", "recent", "最近播放")) } }
+        item { val dls by Downloads.items.collectAsState(); ListRow({ IconCover(NIcons.download, 56.dp) }, "本地下载", "${two(dls.size)} 首") { nav.push(Page.DlList) } }
         if (prof == null) item {
             Column(Modifier.padding(vertical = 24.dp)) {
                 T("NOT LOGGED IN", 12, c.s, mono = true, lines = 2, ls = .06f, lh = 1.7f)
@@ -334,6 +335,12 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                 ActionRow {
                     PrimaryBar("播放全部", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(list, 0, shuffle = true) }
+                    if (p.kind != "recent" && list.isNotEmpty()) {
+                        Spacer(Modifier.width(10.dp))
+                        Box(Modifier.size(48.dp).press(.96f, true) {
+                            val n = Downloads.downloadAll(list); nav.toast = if (n == 0) "都已经下载过了" else "已加入下载：$n 首"
+                        }.nbf(1.dp, c.k), contentAlignment = Alignment.Center) { NIcon(NIcons.download, 20.dp) }
+                    }
                     // 别人的歌单：可以收藏
                     if (p.kind == "pl" && Ncm.loggedIn && !mine) {
                         val subbed by produceState<Boolean?>(null, p.id) { value = runCatching { Ncm.playlistSubscribed(p.id) }.getOrNull() }
@@ -526,6 +533,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { Group("PLAYBACK") }
         item { NavRow("音质", "在线播放的档位，拿不到时自动降一档", Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav) } }
         item { NavRow("效果器", "10 段均衡器、低音增强、环绕、响度", if (FxStore.fx.on) FxStore.fx.preset else "关") { nav.push(Page.Effects) } }
+        item { val dls by Downloads.items.collectAsState(); NavRow("本地下载", "按当前音质下载，附带歌词 · ${Downloads.dir.absolutePath}", "${dls.size} 首") { nav.push(Page.DlList) } }
         item { SwitchRow("进度条显示缓存", "进度条上用深一点的颜色标出已经下载好的部分", UiPref.showBuffer) { UiPref.showBuffer = it; UiPref.save() } }
         item {
             NavRow("播放缓存", "听过的歌存在本地，再听不用重新下载（上限 1GB）", "%.0f MB".format(cacheSize / 1048576.0)) {
