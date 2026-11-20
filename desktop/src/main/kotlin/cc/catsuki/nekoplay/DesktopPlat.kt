@@ -230,12 +230,16 @@ private interface Mpv : Library {
  */
 private class MpvAudio : Audio {
     override var listener: Audio.Listener? = null
+    /** 加载失败的原因（显示在错误提示里，方便排查） */
+    private val loadErrors = ArrayList<String>()
     /** 先找安装包自带的 libmpv（程序资源目录），找不到再找系统里装的 */
     private val lib: Mpv? = run {
         val bundled = System.getProperty("compose.application.resources.dir")?.let { File(it) }
             ?.listFiles { f -> f.name.startsWith("libmpv") && (f.name.endsWith(".dll") || f.name.endsWith(".dylib") || f.name.contains(".so")) }
             ?.sortedBy { it.name.length }?.map { it.absolutePath } ?: emptyList()
-        (bundled + listOf("mpv", "libmpv-2", "mpv-2", "libmpv", "mpv.2")).firstNotNullOfOrNull { n -> runCatching { Native.load(n, Mpv::class.java) }.getOrNull() }
+        (bundled + listOf("mpv", "libmpv-2", "mpv-2", "libmpv", "mpv.2")).firstNotNullOfOrNull { n ->
+            runCatching { Native.load(n, Mpv::class.java) }.onFailure { e -> if (loadErrors.size < 3 && (n.contains('/') || n.contains('\\'))) loadErrors += "${File(n).name}: ${e.message?.lineSequence()?.firstOrNull()}" }.getOrNull()
+        }
     }
     private val h: Pointer? = lib?.mpv_create()?.also { h ->
         lib.mpv_set_option_string(h, "vid", "no")
@@ -295,7 +299,7 @@ private class MpvAudio : Audio {
 
     override fun open(url: String?, cacheKey: String, startMs: Long, autoplay: Boolean, meta: Track) {
         // 抛异常由 Engine 显示提示，不会自动跳下一首（避免整个队列连环报错）
-        if (lib == null || h == null) throw Exception("播放内核 libmpv 加载失败")
+        if (lib == null || h == null) throw Exception("播放内核 libmpv 加载失败" + if (lib != null) "（mpv_create 失败）" else if (loadErrors.isNotEmpty()) "：" + loadErrors.joinToString("；") else "（程序目录里没有找到 libmpv）")
         if (url == null) throw Exception("桌面版暂无本地缓存")
         ended = false; opened = true
         lib.mpv_set_property_string(h, "pause", if (autoplay) "no" else "yes")

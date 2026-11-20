@@ -95,7 +95,14 @@ class Response internal constructor(val request: Request, val code: Int, val mes
 
 interface Call { fun execute(): Response; fun cancel() }
 
-class OkHttpClient private constructor(private val connectMs: Long, private val readMs: Long) {
+/** 不跟随跳转：把 302 原样交给调用方（登录流程要读 Location 和 Set-Cookie） */
+private class NoRedirect : NSObject(), NSURLSessionTaskDelegateProtocol {
+    override fun URLSession(session: NSURLSession, task: NSURLSessionTask, willPerformHTTPRedirection: NSHTTPURLResponse, newRequest: NSURLRequest, completionHandler: (NSURLRequest?) -> Unit) {
+        completionHandler(null)
+    }
+}
+
+class OkHttpClient private constructor(private val connectMs: Long, private val readMs: Long, private val follow: Boolean = true) {
     constructor() : this(10_000, 15_000)
 
     private val session: NSURLSession by lazy {
@@ -107,10 +114,10 @@ class OkHttpClient private constructor(private val connectMs: Long, private val 
         c.URLCache = null
         c.timeoutIntervalForRequest = (connectMs + readMs) / 1000.0
         c.timeoutIntervalForResource = 600.0
-        NSURLSession.sessionWithConfiguration(c)
+        if (follow) NSURLSession.sessionWithConfiguration(c) else NSURLSession.sessionWithConfiguration(c, NoRedirect(), null)
     }
 
-    fun newBuilder() = Builder(connectMs, readMs)
+    fun newBuilder() = Builder(connectMs, readMs, follow)
 
     fun newCall(r: Request): Call = object : Call {
         private var task: NSURLSessionDataTask? = null
@@ -155,13 +162,14 @@ class OkHttpClient private constructor(private val connectMs: Long, private val 
         }
     }
 
-    class Builder internal constructor(private var connectMs: Long, private var readMs: Long) {
+    class Builder internal constructor(private var connectMs: Long, private var readMs: Long, private var follow: Boolean = true) {
         constructor() : this(10_000, 15_000)
         fun connectTimeout(n: Long, u: TimeUnit): Builder { connectMs = u.toMillis(n); return this }
         fun readTimeout(n: Long, u: TimeUnit): Builder { readMs = u.toMillis(n); return this }
         fun writeTimeout(n: Long, u: TimeUnit): Builder = this
         fun callTimeout(n: Long, u: TimeUnit): Builder = this
-        fun followRedirects(b: Boolean): Builder = this
-        fun build() = OkHttpClient(connectMs, readMs)
+        fun followRedirects(b: Boolean): Builder { follow = b; return this }
+        fun followSslRedirects(b: Boolean): Builder { follow = b; return this }
+        fun build() = OkHttpClient(connectMs, readMs, follow)
     }
 }
