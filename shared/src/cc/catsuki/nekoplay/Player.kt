@@ -627,8 +627,9 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
     // 队列栏展开 / 收起是动画：左栏宽度按「动画结束后」的目标来算，再平滑过渡。
     // 之前按每一帧的实际宽度算，加上左栏比例瞬间切换，封面会先变大再变小（抽一下）
     val queueOpen = nav.side == 2
-    val wl = if (queueOpen) 1.3f else 1f
-    val leftTarget = (maxWidth - if (queueOpen) 363.dp else 0.dp) * (wl / (wl + 1f))
+    // 正在播放占 1/4，歌词占 3/4；左栏至少要放得下最小封面（200）+ 进度条边距 + 收起按钮 + 按钮竖栏
+    val leftMin = 200.dp + 44.dp + 56.dp + (if (PlayerLayout.keys(true, "side").isEmpty()) 0.dp else 52.dp) + 16.dp
+    val leftTarget = maxOf((maxWidth - if (queueOpen) 363.dp else 0.dp) * .25f, leftMin)
     val rightTarget = maxWidth - (if (queueOpen) 363.dp else 0.dp) - leftTarget
     val leftW by animateDpAsState(leftTarget, spring(1f, Anim.stiff(Spring.StiffnessMediumLow)), label = "leftW")
     val totalH = maxHeight
