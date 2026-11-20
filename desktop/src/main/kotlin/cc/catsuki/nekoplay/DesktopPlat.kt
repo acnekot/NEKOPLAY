@@ -219,6 +219,9 @@ private class MpvAudio : Audio {
                 if (lib == null || h == null || !opened) continue
                 val paused = str("pause") == "yes"
                 val eof = str("eof-reached") == "yes"
+                // 无缝播放：mpv 自己切到了列表里的下一首 → 删掉上一首，通知 Engine
+                val pp = str("playlist-pos")?.toIntOrNull() ?: 0
+                if (pp > 0) { cmd("playlist-remove", "0"); java.awt.EventQueue.invokeLater { listener?.onAdvanced() } }
                 val buf = str("paused-for-cache") == "yes"
                 pos = (num("time-pos") * 1000).toLong()
                 bufPos = (num("demuxer-cache-time") * 1000).toLong()
@@ -252,6 +255,12 @@ private class MpvAudio : Audio {
         val src = if (url.startsWith("file:")) File(java.net.URI(url)).absolutePath else url
         cmd("loadfile", src, "replace", "-1", "start=${startMs / 1000.0}")
     }
+    override fun queueNext(url: String?, cacheKey: String, meta: Track) {
+        if (lib == null || h == null || url == null) return
+        clearNext()
+        cmd("loadfile", if (url.startsWith("file:")) File(java.net.URI(url)).absolutePath else url, "append")
+    }
+    override fun clearNext() { if (lib == null || h == null) return; val n = str("playlist-count")?.toIntOrNull() ?: 0; for (i in n - 1 downTo 1) cmd("playlist-remove", i.toString()) }
     override fun play() { h?.let { lib!!.mpv_set_property_string(it, "pause", "no") } }
     override fun pause() { h?.let { lib!!.mpv_set_property_string(it, "pause", "yes") } }
     override fun seek(ms: Long) { cmd("seek", (ms / 1000.0).toString(), "absolute"); pos = ms; ended = false }

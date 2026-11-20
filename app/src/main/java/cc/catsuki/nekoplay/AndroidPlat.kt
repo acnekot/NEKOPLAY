@@ -202,6 +202,12 @@ class ExoAudio(private val c: Context) : Audio {
                 if (s == Player.STATE_ENDED) listener?.onEnded()
             }
             override fun onPlayerError(e: PlaybackException) { listener?.onError(e.errorCodeName) }
+            // 无缝播放：自动接到排好的下一首 → 把上一首从播放器里拿掉，告诉 Engine
+            override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && exo.currentMediaItemIndex > 0) {
+                    exo.removeMediaItems(0, exo.currentMediaItemIndex); listener?.onAdvanced()
+                }
+            }
         })
         player = object : ForwardingPlayer(exo) {
             override fun getAvailableCommands(): Player.Commands = super.getAvailableCommands().buildUpon()
@@ -225,6 +231,18 @@ class ExoAudio(private val c: Context) : Audio {
         else exo.setMediaItem(item, startMs)
         exo.prepare(); exo.playWhenReady = autoplay
     }
+    private fun item(url: String?, cacheKey: String, meta: Track): MediaItem {
+        val m = MediaMetadata.Builder().setTitle(meta.title).setArtist(meta.artist).setAlbumTitle(meta.album)
+            .setArtworkUri(meta.cover?.let { android.net.Uri.parse("$it?param=512y512") }).build()
+        return MediaItem.Builder().setUri(url ?: "cache://${meta.id}").setCustomCacheKey(cacheKey).setMediaId(meta.id).setMediaMetadata(m).build()
+    }
+    override fun queueNext(url: String?, cacheKey: String, meta: Track) {
+        clearNext()
+        val it = item(url, cacheKey, meta)
+        if (url?.startsWith("file:") == true) exo.addMediaSource(androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(c)).createMediaSource(it))
+        else exo.addMediaItem(it)
+    }
+    override fun clearNext() { val n = exo.mediaItemCount; val cur = exo.currentMediaItemIndex; if (n > cur + 1) exo.removeMediaItems(cur + 1, n) }
     override fun play() = exo.play()
     override fun pause() = exo.pause()
     override fun seek(ms: Long) = exo.seekTo(ms)

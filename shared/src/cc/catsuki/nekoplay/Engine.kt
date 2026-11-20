@@ -53,6 +53,52 @@ object Engine {
     var fadeMs by androidx.compose.runtime.mutableIntStateOf(300)
     private var fadeJob: Job? = null
     private var rampOnPlay = false
+    fun setFade(ms: Int) { fadeMs = ms; prefs?.edit()?.putInt("fade", ms)?.apply() }
+
+    // ---------- 无缝播放 ----------
+    var gapless by androidx.compose.runtime.mutableStateOf(true)
+    fun changeGapless(v: Boolean) { gapless = v; prefs?.edit()?.putBoolean("gapless", v)?.apply(); if (!v) dropNext() }
+    private var queuedIndex = -1
+    private var queuedFmt = ""
+    private var queuing = false
+    /** 快播完时（剩 12 秒）把下一首排到播放器里 */
+    private fun maybeQueueNext() {
+        val s = state.value
+        if (!gapless || queuedIndex >= 0 || queuing || !audio.isPlaying || s.queue.size < 2 || s.mode == Mode.LOOP_ONE || Sleep.holdNext) return
+        val cur = s.current ?: return
+        if (cur.durationMs <= 0 || cur.durationMs - audio.position > 12_000) return
+        if (s.fm && s.index + 1 >= s.queue.size) return
+        val ni = if (s.mode == Mode.SHUFFLE && !s.fm) s.queue.indices.filter { it != s.index }.random() else (s.index + 1) % s.queue.size
+        val nt = s.queue[ni]
+        queuing = true
+        scope.launch {
+            try {
+                val dl = Downloads.file(nt.id)
+                val hit = cachedLevel(nt.id)
+                when {
+                    dl != null -> { audio.queueNext(dl.toURI().toString(), "dl_${nt.id}", nt); queuedFmt = dl.extension.lowercase() }
+                    hit != null && !Plat.isDesktop -> { audio.queueNext(null, cacheKey(nt.id, hit.first), nt); queuedFmt = hit.second }
+                    else -> { val st = Ncm.stream(nt.id, q); audio.queueNext(st.url, cacheKey(nt.id, st.level), nt); queuedFmt = st.format; prefs?.edit()?.putString("fmt_${cacheKey(nt.id, st.level)}", st.format)?.apply() }
+                }
+                if (state.value.current?.id == cur.id) queuedIndex = ni else audio.clearNext()
+            } catch (_: Exception) { } finally { queuing = false }
+        }
+    }
+    private fun dropNext() { if (queuedIndex >= 0) audio.clearNext(); queuedIndex = -1 }
+    /** 播放器已经自己接上了下一首：只更新状态，不重新加载 */
+    private fun onAdvanced() {
+        val ni = queuedIndex; queuedIndex = -1
+        val s = state.value
+        if (ni !in s.queue.indices) return
+        reportPrev()
+        val t = s.queue[ni]
+        reportId = t.id
+        if (Ncm.loggedIn) scope.launch { Ncm.scrobbleStart(t.id) }
+        state.value = s.copy(index = ni, loading = false, format = queuedFmt, kbps = 0, cached = false)
+        position.value = 0; info.value = null; localKbps = 0
+        Store.addRecent(t); Store.saveQueue(s.queue, ni, 0)
+        if (s.fm && ni + 3 >= s.queue.size) fmFill()
+    }
     private suspend fun ramp(from: Float, to: Float, ms: Int) {
         val steps = (ms / 16).coerceAtLeast(1)
         for (i in 1..steps) { audio.volume = Vol.v * (from + (to - from) * i / steps); delay(16) }
@@ -74,6 +120,7 @@ object Engine {
         quality = prefs!!.getInt("q2", 3)
         qualityCell = prefs!!.getInt("qCell", -1)
         fadeMs = prefs!!.getInt("fade", 300)
+        gapless = prefs!!.getBoolean("gapless", true)
         audio.listener = object : Audio.Listener {
             override fun onPlaying(p: Boolean) {
                 state.value = state.value.copy(playing = p)
@@ -81,11 +128,13 @@ object Engine {
             }
             override fun onBuffering(b: Boolean) { state.value = state.value.copy(loading = b) }
             override fun onEnded() = this@Engine.onEnded()
+            override fun onAdvanced() = this@Engine.onAdvanced()
             override fun onError(msg: String) { error.value = "播放失败：$msg"; next() }
         }
         // 进度：播放时定时更新
         // 音质参数：开始播放后读一次（读不到就过一会再试）
         scope.launch { while (isActive) { if (info.value == null && audio.isPlaying) info.value = audio.info()?.let { if (it.kbps == 0 && localKbps > 0) it.copy(kbps = localKbps) else it }; delay(700) } }
+        scope.launch { while (isActive) { maybeQueueNext(); delay(1000) } }
         scope.launch { while (isActive) { val p = audio.position; if (audio.isPlaying || position.value != p) position.value = p; runCatching { buffered.value = if (state.value.cached) Long.MAX_VALUE else audio.buffered }; delay(if (fastPos > 0) 50 else 250) } }
         Store.restoreQueue()?.let { (q, i, pos) -> state.value = state.value.copy(queue = q, index = i); load(i, false, pos) }
     }
@@ -113,6 +162,7 @@ object Engine {
         reportPrev()
         reportId = t.id
         if (autoplay && Ncm.loggedIn) scope.launch { Ncm.scrobbleStart(t.id) }
+        dropNext()
         state.value = state.value.copy(index = i, loading = true, format = "", kbps = 0)
         info.value = null; localKbps = 0
         position.value = startMs
@@ -205,16 +255,16 @@ object Engine {
         if (state.value.mode == Mode.LOOP_ONE) { seek(0); audio.play() } else next()
     }
 
-    fun cycleMode() { state.value = state.value.copy(mode = Mode.entries[(state.value.mode.ordinal + 1) % 3]) }
+    fun cycleMode() { dropNext(); state.value = state.value.copy(mode = Mode.entries[(state.value.mode.ordinal + 1) % 3]) }
 
-    fun removeAt(i: Int) {
+    fun removeAt(i: Int) { dropNext();
         val s = state.value
         if (i == s.index || i !in s.queue.indices) return
         val q = s.queue.toMutableList().apply { removeAt(i) }
         state.value = s.copy(queue = q, index = if (i < s.index) s.index - 1 else s.index)
     }
 
-    fun enqueueNext(t: Track) {
+    fun enqueueNext(t: Track) { dropNext()
         val s = state.value
         if (s.queue.isEmpty()) { playList(listOf(t), 0); return }
         val q = s.queue.filterIndexed { i, x -> x.id != t.id || i == s.index }.toMutableList()
@@ -269,7 +319,7 @@ object Engine {
         if (s.current != null && Plat.impl.metered()) load(s.index, audio.isPlaying, audio.position)
     }
 
-    fun clearUpcoming() { val s = state.value; s.current?.let { state.value = s.copy(queue = listOf(it), index = 0) } }
+    fun clearUpcoming() { dropNext(); val s = state.value; s.current?.let { state.value = s.copy(queue = listOf(it), index = 0) } }
 
     fun savePosition() { val s = state.value; if (s.index >= 0) Store.saveQueue(s.queue, s.index, audio.position) }
 }

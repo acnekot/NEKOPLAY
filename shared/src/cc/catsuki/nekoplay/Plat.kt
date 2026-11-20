@@ -48,6 +48,8 @@ interface Audio {
     interface Listener {
         fun onPlaying(p: Boolean)
         fun onBuffering(b: Boolean)
+        /** 无缝接上了提前排好的下一首 */
+        fun onAdvanced() {}
         fun onEnded()
         fun onError(msg: String)
     }
@@ -69,6 +71,10 @@ interface Audio {
     /** 音量 0..1（桌面用） */
     var volume: Float
     /** 效果器 / 均衡器 */
+    /** 无缝播放：提前把下一首排在后面，当前这首一播完就直接接上（不经过 onEnded） */
+    fun queueNext(url: String?, cacheKey: String, meta: Track) {}
+    /** 撤掉提前排好的下一首（用户切歌、改队列时） */
+    fun clearNext() {}
     /** 正在播放的真实音频参数（解码器读到的），拿不到时 null */
     fun info(): AudioInfo? = null
     fun applyFx(fx: Fx)
