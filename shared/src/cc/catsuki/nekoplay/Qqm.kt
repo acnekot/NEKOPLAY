@@ -112,6 +112,8 @@ object Qqm {
     fun albumPic(mid: String?, size: Int = 500) = if (mid.isNullOrEmpty()) null else "https://y.gtimg.cn/music/photo_new/T002R${size}x${size}M000$mid.jpg"
     fun singerPic(mid: String?, size: Int = 500) = if (mid.isNullOrEmpty()) null else "https://y.gtimg.cn/music/photo_new/T001R${size}x${size}M000$mid.jpg"
 
+    /** 歌曲 mid → 数字 id（收藏要用） */
+    private val songIds = HashMap<String, Long>()
     /** 歌曲 mid → 文件信息（media_mid、各音质大小），拿播放地址时要用 */
     private val files = HashMap<String, JSONObject>()
 
@@ -121,6 +123,7 @@ object Qqm {
         val s = s0.optJSONObject("songInfo") ?: s0
         val mid = s.optString("mid").ifEmpty { s.optString("songmid") }
         s.optJSONObject("file")?.let { files[mid] = it }
+        s.optLong("id").takeIf { it > 0 }?.let { songIds[mid] = it }
         val singers = arr(s.optJSONArray("singer"))
         val al = s.optJSONObject("album") ?: JSONObject()
         val alMid = al.optString("mid").ifEmpty { s.optString("albummid") }
@@ -316,7 +319,7 @@ object Qqm {
     suspend fun toplists(): List<Playlist> {
         val d = call("music.musicToplist.Toplist", "GetAll", JSONObject())
         return arr(d.optJSONArray("group")).flatMap { g -> arr(g.optJSONArray("toplist")) }.map { t ->
-            Playlist(P + "top" + t.optInt("topId"), t.optString("title"), t.optInt("totalNum"), t.optString("frontPicUrl").ifEmpty { t.optString("headPicUrl") }.ifEmpty { null }, mine = false)
+            Playlist(P + "top" + t.optInt("topId"), t.optString("title"), t.optInt("totalNum"), t.optString("frontPicUrl").ifEmpty { t.optString("headPicUrl") }.ifEmpty { null }?.replace("http:", "https:"), mine = false)
         }
     }
 
@@ -332,6 +335,27 @@ object Qqm {
             val d = call("music.UnifiedHomepage.UnifiedHomepageSrv", "GetHomepageHeader", JSONObject().put("uin", musicid.toString()).put("IsQueryTabDetail", 1))
             val b = d.optJSONObject("Info")?.optJSONObject("BaseInfo") ?: return@runCatching
             prefs.edit().putString("nick", b.optString("Name")).putString("avatar", b.optString("Avatar").replace("http:", "https:")).apply()
+        }
+    }
+
+    // ---------- 收藏 / 新碟（接口见 docs/qq-protocol.md） ----------
+    /** 加入 / 移出 QQ 音乐的「我喜欢」（目录 201） */
+    suspend fun like(id: String, on: Boolean) {
+        if (!loggedIn) return
+        val mid = raw(id)
+        val sid = songIds[mid] ?: details(listOf(id)).let { songIds[mid] } ?: throw NcmError("找不到这首歌的 QQ 音乐 id")
+        val d = call("music.musicasset.PlaylistDetailWrite", if (on) "AddSonglist" else "DelSonglist", JSONObject().put("dirId", 201).put("tid", 0).put("bFmtUtf8", true)
+            .put("v_songInfo", JSONArray().put(JSONObject().put("songId", sid).put("songType", 0))))
+        val rc = d.optInt("retCode", 0)
+        if (rc != 0 && rc != 80092) throw NcmError("QQ 音乐收藏失败（$rc）")
+    }
+
+    /** 新碟上架：area 1 内地 / 2 港台 / 3 欧美 / 4 韩国 / 5 日本 */
+    suspend fun newAlbums(area: Int, page: Int = 1, num: Int = 30): List<Album> {
+        val d = call("newalbum.NewAlbumServer", "get_new_album_info", JSONObject().put("area", area).put("num", num).put("start", num * (page - 1)))
+        return arr(d.optJSONArray("albums")).map { a ->
+            val mid = a.optString("mid")
+            Album(P + mid, a.optString("name"), albumPic(mid), 0, a.optString("release_time").take(4), arr(a.optJSONArray("singers")).joinToString(" / ") { it.optString("name") })
         }
     }
 
