@@ -291,6 +291,9 @@ val LocalCompactAction = compositionLocalOf { false }
     Box(Modifier.size(size).background(if (filled) c.p else Color.Transparent).nbf(1.dp, c.k), contentAlignment = Alignment.Center) { NIcon(icon, iconSize, if (filled) Color.White else c.k) }
 
 /** 曲目行（高 64）：外层列表负责左右 18 的边距 */
+/** 歌名后面的小标：这首歌要会员 / 付费才能放整首 */
+@Composable fun VipTag() = Box(Modifier.border(1.dp, c.p).padding(horizontal = 4.dp, vertical = 1.dp)) { T("VIP", 9, c.p, 800, mono = true, ls = .04f) }
+
 @Composable fun TrackRow(t: Track, current: Boolean, label: String? = null, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
     val p = c
     val fg = if (current) p.p else p.k
@@ -305,7 +308,10 @@ val LocalCompactAction = compositionLocalOf { false }
         Cover(t.cover, 44.dp, t.title)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            T(t.title, 16, fg, if (current) 700 else 600, lh = 1.4f)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                T(t.title, 16, fg, if (current) 700 else 600, lh = 1.4f, modifier = Modifier.weight(1f, fill = false))
+                if (t.vip) { Spacer(Modifier.width(6.dp)); VipTag() }
+            }
             T(t.artist, 13, p.s, lh = 1.4f)
         }
         Spacer(Modifier.width(12.dp))

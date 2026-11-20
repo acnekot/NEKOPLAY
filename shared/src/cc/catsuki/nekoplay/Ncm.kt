@@ -25,13 +25,14 @@ data class Track(
     val artists: List<Pair<String, String>> = emptyList(), // (id, 名字)
     val albumId: String = "",
     val src: String? = null, // 本地音乐：文件地址（file:// 或 content://），网易云的歌为 null
+    val vip: Boolean = false, // 需要会员 / 付费才能放整首
 ) {
     val local get() = src != null
     fun toJson() = JSONObject().put("id", id).put("t", title).put("a", artist).put("al", album).put("d", durationMs).put("c", cover ?: "")
-        .put("ar", JSONArray(artists.map { JSONArray().put(it.first).put(it.second) })).put("alid", albumId).apply { if (src != null) put("src", src) }
+        .put("ar", JSONArray(artists.map { JSONArray().put(it.first).put(it.second) })).put("alid", albumId).apply { if (src != null) put("src", src); if (vip) put("v", true) }
     companion object {
         fun fromJson(o: JSONObject) = Track(o.getString("id"), o.optString("t"), o.optString("a"), o.optString("al"), o.optLong("d"), o.optString("c").ifEmpty { null },
-            o.optJSONArray("ar")?.let { a -> (0 until a.length()).map { a.getJSONArray(it).let { x -> x.getString(0) to x.getString(1) } } } ?: emptyList(), o.optString("alid"), o.optString("src").ifEmpty { null })
+            o.optJSONArray("ar")?.let { a -> (0 until a.length()).map { a.getJSONArray(it).let { x -> x.getString(0) to x.getString(1) } } } ?: emptyList(), o.optString("alid"), o.optString("src").ifEmpty { null }, o.optBoolean("v"))
     }
 }
 
@@ -124,7 +125,7 @@ object Ncm {
         val names = (0 until ar.length()).map { ar.getJSONObject(it).optString("name") }.filter { it.isNotEmpty() }
         val ids = (0 until ar.length()).map { ar.getJSONObject(it) }.filter { it.optString("name").isNotEmpty() }.map { it.opt("id").toString() to it.optString("name") }
         return Track(s.get("id").toString(), s.optString("name"), names.joinToString(" / ").ifEmpty { "未知艺人" },
-            al.optString("name"), s.optLong("dt", s.optLong("duration")), pic(al.optString("picUrl")), ids, al.opt("id")?.toString() ?: "")
+            al.optString("name"), s.optLong("dt", s.optLong("duration")), pic(al.optString("picUrl")), ids, al.opt("id")?.toString() ?: "", vip = s.optInt("fee") == 1 || s.optInt("fee") == 4)
     }
 
     /** 按 id 取歌曲详情：每 200 首一个请求，并行发出 */

@@ -75,7 +75,8 @@ object Qqm {
     private fun comm(extra: JSONObject?): JSONObject {
         val c = JSONObject().put("ct", 19).put("cv", 2201).put("platform", "").put("chid", "0")
             .put("g_tk", if (loggedIn) hash33(musickey, 5381) else 5381).put("guid", guid.uppercase())
-        if (loggedIn) c.put("uin", musicid).put("tmeLoginType", loginType)
+        // 登录态：PC 客户端用 uin + Cookie，手机客户端用 qq + authst，两种都带上
+        if (loggedIn) c.put("uin", musicid).put("tmeLoginType", loginType).put("qq", musicid.toString()).put("authst", musickey)
         extra?.keys()?.forEach { c.put(it, extra.opt(it)) }
         return c
     }
@@ -112,6 +113,8 @@ object Qqm {
     fun albumPic(mid: String?, size: Int = 500) = if (mid.isNullOrEmpty()) null else "https://y.gtimg.cn/music/photo_new/T002R${size}x${size}M000$mid.jpg"
     fun singerPic(mid: String?, size: Int = 500) = if (mid.isNullOrEmpty()) null else "https://y.gtimg.cn/music/photo_new/T001R${size}x${size}M000$mid.jpg"
 
+    /** 歌曲 mid → 试听片段的 mid（没权限放整首时退而求其次） */
+    private val trials = HashMap<String, String>()
     /** 歌曲 mid → 数字 id（收藏要用） */
     private val songIds = HashMap<String, Long>()
     /** 歌曲 mid → 文件信息（media_mid、各音质大小），拿播放地址时要用 */
@@ -124,6 +127,7 @@ object Qqm {
         val mid = s.optString("mid").ifEmpty { s.optString("songmid") }
         s.optJSONObject("file")?.let { files[mid] = it }
         s.optLong("id").takeIf { it > 0 }?.let { songIds[mid] = it }
+        s.optJSONArray("vs")?.optString(0)?.takeIf { it.isNotEmpty() }?.let { trials[mid] = it }
         val singers = arr(s.optJSONArray("singer"))
         val al = s.optJSONObject("album") ?: JSONObject()
         val alMid = al.optString("mid").ifEmpty { s.optString("albummid") }
@@ -131,7 +135,8 @@ object Qqm {
         return Track(P + mid, title, singers.joinToString(" / ") { it.optString("name") }.ifEmpty { "未知艺人" },
             al.optString("name").ifEmpty { al.optString("title") }, s.optLong("interval") * 1000,
             albumPic(alMid) ?: singerPic(singers.firstOrNull()?.optString("mid")),
-            singers.map { P + it.optString("mid") to it.optString("name") }, if (alMid.isEmpty()) "" else P + alMid)
+            singers.map { P + it.optString("mid") to it.optString("name") }, if (alMid.isEmpty()) "" else P + alMid,
+            vip = s.optJSONObject("pay")?.optInt("pay_play") == 1)
     }
 
     // ---------- 搜索 ----------
@@ -192,7 +197,8 @@ object Qqm {
         val f = fileInfo(mid)
         // 文件名：前缀 + media_mid + 扩展名；没有 media_mid 时是 mid 写两遍
         val media = f.optString("media_mid").ifEmpty { mid + mid }
-        var err = "没有可用的播放地址（无版权或需要 QQ 音乐会员）"
+        var err = if (loggedIn) "没有可用的播放地址（这首歌需要 QQ 音乐会员或单独购买）" else "这首歌需要登录 QQ 音乐才能播放（未登录只能放少数免费歌）"
+        val codes = LinkedHashSet<Int>()
         for (i in quality.coerceIn(0, FMTS.lastIndex) downTo 0) {
             val fmt = FMTS[i]
             // 文件信息里明确是 0 的音质跳过（没有这个文件）；字段不存在时照样试一次
@@ -203,7 +209,7 @@ object Qqm {
                     .put("songtype", JSONArray().put(0)).put("ctx", 0))
                 val info = d.optJSONArray("midurlinfo")?.optJSONObject(0) ?: continue
                 val purl = info.optString("purl")
-                if (purl.isEmpty()) { if (info.optInt("result") == 104003) err = "这首歌需要 QQ 音乐会员或购买"; continue }
+                if (purl.isEmpty()) { codes += info.optInt("result"); if (info.optInt("result") == 104003) err = "这首歌需要 QQ 音乐会员或购买"; continue }
                 val host = d.optJSONArray("sip")?.optString(0)?.ifEmpty { null } ?: CDN
                 val size = f.optLong(fmt.sizeKey)
                 val kbps = if (fmt.kbps > 0) fmt.kbps else if (size > 0 && fileDur[mid] != null) (size * 8 / fileDur[mid]!! / 1000).toInt() else 0
@@ -212,7 +218,19 @@ object Qqm {
                 return s
             } catch (e: NcmError) { err = e.message ?: err }
         }
-        throw NcmError(err)
+        // 整首拿不到：放试听片段（一般 30~60 秒），并提示原因
+        trials[mid]?.let { t ->
+            runCatching {
+                val d = call("music.vkey.GetVkey", "UrlGetVkey", JSONObject().put("uin", if (loggedIn) musicid.toString() else "0")
+                    .put("filename", JSONArray().put("RS02$t.mp3")).put("guid", guid).put("songmid", JSONArray().put(mid)).put("songtype", JSONArray().put(0)).put("ctx", 0))
+                val purl = d.optJSONArray("midurlinfo")?.optJSONObject(0)?.optString("purl").orEmpty()
+                if (purl.isNotEmpty()) {
+                    Engine.error.value = "$err，先放试听片段"
+                    return Stream(CDN + purl, "mp3", 128, "standard")
+                }
+            }
+        }
+        throw NcmError(err + if (Debug.on && codes.isNotEmpty()) "（result ${codes.joinToString()}）" else "")
     }
     /** 秒数（算无损码率用） */
     private val fileDur = HashMap<String, Long>()

@@ -109,7 +109,8 @@ object Kgm {
         val name = x.optString("SongName").ifEmpty { x.optString("OriSongName") }
         val alb = x.optString("AlbumID")
         return Track(songId(x.optString("FileHash"), x.opt("MixSongID"), alb), name, x.optString("SingerName").ifEmpty { "未知艺人" }, x.optString("AlbumName"),
-            x.optLong("Duration") * 1000, pic(x.optString("Image")), singers.map { "${P}ar${it.opt("id")}" to it.optString("name") }, if (alb.isEmpty() || alb == "0") "" else "${P}al$alb")
+            x.optLong("Duration") * 1000, pic(x.optString("Image")), singers.map { "${P}ar${it.opt("id")}" to it.optString("name") }, if (alb.isEmpty() || alb == "0") "" else "${P}al$alb",
+            vip = x.optInt("Privilege") == 10)
     }
 
     /** 歌单 / 专辑里的歌（小写字段那套） */
@@ -130,7 +131,8 @@ object Kgm {
         return Track(songId(x.optString("hash"), x.opt("mixsongid") ?: x.opt("add_mixsongid"), alb), title,
             singers.joinToString(" / ") { it.optString("name") }.ifEmpty { full.substringBefore(" - ", "未知艺人") },
             x.optJSONObject("albuminfo")?.optString("name") ?: "", x.optLong("timelen"), pic(x.optString("cover")),
-            singers.map { "${P}ar${it.opt("id")}" to it.optString("name") }, if (alb.isEmpty() || alb == "0") "" else "${P}al$alb")
+            singers.map { "${P}ar${it.opt("id")}" to it.optString("name") }, if (alb.isEmpty() || alb == "0") "" else "${P}al$alb",
+            vip = x.optInt("privilege") == 10)
     }
 
     // ---------- 搜索 ----------
