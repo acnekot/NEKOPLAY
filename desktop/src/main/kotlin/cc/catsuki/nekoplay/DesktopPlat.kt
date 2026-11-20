@@ -162,10 +162,28 @@ class DesktopPlat : PlatImpl {
 
     override fun memInfo(): String {
         val rt = Runtime.getRuntime()
-        val rss = runCatching { File("/proc/self/status").readLines().first { it.startsWith("VmRSS") }.split(Regex("\\s+"))[1].toLong() / 1024 }.getOrNull()
+        val rss = WinMem.workingSetMB() ?: runCatching { File("/proc/self/status").readLines().first { it.startsWith("VmRSS") }.split(Regex("\\s+"))[1].toLong() / 1024 }.getOrNull()
         return "${if (rss != null) "常驻内存 ${rss}M · " else ""}Java 堆 ${(rt.totalMemory() - rt.freeMemory()) / 1048576}M / 上限 ${rt.maxMemory() / 1048576}M"
     }
-    override fun memAnalysis(): String = memInfo()
+    /** 内存分项：Java 堆 / 类元数据 / 代码缓存 / 直接内存 / 线程，剩下的是原生部分（Skia 渲染、mpv、JVM 自身） */
+    override fun memAnalysis(): String {
+        val mx = java.lang.management.ManagementFactory.getMemoryMXBean()
+        val pools = java.lang.management.ManagementFactory.getMemoryPoolMXBeans()
+        fun mb(b: Long) = b / 1048576
+        val heap = mx.heapMemoryUsage; val non = mx.nonHeapMemoryUsage
+        val meta = pools.filter { it.name.contains("Metaspace") || it.name.contains("Class") }.sumOf { it.usage.committed }
+        val code = pools.filter { it.name.contains("CodeHeap") || it.name.contains("Code Cache") }.sumOf { it.usage.committed }
+        val direct = java.lang.management.ManagementFactory.getPlatformMXBeans(java.lang.management.BufferPoolMXBean::class.java).sumOf { it.memoryUsed }
+        val threads = Thread.activeCount()
+        val ws = WinMem.workingSetMB(); val priv = WinMem.privateMB()
+        val javaPart = mb(heap.committed) + mb(non.committed) + mb(direct)
+        return buildString {
+            if (ws != null) append("工作集 ${ws}M · 私有 ${priv}M\n")
+            append("Java 堆 已用 ${mb(heap.used)}M / 已申请 ${mb(heap.committed)}M\n")
+            append("类元数据 ${mb(meta)}M · 代码缓存 ${mb(code)}M · 直接内存 ${mb(direct)}M · 线程 $threads\n")
+            if (priv != null) append("原生（Skia/mpv/JVM）约 ${priv - javaPart}M")
+        }
+    }
 }
 
 /** 简单的 properties 文件存储 */
@@ -226,6 +244,11 @@ private class MpvAudio : Audio {
         lib.mpv_set_option_string(h, "user-agent", "Mozilla/5.0")
         lib.mpv_set_option_string(h, "referrer", "https://music.163.com/")
         lib.mpv_set_option_string(h, "cache", "yes")
+        // 省内存：mpv 默认网络缓存往前 150MB、往回 50MB，一首无损能整首塞进内存（无缝播放时还有下一首）。
+        // 音频不需要这么多：往前 8MB（无损约 1 分钟）、往回 2MB
+        lib.mpv_set_option_string(h, "demuxer-max-bytes", "8MiB")
+        lib.mpv_set_option_string(h, "demuxer-max-back-bytes", "2MiB")
+        lib.mpv_set_option_string(h, "audio-buffer", "0.5")
         lib.mpv_initialize(h)
     }
     @Volatile private var opened = false
@@ -312,4 +335,32 @@ private class MpvAudio : Audio {
         }
         lib!!.mpv_set_property_string(hh, "af", if (f.isEmpty()) "" else "lavfi=[${f.joinToString(",")}]")
     }
+}
+
+
+/** Windows：用 psapi 读当前进程的工作集 / 私有内存（和任务管理器的数字对得上） */
+object WinMem {
+    @com.sun.jna.Structure.FieldOrder("cb", "PageFaultCount", "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage", "QuotaPagedPoolUsage",
+        "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage", "PagefileUsage", "PeakPagefileUsage", "PrivateUsage")
+    class Counters : com.sun.jna.Structure() {
+        @JvmField var cb = 0; @JvmField var PageFaultCount = 0
+        @JvmField var PeakWorkingSetSize = 0L; @JvmField var WorkingSetSize = 0L
+        @JvmField var QuotaPeakPagedPoolUsage = 0L; @JvmField var QuotaPagedPoolUsage = 0L
+        @JvmField var QuotaPeakNonPagedPoolUsage = 0L; @JvmField var QuotaNonPagedPoolUsage = 0L
+        @JvmField var PagefileUsage = 0L; @JvmField var PeakPagefileUsage = 0L; @JvmField var PrivateUsage = 0L
+    }
+    private interface Psapi : Library { fun GetProcessMemoryInfo(p: Pointer, c: Counters, cb: Int): Boolean }
+    private interface K32 : Library { fun GetCurrentProcess(): Pointer; fun SetProcessWorkingSetSize(p: Pointer, min: Long, max: Long): Boolean }
+    private val win = System.getProperty("os.name").startsWith("Windows")
+    private val ps by lazy { runCatching { Native.load("psapi", Psapi::class.java) }.getOrNull() }
+    private val k by lazy { runCatching { Native.load("kernel32", K32::class.java) }.getOrNull() }
+    private fun read(): Counters? {
+        if (!win) return null
+        val c = Counters(); c.cb = c.size()
+        return c.takeIf { runCatching { ps!!.GetProcessMemoryInfo(k!!.GetCurrentProcess(), it, it.cb) }.getOrDefault(false) }
+    }
+    fun workingSetMB(): Long? = read()?.WorkingSetSize?.div(1048576)
+    fun privateMB(): Long? = read()?.PrivateUsage?.div(1048576)
+    /** 把暂时不用的页还给系统（最小化时用） */
+    fun trim() { if (win) runCatching { k!!.SetProcessWorkingSetSize(k!!.GetCurrentProcess(), -1, -1) } }
 }
