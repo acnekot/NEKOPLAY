@@ -35,8 +35,9 @@ import okio.Path.Companion.toOkioPath
 
 fun main() {
     Plat.impl = DesktopPlat()
-    // 渲染方式：默认软件渲染（实测 Windows 上比 Direct3D 少约 170MB 私有内存）；设置里可以换回 GPU，重启生效
-    if (Plat.prefs("ui").getString("render", "soft") == "soft" && System.getProperty("skiko.renderApi") == null) System.setProperty("skiko.renderApi", "SOFTWARE_FAST")
+    // 渲染方式：默认显卡（Direct3D）。软件渲染省约 170MB 内存，但实测 175% 缩放下主页约 30 帧、开了背景模糊的播放页只有约 9 帧，
+    // 只适合不在乎流畅度、想省内存的情况；设置里可以切换，重启生效
+    if (Plat.prefs("ui").getString("render", "gpu") == "soft" && System.getProperty("skiko.renderApi") == null) System.setProperty("skiko.renderApi", "SOFTWARE_FAST")
     Boot.init()
     Store.refreshAll()
     Perf.start()

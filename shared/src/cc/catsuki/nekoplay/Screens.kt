@@ -624,8 +624,8 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { val ps by Perf.stat.collectAsState(); T(Perf.line(ps), 11, p.s, mono = true, lines = 3, lh = 1.5f, modifier = Modifier.padding(vertical = 10.dp)) }
         item { val po by Perf.overlay.collectAsState(); SwitchRow("性能浮窗", "在所有页面左下角显示 CPU、帧率和 GPU", po) { Perf.overlay.value = it; prefs.edit().putBoolean("perf", it).apply() } }
         if (Plat.isDesktop) item {
-            val soft = prefs.getString("render", "soft") == "soft"
-            SwitchRow("软件渲染", "用 CPU 画界面，比显卡渲染少占约 170MB 内存；动画多时 CPU 稍高。重启生效", soft) { prefs.edit().putString("render", if (it) "soft" else "gpu").apply(); nav.toast = "重启后生效" }
+            val soft = prefs.getString("render", "gpu") == "soft"
+            SwitchRow("软件渲染（省内存）", "用 CPU 画界面，少占约 170MB 内存，但帧率会掉到 30 帧以下（开背景模糊时更低）。重启生效", soft) { prefs.edit().putString("render", if (it) "soft" else "gpu").apply(); nav.toast = "重启后生效" }
         }
         item { SwitchRow("省内存模式", "图片缓存变小、头像不播放动画、逐字高亮降到约 20 帧${if (Plat.isDesktop) "、最小化时释放内存" else ""}；图片缓存大小重启后生效", UiPref.lowMem) { UiPref.lowMem = it; UiPref.save() } }
         item {
