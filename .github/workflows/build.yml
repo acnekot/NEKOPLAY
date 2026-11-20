@@ -43,15 +43,22 @@ jobs:
           gh release download -R shinchiro/mpv-winbuild-cmake --pattern "mpv-dev-x86_64-2*.7z" -D mpvtmp
           7z e mpvtmp/*.7z -omp libmpv-2.dll -r -y
           cp mp/libmpv-2.dll desktop/resources/windows/
+      # 用 media-kit 编好的 libmpv（只含音频、通用二进制、最低 macOS 11）。
+      # 以前用 Homebrew 的，那些库要求和打包机一样新的系统（现在是 macOS 26），旧系统上加载失败
       - name: 准备 libmpv（macOS）
         if: runner.os == 'macOS'
         shell: bash
+        env: { GH_TOKEN: "${{ github.token }}" }
         run: |
-          brew install mpv dylibbundler
-          mkdir -p desktop/resources/macos && cd desktop/resources/macos
-          cp "$(brew --prefix mpv)/lib/libmpv.2.dylib" . && chmod u+w libmpv.2.dylib
-          dylibbundler -of -b -x ./libmpv.2.dylib -d . -p @loader_path/
+          mkdir -p desktop/resources/macos mpvtmp
+          gh release download v0.7.3 -R media-kit/libmpv-darwin-build --pattern "libmpv-libs_v0.7.3_macos-universal-audio-default.tar.gz" -D mpvtmp
+          tar xzf mpvtmp/*.tar.gz -C mpvtmp
+          cp mpvtmp/libmpv-libs_*/*.dylib desktop/resources/macos/
+          cd desktop/resources/macos
+          # 依赖都写成 @rpath/xxx.dylib：给每个库加上「自己所在目录」作为搜索路径
+          for f in *.dylib; do chmod u+w "$f"; install_name_tool -add_rpath @loader_path "$f" 2>/dev/null || true; done
           codesign --force -s - ./*.dylib
+          for f in *.dylib; do vtool -show-build "$f" | grep -m1 minos; done
       - name: 准备 libmpv（Linux）
         if: runner.os == 'Linux'
         shell: bash
