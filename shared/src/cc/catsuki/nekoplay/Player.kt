@@ -189,6 +189,8 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             Box(Modifier.size(44.dp).press(haptic = true) { Engine.cycleMode(); nav.toast = listOf("列表循环", "单曲循环", "随机播放")[Engine.state.value.mode.ordinal] }, contentAlignment = Alignment.Center) {
                 NIcon(when (st.mode) { Mode.LOOP_ALL -> NIcons.modeSeq; Mode.LOOP_ONE -> NIcons.modeOne; Mode.SHUFFLE -> NIcons.modeShuffle }, 22.dp)
             }
+            Spacer(Modifier.width(6.dp))
+            SleepBtn()
             Spacer(Modifier.weight(1f))
             Box(Modifier.size(44.dp).press(haptic = true) { trackActions(nav, t) }, contentAlignment = Alignment.Center) { NIcon(NIcons.more, 22.dp) }
             Spacer(Modifier.width(6.dp))

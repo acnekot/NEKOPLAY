@@ -4,6 +4,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.*
@@ -154,25 +156,59 @@ class BgDraft {
 }
 
 /** 方形滑块条（BenchLab 风格） */
+/**
+ * 设置里的滑条：手指要按住约 0.3 秒才开始拖（防止滑动页面时误触），鼠标按下立刻生效；
+ * 激活时轻震一下、线变粗、方块放大，进度用 150ms 匀速追上手指（和播放进度条一样的拖尾）。
+ */
 @Composable fun NSlider(value: Float, range: ClosedFloatingPointRange<Float>, onDone: () -> Unit = {}, onChange: (Float) -> Unit) {
     val p = c
-    val f = ((value - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
+    val span = range.endInclusive - range.start
+    val f = ((value - range.start) / span).coerceIn(0f, 1f)
+    var active by remember { mutableStateOf(false) }
+    var hold by remember { mutableStateOf(false) }        // 正在按住等待激活
+    val lin = androidx.compose.animation.core.LinearEasing
+    val fill by androidx.compose.animation.core.animateFloatAsState(f, androidx.compose.animation.core.tween(150, easing = lin), label = "f")
+    val th by androidx.compose.animation.core.animateFloatAsState(if (active) 1f else if (hold) .8f else .6f, androidx.compose.animation.core.tween(150, easing = lin), label = "t")
+    val hh by androidx.compose.animation.core.animateFloatAsState(if (active) 6f else 4f, androidx.compose.animation.core.tween(150, easing = lin), label = "h")
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val cb by rememberUpdatedState(onChange); val done by rememberUpdatedState(onDone)
     Box(Modifier.fillMaxWidth().height(32.dp).pointerInput(range) {
-        awaitPointerEventScope {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val mouse = down.type == androidx.compose.ui.input.pointer.PointerType.Mouse
+            var ok = mouse
+            if (!mouse) {
+                hold = true
+                // 0.3 秒内松手或者明显移动 = 不是要拖滑条（交给页面滚动）
+                val r = withTimeoutOrNull(300) {
+                    while (true) {
+                        val e = awaitPointerEvent()
+                        val ch = e.changes.firstOrNull { it.id == down.id } ?: return@withTimeoutOrNull false
+                        if (!ch.pressed) return@withTimeoutOrNull false
+                        if ((ch.position - down.position).getDistance() > viewConfiguration.touchSlop) return@withTimeoutOrNull false
+                    }
+                    @Suppress("UNREACHABLE_CODE") false
+                }
+                hold = false
+                ok = r == null
+                if (ok) haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            }
+            if (!ok) return@awaitEachGesture
+            active = true
+            cb(range.start + (down.position.x / size.width).coerceIn(0f, 1f) * span); down.consume()
             while (true) {
                 val e = awaitPointerEvent()
-                val ch = e.changes.firstOrNull() ?: continue
-                if (ch.pressed) {
-                    val x = (ch.position.x / size.width).coerceIn(0f, 1f)
-                    onChange(range.start + x * (range.endInclusive - range.start)); ch.consume()
-                } else if (ch.previousPressed) onDone()
+                val ch = e.changes.firstOrNull { it.id == down.id } ?: break
+                if (!ch.pressed) break
+                cb(range.start + (ch.position.x / size.width).coerceIn(0f, 1f) * span); ch.consume()
             }
+            active = false; done()
         }
     }.drawBehind {
-        val y = size.height / 2; val h = 4.dp.toPx(); val t = 14.dp.toPx()
+        val y = size.height / 2; val h = hh.dp.toPx(); val t = 14.dp.toPx() * th
         drawRect(p.l3, Offset(0f, y - h / 2), Size(size.width, h))
-        drawRect(p.p, Offset(0f, y - h / 2), Size(size.width * f, h))
-        drawRect(p.p, Offset((size.width * f - t / 2).coerceIn(0f, size.width - t), y - t / 2), Size(t, t))
+        drawRect(p.p, Offset(0f, y - h / 2), Size(size.width * fill, h))
+        drawRect(p.p, Offset((size.width * fill - t / 2).coerceIn(0f, size.width - t), y - t / 2), Size(t, t))
     })
 }
 

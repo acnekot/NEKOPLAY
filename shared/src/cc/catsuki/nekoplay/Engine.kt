@@ -39,13 +39,38 @@ object Engine {
     /** 歌词页可见时进度刷新加快到 50ms（高亮扫过更平滑），平时 250ms */
     @Volatile var fastPos = 0
     val isPlaying get() = audio.isPlaying
-    fun pause() = audio.pause()
+    fun pause() = fadePause()
+
+    // ---------- 淡入淡出 ----------
+    /** 暂停 / 播放 / 切歌时音量渐变的时长（毫秒，0 = 关闭） */
+    var fadeMs by androidx.compose.runtime.mutableIntStateOf(300)
+    private var fadeJob: Job? = null
+    private var rampOnPlay = false
+    private suspend fun ramp(from: Float, to: Float, ms: Int) {
+        val steps = (ms / 16).coerceAtLeast(1)
+        for (i in 1..steps) { audio.volume = Vol.v * (from + (to - from) * i / steps); delay(16) }
+    }
+    fun fadePause() {
+        fadeJob?.cancel()
+        if (fadeMs == 0 || !audio.isPlaying) { audio.pause(); return }
+        fadeJob = scope.launch { ramp(1f, 0f, fadeMs); audio.pause(); audio.volume = Vol.v }
+    }
+    fun fadePlay() {
+        fadeJob?.cancel()
+        if (fadeMs == 0) { audio.volume = Vol.v; audio.play(); return }
+        audio.volume = 0f; audio.play()
+        fadeJob = scope.launch { ramp(0f, 1f, fadeMs) }
+    }
 
     fun init() {
         prefs = Plat.prefs("ui")
         quality = prefs!!.getInt("q2", 3)
+        fadeMs = prefs!!.getInt("fade", 300)
         audio.listener = object : Audio.Listener {
-            override fun onPlaying(p: Boolean) { state.value = state.value.copy(playing = p) }
+            override fun onPlaying(p: Boolean) {
+                state.value = state.value.copy(playing = p)
+                if (p && rampOnPlay) { rampOnPlay = false; fadeJob?.cancel(); fadeJob = scope.launch { ramp(0f, 1f, fadeMs) } }
+            }
             override fun onBuffering(b: Boolean) { state.value = state.value.copy(loading = b) }
             override fun onEnded() = this@Engine.onEnded()
             override fun onError(msg: String) { error.value = "播放失败：$msg"; next() }
@@ -82,6 +107,8 @@ object Engine {
         position.value = startMs
         Store.addRecent(t)
         loadJob?.cancel()
+        // 切歌淡入：先静音，真正出声时再渐变上来
+        if (autoplay && fadeMs > 0) { fadeJob?.cancel(); audio.volume = 0f; rampOnPlay = true } else if (!rampOnPlay) audio.volume = Vol.v
         loadJob = scope.launch {
             try {
                 // 已经完整缓存过（同档位或更高档位）：直接读本地，不联网
@@ -108,7 +135,7 @@ object Engine {
         }
     }
 
-    fun toggle() { if (audio.idle) load(state.value.index, true) else if (audio.isPlaying) audio.pause() else audio.play() }
+    fun toggle() { if (audio.idle) load(state.value.index, true) else if (audio.isPlaying) fadePause() else fadePlay() }
     fun seek(ms: Long) { audio.seek(ms); position.value = ms }
 
     // ---------- 私人 FM ----------
@@ -160,7 +187,11 @@ object Engine {
         load((s.index - 1 + s.queue.size) % s.queue.size, true)
     }
 
-    private fun onEnded() { if (state.value.mode == Mode.LOOP_ONE) { seek(0); audio.play() } else next() }
+    private fun onEnded() {
+        // 定时关闭：停在这里，顺手把下一首准备好（不自动播）
+        if (Sleep.stopAtEnd()) { val s = state.value; if (s.mode != Mode.LOOP_ONE && s.queue.size > 1 && !s.fm) load((s.index + 1) % s.queue.size, false) else seek(0); return }
+        if (state.value.mode == Mode.LOOP_ONE) { seek(0); audio.play() } else next()
+    }
 
     fun cycleMode() { state.value = state.value.copy(mode = Mode.entries[(state.value.mode.ordinal + 1) % 3]) }
 
