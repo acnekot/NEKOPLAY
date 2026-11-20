@@ -174,7 +174,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     }
 }
 
-@Composable private fun Controls(t: Track, st: PlayState) {
+@Composable private fun Controls(t: Track, st: PlayState, btns: Boolean = true) {
     val nav = LocalNav.current
     val liked by Store.likedIds.collectAsState()
     var scrub by remember { mutableStateOf<Float?>(null) }
@@ -192,28 +192,31 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             Spacer(Modifier.width(26.dp))
             SquareBtn(NIcons.next) { Engine.next() }
         }
-        Spacer(Modifier.height(10.dp))
-        // 按钮可以在设置里开关：左边放模式 / 定时，右边放下载 / 更多 / 评论 / 队列
-        val b = UiPref.btns
-        Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (btns) { Spacer(Modifier.height(10.dp)); Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) { PlayerBtnItems(t, st) { Spacer(Modifier.weight(1f)) } } }
+    }
+}
+
+/** 播放页功能按钮（模式 / 定时 / 下载 / 更多 / 评论 / 队列），手机横排，PC 竖排放在左边 */
+@Composable private fun PlayerBtnItems(t: Track, st: PlayState, fill: @Composable () -> Unit) {
+    val nav = LocalNav.current
+    // 按钮可以在设置里开关：左边放模式 / 定时，右边放下载 / 更多 / 评论 / 队列
+    val b = UiPref.btns
             if ("mode" in b) { Box(Modifier.size(44.dp).press(haptic = true) { Engine.cycleMode(); nav.toast = listOf("列表循环", "单曲循环", "随机播放")[Engine.state.value.mode.ordinal] }, contentAlignment = Alignment.Center) {
                 NIcon(when (st.mode) { Mode.LOOP_ALL -> NIcons.modeSeq; Mode.LOOP_ONE -> NIcons.modeOne; Mode.SHUFFLE -> NIcons.modeShuffle }, 22.dp)
-            }; Spacer(Modifier.width(6.dp)) }
+            }; Spacer(Modifier.size(6.dp)) }
             if ("sleep" in b) SleepBtn()
-            Spacer(Modifier.weight(1f))
+            fill()
             if ("dl" in b) {
                 val dls by Downloads.items.collectAsState(); val act by Downloads.active.collectAsState()
                 val has = dls.any { it.track.id == t.id }; val ing = t.id in act
                 Box(Modifier.size(44.dp).press(haptic = true) { if (has) nav.toast = "已经下载过了" else if (!ing) downloadSheet(nav, listOf(t)) }, contentAlignment = Alignment.Center) {
                     if (ing) T(act[t.id]!!.let { if (it < 0) "…" else "%.0f".format(it * 100) }, 12, c.p, 700, mono = true) else NIcon(NIcons.download, 22.dp, if (has) c.p else c.k)
                 }
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.size(6.dp))
             }
-            if ("more" in b) { Box(Modifier.size(44.dp).press(haptic = true) { trackActions(nav, t) }, contentAlignment = Alignment.Center) { NIcon(NIcons.more, 22.dp) }; Spacer(Modifier.width(6.dp)) }
-            if ("comment" in b) { Box(Modifier.size(44.dp).press(haptic = true) { nav.comments = t }, contentAlignment = Alignment.Center) { NIcon(NIcons.comment, 22.dp) }; Spacer(Modifier.width(6.dp)) }
+            if ("more" in b) { Box(Modifier.size(44.dp).press(haptic = true) { trackActions(nav, t) }, contentAlignment = Alignment.Center) { NIcon(NIcons.more, 22.dp) }; Spacer(Modifier.size(6.dp)) }
+            if ("comment" in b) { Box(Modifier.size(44.dp).press(haptic = true) { nav.comments = t }, contentAlignment = Alignment.Center) { NIcon(NIcons.comment, 22.dp) }; Spacer(Modifier.size(6.dp)) }
             if ("queue" in b) Box(Modifier.size(44.dp).press(haptic = true) { nav.queue = true }, contentAlignment = Alignment.Center) { NIcon(NIcons.queue, 22.dp) }
-        }
-    }
 }
 
 /** 缓冲超过 0.4 秒才显示加载点 */
@@ -666,10 +669,14 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Box(Modifier.fillMaxWidth()) { Controls(t, st) }
+                Box(Modifier.fillMaxWidth()) { Controls(t, st, btns = false) }
             }
             // 收起播放页（也可以按 Esc）
             Box(Modifier.align(Alignment.TopStart).padding(8.dp).size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp, p.s) }
+            // 功能按钮竖排在左边，和收起按钮对齐，往下让出一段
+            Column(Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                PlayerBtnItems(t, st) { Spacer(Modifier.height(18.dp)) }
+            }
         }
         // 右栏：歌词；打开评论时换成评论（从右边滑进来）
         Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
