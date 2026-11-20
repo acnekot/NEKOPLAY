@@ -180,7 +180,7 @@ import androidx.compose.ui.unit.dp
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), ls, contentPadding = PaddingValues(start = 18.dp, end = 10.dp, bottom = 12.dp)) {
             itemsIndexed(st.queue, key = { i, x -> "$i${x.id}" }) { i, x ->
-                TrackRow(x, i == st.index, null, onLong = { trackActions(nav, x) }) { Engine.playAt(i) }
+                TrackRow(x, i == st.index, null) { Engine.playAt(i) }
             }
         }
     }

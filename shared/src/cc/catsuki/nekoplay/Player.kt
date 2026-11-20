@@ -78,6 +78,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     val nav = LocalNav.current
     val drag = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    val copy = rememberCopy()
     AnimatedVisibility(nav.player, enter = slideInVertically(sp) { it }, exit = slideOutVertically(sp) { it }) {
         LaunchedEffect(Unit) { drag.snapTo(0f) }
         val st by Engine.state.collectAsState()
@@ -143,12 +144,12 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                         val liked by Store.likedIds.collectAsState()
                         val on = t.id in liked
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            T(t.title, 24, w = 800, lh = 1.25f, modifier = Modifier.weight(1f))
+                            T(t.title, 24, w = 800, lh = 1.25f, lines = 2, modifier = Modifier.weight(1f).press(onLong = { copy(t.title, "歌名") }) {})
                             Box(Modifier.size(44.dp).offset(x = 10.dp).press(.85f, true) { Store.toggleLike(t) { nav.toast = it } }, contentAlignment = Alignment.Center) {
                                 NIcon(if (on) NIcons.heart else NIcons.heartLine, 24.dp, if (on) p.p else p.k)
                             }
                         }
-                        T(t.artist, 15, p.s, lh = 1.3f, modifier = Modifier.press { openArtists(nav, t) })
+                        T(t.artist, 15, p.s, lh = 1.3f, lines = 2, modifier = Modifier.press(onLong = { copy(t.artist, "歌手") }) { openArtists(nav, t) })
                         // 点音质这一行可以换音质
                         T(if (st.format.isEmpty()) Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)] + " ▾"
                           else "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}${if (st.cached) " · 已缓存" else ""} ▾",
@@ -156,7 +157,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     }
                     if (lt > .75f) Column(Modifier.width(with(d) { (w - cl - cs - 30 * dp).coerceAtLeast(40 * dp).toDp() }).graphicsLayer {
                         translationX = cl + cs + 12 * dp; translationY = ct + (cs - 38 * dp) / 2; alpha = ((lt - .75f) / .25f).coerceIn(0f, 1f)
-                    }) { T(t.title, 16, w = 800, lh = 1.25f); T(t.artist, 13, p.s, lh = 1.3f, modifier = Modifier.press { openArtists(nav, t) }) }
+                    }) { T(t.title, 16, w = 800, lh = 1.25f, lines = 2, modifier = Modifier.press(onLong = { copy(t.title, "歌名") }) {}); T(t.artist, 13, p.s, lh = 1.3f, modifier = Modifier.press(onLong = { copy(t.artist, "歌手") }) { openArtists(nav, t) }) }
                     // 控制组（两页位置完全一致）
                     Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(with(d) { ctrlH.toDp() })) { Controls(t, st) }
                 }
@@ -246,6 +247,7 @@ object LyricCache {
  */
 @Composable private fun LyricsFlow(l: List<LyricLine>, cur: Int, showTr: Boolean, pos: Long) {
     val p = c
+    val copy = rememberCopy()
     val tops = remember(l) { FloatArray(l.size) { -1f } }
     var measured by remember(l) { mutableStateOf(0) }
     val offs = remember(l) { List(l.size) { Animatable(0f) } }
@@ -292,7 +294,7 @@ object LyricCache {
                     .onPlaced { val y = it.positionInParent().y; if (tops[i] != y) { tops[i] = y; measured++ } }
                     .graphicsLayer { translationY = offs[i].value + manual.value; alpha = a }
                     .then(if (UiPref.lyricBlur && !browsing && dist in 2..8 && Plat.impl.liveBlur) Modifier.blur(1.2.dp) else Modifier)
-                    .press { Engine.seek(line.t); backJob?.cancel(); browsing = false; scope.launch { manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessMediumLow))) } }
+                    .press(onLong = { if (line.text.isNotEmpty()) copy(if (showTr && line.tr != null) line.text + "\n" + line.tr else line.text, "歌词") }) { Engine.seek(line.t); backJob?.cancel(); browsing = false; scope.launch { manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessMediumLow))) } }
                     .padding(bottom = with(LocalDensity.current) { gap.toDp() })) {
                     if (line.text.isEmpty()) {
                         val next = l.getOrNull(i + 1)?.t ?: (line.t + 5000)
@@ -333,7 +335,7 @@ object LyricCache {
                 LazyColumn(Modifier.fillMaxSize(), ls, contentPadding = PaddingValues(start = 18.dp, end = 6.dp, bottom = 12.dp)) {
                     itemsIndexed(st.queue, key = { i, t -> "$i${t.id}" }) { i, t ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.weight(1f)) { TrackRow(t, i == st.index, st.format.uppercase().takeIf { i == st.index && it.isNotEmpty() }, onLong = { trackActions(nav, t) }) { Engine.playAt(i) } }
+                            Box(Modifier.weight(1f)) { TrackRow(t, i == st.index, st.format.uppercase().takeIf { i == st.index && it.isNotEmpty() }) { Engine.playAt(i) } }
                             Box(Modifier.size(44.dp).press { Engine.removeAt(i) }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp, p.s) }
                         }
                     }
@@ -541,6 +543,7 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
 
 /** 宽屏播放页：左栏封面、歌名、控制（限制宽度居中），右栏歌词 */
 @Composable private fun WidePlayerBody(t: Track, st: PlayState, showTr: Boolean, toggleTr: () -> Unit) {
+    val copy = rememberCopy()
     val nav = LocalNav.current
     val p = c
     val liked by Store.likedIds.collectAsState()
@@ -554,8 +557,8 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
                 Spacer(Modifier.height(22.dp))
                 Row(Modifier.width(cover), verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f)) {
-                        T(t.title, Fs.PAGE, w = 800, lh = 1.25f, lines = 2)
-                        T(t.artist, 15, p.s, lh = 1.3f, modifier = Modifier.press { openArtists(nav, t) })
+                        T(t.title, Fs.PAGE, w = 800, lh = 1.25f, lines = 2, modifier = Modifier.press(onLong = { copy(t.title, "歌名") }) {})
+                        T(t.artist, 15, p.s, lh = 1.3f, lines = 2, modifier = Modifier.press(onLong = { copy(t.artist, "歌手") }) { openArtists(nav, t) })
                         T(if (st.format.isEmpty()) Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)] + " ▾"
                           else "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}${if (st.cached) " · 已缓存" else ""} ▾",
                             11, p.s, mono = true, ls = .06f, modifier = Modifier.padding(top = 6.dp).press { qualitySheet(nav) })

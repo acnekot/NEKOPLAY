@@ -138,6 +138,13 @@ object Typo {
 }
 
 /** 按下：变淡到 0.7，按钮再缩到 0.96；松手弹回（和 Flutter 版 Tap 一致） */
+/** 长按复制：返回一个函数，传要复制的文字和提示里的名字 */
+@Composable fun rememberCopy(): (String, String) -> Unit {
+    @Suppress("DEPRECATION") val cb = androidx.compose.ui.platform.LocalClipboardManager.current
+    val nav = LocalNav.current
+    return remember(cb, nav) { { text, what -> cb.setText(androidx.compose.ui.text.AnnotatedString(text)); nav.toast = "已复制$what" } }
+}
+
 @Composable fun Modifier.press(scale: Float = 1f, haptic: Boolean = false, onLong: (() -> Unit)? = null, onClick: () -> Unit): Modifier {
     val src = remember { MutableInteractionSource() }
     val down by src.collectIsPressedAsState()
