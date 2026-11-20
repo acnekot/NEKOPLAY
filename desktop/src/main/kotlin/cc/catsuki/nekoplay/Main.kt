@@ -35,6 +35,8 @@ import okio.Path.Companion.toOkioPath
 
 fun main() {
     Plat.impl = DesktopPlat()
+    // 渲染方式：默认软件渲染（实测 Windows 上比 Direct3D 少约 170MB 私有内存）；设置里可以换回 GPU，重启生效
+    if (Plat.prefs("ui").getString("render", "soft") == "soft" && System.getProperty("skiko.renderApi") == null) System.setProperty("skiko.renderApi", "SOFTWARE_FAST")
     Boot.init()
     Store.refreshAll()
     Perf.start()
@@ -47,7 +49,7 @@ fun main() {
                 .header("Referer", "https://music.163.com/").build() else r)
         }.build()
         ImageLoader.Builder(ctx)
-            .memoryCache { MemoryCache.Builder().maxSizeBytes((if (UiPref.lowMem) 12L else 40L) * 1024 * 1024).build() }
+            .memoryCache { MemoryCache.Builder().maxSizeBytes((if (UiPref.lowMem) 12L else 24L) * 1024 * 1024).build() }
             .diskCache { DiskCache.Builder().directory(Plat.impl.cacheDir.resolve("img").toOkioPath()).maxSizeBytes(300L * 1024 * 1024).build() }
             .components { add(OkHttpNetworkFetcherFactory(callFactory = { client })) }
             .build()
@@ -72,7 +74,7 @@ fun main() {
         val winRef = remember { arrayOfNulls<java.awt.Window>(1) }
         val show = { visible = true; state.isMinimized = false; winRef[0]?.toFront(); Unit }
         if (UiPref.tray && trayOk) NekoTray(st.playing, st.current?.let { "${it.title} - ${it.artist}" } ?: "NEKOPLAY", show, quit)
-        val close = { if (UiPref.tray && trayOk) visible = false else quit() }
+        val close = { if (UiPref.tray && trayOk) { visible = false; Thread { Thread.sleep(1500); System.gc(); WinMem.trim() }.start() } else quit() }
         if (DeskLyric.on && Features.on("desk")) DeskLyricWindow()
         // 无边框窗口：标题栏、最小化 / 最大化 / 关闭按钮和拖边改大小都自己画
         Window(onCloseRequest = close, state = state, visible = visible, title = "NEKOPLAY", icon = appIcon, undecorated = true,
@@ -92,6 +94,8 @@ fun main() {
             // 最小化时释放图片内存缓存并回收一次，把内存还给系统
             androidx.compose.runtime.LaunchedEffect(state.isMinimized) {
                 if (state.isMinimized && UiPref.lowMem) { SingletonImageLoader.get(coil3.PlatformContext.INSTANCE).memoryCache?.clear(); System.gc() }
+                // 最小化后把暂时用不到的内存页还给系统（任务管理器里的数字会明显降下来，切回来时按需再读回）
+                if (state.isMinimized) { kotlinx.coroutines.delay(1500); WinMem.trim() }
             }
             NekoTheme {
                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
