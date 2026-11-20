@@ -39,7 +39,7 @@ data class User(val uid: String, val name: String, val avatar: String?, val bg: 
 
 data class Playlist(val id: String, val name: String, val count: Int, val cover: String?, val liked: Boolean = false, val mine: Boolean = true, val desc: String = "")
 data class Profile(val uid: String, val name: String, val avatar: String)
-data class Comment(val id: Long, val user: String, val uid: String, val avatar: String?, val content: String, val liked: Int, val time: Long, val reply: String?)
+data class Comment(val id: Long, val user: String, val uid: String, val avatar: String?, val content: String, val liked: Int, val time: Long, val reply: String?, val replies: Int = 0, val likedByMe: Boolean = false)
 data class Mv(val id: String, val name: String, val cover: String?, val artist: String, val durationMs: Long, val plays: Long)
 data class Radio(val id: String, val name: String, val pic: String?, val desc: String, val count: Int)
 data class LyricData(val lrc: String, val tr: String?, val yrc: String?)
@@ -267,15 +267,33 @@ object Ncm {
 
     /** 歌曲评论：hot=true 热门，false 最新 → (评论, 总数) */
     suspend fun comments(id: String, hot: Boolean, offset: Int, before: Long = 0): Pair<List<Comment>, Int> {
+        // 热门用新版接口：带楼层回复数（cursor = normalHot#偏移）；最新还用老接口（按时间排）
+        if (hot) runCatching {
+            val d = api("/weapi/v2/resource/comments", JSONObject().put("threadId", "R_SO_4_$id").put("pageNo", offset / 20 + 1).put("pageSize", 20)
+                .put("cursor", "normalHot#$offset").put("sortType", 2).put("showInner", true)).optJSONObject("data")
+            val a = d?.optJSONArray("comments")
+            if (a != null) return (0 until a.length()).map { commentOf(a.getJSONObject(it)) } to d.optInt("totalCount")
+        }
         val path = if (hot) "/weapi/v1/resource/hotcomments/R_SO_4_$id" else "/weapi/v1/resource/comments/R_SO_4_$id"
         val j = api(path, JSONObject().put("rid", id).put("limit", 20).put("offset", offset).put("beforeTime", before))
         val a = (if (hot) j.optJSONArray("hotComments") else j.optJSONArray("comments")) ?: JSONArray()
-        return (0 until a.length()).map {
-            val c = a.getJSONObject(it); val u = c.optJSONObject("user") ?: JSONObject()
-            val r = c.optJSONArray("beReplied")?.optJSONObject(0)
-            Comment(c.optLong("commentId"), u.optString("nickname"), u.opt("userId")?.toString() ?: "", pic(u.optString("avatarUrl")), c.optString("content"), c.optInt("likedCount"), c.optLong("time"),
-                r?.let { x -> "@${x.optJSONObject("user")?.optString("nickname") ?: ""}：${x.optString("content")}" })
-        } to j.optInt("total")
+        return (0 until a.length()).map { commentOf(a.getJSONObject(it)) } to j.optInt("total")
+    }
+    private fun commentOf(c: JSONObject): Comment {
+        val u = c.optJSONObject("user") ?: JSONObject()
+        val r = c.optJSONArray("beReplied")?.optJSONObject(0)
+        return Comment(c.optLong("commentId"), u.optString("nickname"), u.opt("userId")?.toString() ?: "", pic(u.optString("avatarUrl")), c.optString("content"), c.optInt("likedCount"), c.optLong("time"),
+            r?.let { x -> "@${x.optJSONObject("user")?.optString("nickname") ?: ""}：${x.optString("content")}" },
+            c.optJSONObject("showFloorComment")?.optInt("replyCount") ?: c.optInt("replyCount"), c.optBoolean("liked"))
+    }
+
+    /** 楼层回复：某条评论下面的回复 → (回复, 下一页游标，-1 = 没有更多) */
+    suspend fun commentFloor(songId: String, parent: Long, cursor: Long = -1): Pair<List<Comment>, Long> {
+        val j = api("/weapi/resource/comment/floor/get", JSONObject().put("parentCommentId", parent).put("threadId", "R_SO_4_$songId").put("time", cursor).put("limit", 20))
+        val d = j.optJSONObject("data") ?: JSONObject()
+        val a = d.optJSONArray("comments") ?: JSONArray()
+        val list = (0 until a.length()).map { commentOf(a.getJSONObject(it)) }
+        return list to if (d.optBoolean("hasMore")) d.optLong("time", list.lastOrNull()?.time ?: -1) else -1
     }
 
     suspend fun simiSongs(id: String): List<Track> {

@@ -124,7 +124,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     val coverDp = with(d) { coverNow.toDp() }
                     // 歌词列
                     if (lt > .7f) Box(Modifier.fillMaxWidth().height(with(d) { (free - 68 * dp).coerceAtLeast(0f).toDp() }).offset(y = 68.dp)
-                        .graphicsLayer { alpha = ((lt - .7f) / .3f).coerceIn(0f, 1f).let { it * it } }) { Lyrics(t, showTr) }
+                        .graphicsLayer { alpha = ((lt - .7f) / .3f).coerceIn(0f, 1f).let { it * it } }) { Lyrics(t, showTr) { nav.lyrics = false } }
                     // 封面：始终按大尺寸解码，只做位移和缩放
                     Box(Modifier.graphicsLayer {
                         transformOrigin = TransformOrigin(0f, 0f); translationX = cl; translationY = ct; scaleX = cs / coverNow; scaleY = cs / coverNow
@@ -227,7 +227,7 @@ object LyricCache {
     }
 }
 
-@Composable fun Lyrics(t: Track, showTr: Boolean) {
+@Composable fun Lyrics(t: Track, showTr: Boolean, onBlank: (() -> Unit)? = null) {
     // 按歌重建状态：缓存里有就直接显示，没有才去拉
     var lines by remember(t.id) { mutableStateOf(LyricCache.peek(t.id)) }
     LaunchedEffect(t.id) { if (lines == null) lines = try { LyricCache.get(t.id) } catch (e: Exception) { emptyList() } }
@@ -240,14 +240,14 @@ object LyricCache {
         return
     }
     val cur = Lrc.indexAt(l, pos)
-    LyricsFlow(l, cur, showTr, pos)
+    LyricsFlow(l, cur, showTr, pos, onBlank)
 }
 
 /**
  * 方案 B「大字流动」：大号粗体左对齐，当前句全亮、其它按距离渐淡（远处轻微模糊）；
  * 换句时每一行各自用弹簧滚到新位置，从上往下错开约 35ms，形成「流动」感。
  */
-@Composable private fun LyricsFlow(l: List<LyricLine>, cur: Int, showTr: Boolean, pos: Long) {
+@Composable private fun LyricsFlow(l: List<LyricLine>, cur: Int, showTr: Boolean, pos: Long, onBlank: (() -> Unit)? = null) {
     val p = c
     val copy = rememberCopy()
     val tops = remember(l) { FloatArray(l.size) { -1f } }
@@ -285,7 +285,7 @@ object LyricCache {
         backJob = scope.launch { kotlinx.coroutines.delay(3000); browsing = false; manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessLow))) }
     }
     val drag = androidx.compose.foundation.gestures.rememberDraggableState { dy -> scope.launch { manual.snapTo(manual.value + dy) } }
-    Box(Modifier.fillMaxSize().clipToBounds().draggable(drag, androidx.compose.foundation.gestures.Orientation.Vertical,
+    Box(Modifier.fillMaxSize().clipToBounds().then(if (onBlank == null) Modifier else Modifier.pointerInput(onBlank) { detectTapGestures { onBlank() } }).draggable(drag, androidx.compose.foundation.gestures.Orientation.Vertical,
         onDragStarted = { backJob?.cancel(); browsing = true; bounds(); manual.stop() },
         onDragStopped = { v -> scope.launch { manual.animateDecay(v, androidx.compose.animation.core.exponentialDecay(.6f)) }; scheduleBack() })) {
         Column(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).padding(start = 22.dp, end = 30.dp, top = 8.dp)) {
@@ -296,8 +296,11 @@ object LyricCache {
                     .onPlaced { val y = it.positionInParent().y; if (tops[i] != y) { tops[i] = y; measured++ } }
                     .graphicsLayer { translationY = offs[i].value + manual.value; alpha = a }
                     .then(if (UiPref.lyricBlur && !browsing && dist in 2..8 && Plat.impl.liveBlur) Modifier.blur(1.2.dp) else Modifier)
-                    .press(onLong = { if (line.text.isNotEmpty()) copy(if (showTr && line.tr != null) line.text + "\n" + line.tr else line.text, "歌词") }) { Engine.seek(line.t); backJob?.cancel(); browsing = false; scope.launch { manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessMediumLow))) } }
                     .padding(bottom = with(LocalDensity.current) { gap.toDp() })) {
+                  // 当前句放大两个字号（用缩放做，换句时有过渡）；点击区域只包住文字，旁边的空白点了回到封面
+                  val big by animateFloatAsState(if (i == cur && !browsing) (LyricPref.size + 2f) / LyricPref.size else 1f, spring(.8f, Anim.stiff(Spring.StiffnessLow)), label = "lz")
+                  Box(Modifier.graphicsLayer { scaleX = big; scaleY = big; transformOrigin = TransformOrigin(0f, .5f) }
+                    .press(onLong = { if (line.text.isNotEmpty()) copy(if (showTr && line.tr != null) line.text + "\n" + line.tr else line.text, "歌词") }) { Engine.seek(line.t); backJob?.cancel(); browsing = false; scope.launch { manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessMediumLow))) } }) {
                     if (line.text.isEmpty()) {
                         val next = l.getOrNull(i + 1)?.t ?: (line.t + 5000)
                         val prog = if (i == cur) ((pos - line.t).toFloat() / (next - line.t).coerceAtLeast(300)).coerceIn(0f, 1f) else 0f
@@ -308,6 +311,7 @@ object LyricCache {
                         if (UiPref.karaoke && i == cur && line.words != null && !browsing) KaraokeLine(line, pos) else T(line.text, LyricPref.size.toFloat(), p.k, 800, lines = 6, lh = 1.25f)
                         if (showTr && line.tr != null) T(line.tr, Fs.SUB, p.s, lines = 4, lh = 1.45f, modifier = Modifier.padding(top = 4.dp))
                     }
+                  }
                 }
             }
             Spacer(Modifier.height(400.dp))
@@ -458,9 +462,9 @@ object LyricCache {
         Box(Modifier.fillMaxWidth().height(1.dp).background(if (Look.flat) Color.Transparent else p.l2))
         LazyColumn(Modifier.fillMaxWidth().weight(1f), ls, contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 16.dp)) {
             itemsIndexed(list, key = { _, x -> x.id }) { _, x ->
-                CommentRow(x, t.id, onReply = { if (me == null) nav.toast = "登录后才能回复" else { replyTo = x; fr.requestFocus() } }) {
-                    fm.clearFocus(); nav.comments = null; nav.player = false; nav.push(Page.User(x.uid, x.user))
-                }
+                val replyOf: (Comment) -> Unit = { r -> if (me == null) nav.toast = "登录后才能回复" else { replyTo = r; fr.requestFocus() } }
+                val userOf: (Comment) -> Unit = { r -> fm.clearFocus(); nav.comments = null; nav.player = false; nav.push(Page.User(r.uid, r.user)) }
+                CommentRow(x, t.id, onReply = { replyOf(x) }, onUserOf = userOf, onReplyOf = replyOf) { userOf(x) }
             }
             item {
                 T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; list.isEmpty() -> "NO COMMENTS"; end -> "END"; else -> "" },
@@ -494,11 +498,11 @@ object LyricCache {
     }
 }
 
-@Composable private fun CommentRow(x: Comment, songId: String, onReply: () -> Unit, onUser: () -> Unit) {
+@Composable private fun CommentRow(x: Comment, songId: String, nested: Boolean = false, onReply: () -> Unit, onUserOf: (Comment) -> Unit = {}, onReplyOf: (Comment) -> Unit = {}, onUser: () -> Unit) {
     val p = c
     val nav = LocalNav.current
-    var liked by remember(x.id) { mutableStateOf(false) }
-    val n = x.liked + if (liked) 1 else 0
+    var liked by remember(x.id) { mutableStateOf(x.likedByMe) }
+    val n = x.liked + (if (liked) 1 else 0) - (if (x.likedByMe) 1 else 0)
     Row(Modifier.fillMaxWidth().drawBehind { if (!Look.flat) drawRect(p.l1, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }.padding(vertical = 14.dp)) {
         Box(Modifier.size(36.dp).background(p.ph).nb(1.dp, p.k).press(onClick = onUser)) {
             if (x.avatar != null) coil3.compose.AsyncImage(img(x.avatar, 96), null, Modifier.matchParentSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
@@ -507,11 +511,15 @@ object LyricCache {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 T(x.user, 13, p.s, 600, modifier = Modifier.weight(1f).press(onClick = onUser))
-                T("♥ " + likeNum(n), 12, if (liked) p.p else p.s, mono = true, modifier = Modifier.press {
+                Row(Modifier.press(.9f, true) {
                     if (!Ncm.loggedIn) { nav.toast = "登录后才能点赞"; return@press }
                     val on = !liked; liked = on
                     Store.run { try { Ncm.commentLike(songId, x.id, on) } catch (e: Exception) { liked = !on; nav.toast = "点赞失败：${e.message}" } }
-                }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
+                }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // 点了赞：红色实心；没点：空心
+                    NIcon(if (liked) NIcons.heart else NIcons.heartLine, 15.dp, if (liked) LikeRed else p.s)
+                    Spacer(Modifier.width(4.dp)); T(likeNum(n), 12, if (liked) LikeRed else p.s, mono = true)
+                }
             }
             Spacer(Modifier.height(4.dp))
             T(x.content, 15, p.k, lines = 40, lh = 1.5f, modifier = Modifier.press(onClick = onReply))
@@ -521,7 +529,40 @@ object LyricCache {
                 T(timeAgo(x.time), 11, p.s, mono = true, modifier = Modifier.weight(1f))
                 T("回复", 12, p.s, 600, modifier = Modifier.press(onClick = onReply).padding(vertical = 4.dp, horizontal = 2.dp))
             }
+            if (!nested && x.replies > 0) FloorReplies(x, songId, onUserOf, onReplyOf)
         }
+    }
+}
+
+val LikeRed = Color(0xFFE5484D)
+
+/** 楼层回复：点「N 条回复」展开，楼里的回复缩进显示，可以继续加载更多 */
+@Composable private fun FloorReplies(x: Comment, songId: String, onUserOf: (Comment) -> Unit, onReplyOf: (Comment) -> Unit) {
+    val p = c
+    val nav = LocalNav.current
+    var open by remember(x.id) { mutableStateOf(false) }
+    var list by remember(x.id) { mutableStateOf<List<Comment>>(emptyList()) }
+    var cursor by remember(x.id) { mutableStateOf(-1L) }
+    var busy by remember(x.id) { mutableStateOf(false) }
+    var loadedOnce by remember(x.id) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    fun more() {
+        if (busy) return; busy = true
+        scope.launch {
+            try { val (l, cur) = Ncm.commentFloor(songId, x.id, if (loadedOnce) cursor else -1); list = list + l.filter { a -> list.none { it.id == a.id } }; cursor = cur; loadedOnce = true }
+            catch (e: Exception) { nav.toast = "回复加载失败：${e.message}" }
+            busy = false
+        }
+    }
+    Column(Modifier.padding(top = 6.dp)) {
+        if (open) Column(Modifier.fillMaxWidth().drawBehind { drawRect(p.l2, size = Size(2.dp.toPx(), size.height)) }.padding(start = 10.dp)) {
+            list.forEach { r -> CommentRow(r, songId, nested = true, onReply = { onReplyOf(r) }, onUser = { onUserOf(r) }, onUserOf = onUserOf) }
+            if (busy) T("LOADING", 11, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 8.dp))
+            else if (cursor != -1L) T("加载更多回复", 12, p.s, 600, modifier = Modifier.press { more() }.padding(vertical = 8.dp))
+        }
+        T(if (open) "收起回复" else "${x.replies} 条回复 ›", 12, p.p, 600, modifier = Modifier.press {
+            open = !open; if (open && !loadedOnce) more()
+        }.padding(vertical = 4.dp))
     }
 }
 
