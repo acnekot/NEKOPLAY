@@ -227,7 +227,9 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     val prof by Store.profile.collectAsState()
     Column(modifier.width(190.dp).background(if (c.dark) c.pop else Color(0xFFF1F7F8)).nb(1.dp, c.k)) {
         T(prof?.name ?: "好奇猫a", 15, w = 800, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
-        listOfNotNull(prof?.let { "我的主页" to Page.User(it.uid, it.name) }, "设置" to Page.Settings, if (prof == null) "登录网易云" to Page.Login else null).forEach { (t, pg) ->
+        listOfNotNull(prof?.let { "我的主页" to Page.User(it.uid, it.name) }, "设置" to Page.Settings, if (prof == null) "登录网易云" to Page.Login else null,
+            if (Features.on("qq") && !Qqm.loggedIn) "登录 QQ 音乐" to Page.QqLogin else null,
+            if (Features.on("kugou") && !Kgm.loggedIn) "登录酷狗" to Page.KgLogin else null).forEach { (t, pg) ->
             Box(Modifier.fillMaxWidth().height(48.dp).press { nav.menu = false; nav.player = false; nav.push(pg) }.drawBehind { drawRect(Color(0x1F888888), size = androidx.compose.ui.geometry.Size(size.width, 1f)) }.padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart) { T(t, 15) }
         }

@@ -527,6 +527,23 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                 else LinkBtn("退出登录", 14, p.bad) { Store.logout(); nav.toast = "已退出网易云音乐" }
             }
         }
+        // 其它音源的账号：和网易云并列
+        if (Features.on("qq")) item {
+            val on by QqStore.loggedIn.collectAsState()
+            Row(Modifier.fillMaxWidth().padding(top = 14.dp).bottomLine().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { T("QQ 音乐", 16, w = 700); T(if (!on) "未登录 · QQ / 微信扫码，登录后可播放账号有权限的歌" else "已登录" + Qqm.nick.let { if (it.isNotEmpty()) " · $it" else "" }, 13, p.s, lh = 1.4f) }
+                if (!on) LinkBtn("登录", 14) { nav.push(Page.QqLogin) }
+                else LinkBtn("退出登录", 14, p.bad) { QqStore.logout(); nav.toast = "已退出 QQ 音乐" }
+            }
+        }
+        if (Features.on("kugou")) item {
+            val on by KgStore.loggedIn.collectAsState()
+            Row(Modifier.fillMaxWidth().padding(top = 14.dp).bottomLine().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { T("酷狗音乐", 16, w = 700); T(if (!on) "未登录 · 酷狗 App 扫码，登录后可播放账号有权限的歌" else "已登录" + Kgm.nick.let { if (it.isNotEmpty()) " · $it" else "" }, 13, p.s, lh = 1.4f) }
+                if (!on) LinkBtn("登录", 14) { nav.push(Page.KgLogin) }
+                else LinkBtn("退出登录", 14, p.bad) { KgStore.logout(); nav.toast = "已退出酷狗" }
+            }
+        }
         item { Group("SETTINGS") }
         item { SecRow("外观", "主题、深色、字体、取色、背景、动效") { nav.push(Page.SetSub("look")) } }
         item { SecRow("布局", "首页模块、播放页按钮的位置") { nav.push(Page.SetSub("layout")) } }
