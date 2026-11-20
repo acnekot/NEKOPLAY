@@ -24,6 +24,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.positionInParent
@@ -613,6 +615,10 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
     val nav = LocalNav.current
     val p = c
     val bx = BtnCtx(t, st, showTr, toggleTr)
+    // 歌词顶端和封面顶端对齐：记下封面在播放页里的纵向位置
+    var coverY by remember { mutableStateOf(-1f) }
+    var rightY by remember { mutableStateOf(0f) }
+    val dens = LocalDensity.current
     Row(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
             // 封面宽度 = 进度条宽度（控制区左右各留 22 的内边距，所以外框比封面宽 44）
@@ -623,7 +629,7 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
             val cover = (full * (UiPref.coverPct / 100f)).coerceAtLeast(160.dp)
             Row(Modifier.padding(start = 56.dp), verticalAlignment = Alignment.Bottom) {
             Column(Modifier.width(cover + 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Cover(t.cover, cover, t.title)
+                Box(Modifier.onGloballyPositioned { coverY = it.positionInRoot().y }) { Cover(t.cover, cover, t.title) }
                 Spacer(Modifier.height(22.dp))
                 Row(Modifier.width(cover), verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f)) {
@@ -648,13 +654,13 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
             Box(Modifier.align(Alignment.TopStart).padding(8.dp).size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp, p.s) }
         }
         // 右栏：歌词；打开评论时换成评论（从右边滑进来）
-        Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
+        Box(Modifier.weight(1f).fillMaxHeight().clipToBounds().onGloballyPositioned { rightY = it.positionInRoot().y }) {
             AnimatedContent(nav.comments, Modifier.fillMaxSize(), transitionSpec = {
                 if (targetState != null) (slideInHorizontally(sp) { it / 3 } + fadeIn(tween(200))) togetherWith fadeOut(tween(120))
                 else fadeIn(tween(200)) togetherWith (slideOutHorizontally(tween(200)) { it / 3 } + fadeOut(tween(160)))
             }, label = "right") { ct ->
                 if (ct != null) CommentsBody(ct) { nav.comments = null }
-                else Box(Modifier.fillMaxSize().padding(top = 24.dp, end = 24.dp)) { Lyrics(t, showTr) }
+                else Box(Modifier.fillMaxSize().padding(top = if (coverY < 0) 24.dp else with(dens) { (coverY - rightY).coerceAtLeast(0f).toDp() - 12.dp }.coerceAtLeast(0.dp), end = 24.dp)) { Lyrics(t, showTr) }
             }
         }
         // 第三栏：播放队列（看歌词的同时打开），从右边展开
