@@ -101,7 +101,7 @@ class BtnCtx(val t: Track, val st: PlayState, val showTr: Boolean, val toggleTr:
             }
         }
         "more" -> IconBtn(NIcons.more) { trackActions(nav, t) }
-        "comment" -> IconBtn(NIcons.comment) { nav.comments = t }
+        "comment" -> IconBtn(NIcons.comment) { nav.comments = if (nav.comments != null) null else t }  // 再点一次关掉
         "queue" -> IconBtn(NIcons.queue) { nav.queue = true }
         "card" -> IconBtn(NIcons.image) { nav.player = false; nav.push(Page.LyricCard(t)) }
         "offset" -> IconBtn(NIcons.shift) { offsetSheet(nav, t) }

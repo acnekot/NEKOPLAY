@@ -226,7 +226,7 @@ import androidx.compose.ui.unit.dp
         Row(Modifier.width(300.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             val on = t != null && t.id in liked
             BarBtn(if (on) NIcons.heart else NIcons.heartLine, on) { if (t != null) Store.toggleLike(t) { nav.toast = it } }
-            BarBtn(NIcons.comment, false) { if (t != null) nav.comments = t }
+            BarBtn(NIcons.comment, nav.comments != null) { if (t != null) nav.comments = if (nav.comments != null) null else t }
             if (Features.on("desk")) BarText("桌", DeskLyric.on) { DeskLyric.on = !DeskLyric.on; DeskLyric.save(); nav.toast = if (DeskLyric.on) "已打开桌面歌词" else "已关闭桌面歌词" }
             BarText("词", nav.side == 1) { nav.side = if (nav.side == 1) 0 else 1 }
             BarBtn(NIcons.queue, nav.side == 2) { nav.side = if (nav.side == 2) 0 else 2 }

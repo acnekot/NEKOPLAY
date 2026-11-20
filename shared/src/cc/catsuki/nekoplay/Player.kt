@@ -620,13 +620,16 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
     var rightY by remember { mutableStateOf(0f) }
     val dens = LocalDensity.current
     Row(Modifier.fillMaxSize()) {
-        BoxWithConstraints(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
+        // 开着队列时第三栏占走 360，左栏多分一点，封面不至于太小
+        BoxWithConstraints(Modifier.weight(if (nav.side == 2) 1.3f else 1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
             // 封面宽度 = 进度条宽度（控制区左右各留 22 的内边距，所以外框比封面宽 44）
             // 左边留 48 给收起按钮，右边是按钮竖栏（类似 Hydrogen）；封面大小在设置里按百分比调
             val sideKeys = PlayerLayout.keys(true, "side")
             val sideW = if (sideKeys.isEmpty()) 0.dp else 52.dp
-            val full = minOf(maxWidth - 44.dp - 56.dp - sideW - 16.dp, maxHeight - 290.dp, 560.dp)
-            val cover = (full * (UiPref.coverPct / 100f)).coerceAtLeast(160.dp)
+            // 百分比只按高度缩：开了队列 / 评论、左栏变窄时，封面先用满宽度，不会再被缩一遍变得很小
+            val byW = maxWidth - 44.dp - 56.dp - sideW - 16.dp
+            val byH = minOf(maxHeight - 290.dp, 560.dp) * (UiPref.coverPct / 100f)
+            val cover = minOf(byW, byH).coerceAtLeast(200.dp)
             Row(Modifier.padding(start = 56.dp), verticalAlignment = Alignment.Bottom) {
             Column(Modifier.width(cover + 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.onGloballyPositioned { coverY = it.positionInRoot().y }) { Cover(t.cover, cover, t.title) }
