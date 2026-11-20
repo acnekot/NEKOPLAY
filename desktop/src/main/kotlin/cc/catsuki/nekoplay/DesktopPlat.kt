@@ -237,6 +237,13 @@ private class MpvAudio : Audio {
             ?.substringAfter("] ")?.trim()?.take(160)
     }.getOrNull()
     @Volatile private var openedAt = 0L
+    /** libmpv 是否 ≥ 0.38（loadfile 带 index 参数的新写法） */
+    private val newLoadfile: Boolean by lazy {
+        val v = runCatching { str("mpv-version") }.getOrNull() ?: return@lazy true
+        val m = Regex("(\\d+)\\.(\\d+)").find(v) ?: return@lazy true
+        val (a, b) = m.destructured
+        a.toInt() > 0 || b.toInt() >= 38
+    }
     @Volatile private var failed = false
     /** 加载失败的原因（显示在错误提示里，方便排查） */
     private val loadErrors = ArrayList<String>()
@@ -321,7 +328,9 @@ private class MpvAudio : Audio {
         ended = false; opened = true; failed = false; openedAt = System.currentTimeMillis()
         lib.mpv_set_property_string(h, "pause", if (autoplay) "no" else "yes")
         val src = if (url.startsWith("file:")) File(java.net.URI(url)).absolutePath else url
-        cmd("loadfile", src, "replace", "-1", "start=${startMs / 1000.0}")
+        // mpv 0.38 起 loadfile 多了一个「插入位置」参数；Mac 自带的 libmpv 比较老，第三个参数就是选项
+        if (newLoadfile) cmd("loadfile", src, "replace", "-1", "start=${startMs / 1000.0}")
+        else cmd("loadfile", src, "replace", "start=${startMs / 1000.0}")
     }
     override fun queueNext(url: String?, cacheKey: String, meta: Track) {
         if (lib == null || h == null || url == null) return
