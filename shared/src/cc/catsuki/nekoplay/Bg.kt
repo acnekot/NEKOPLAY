@@ -202,7 +202,7 @@ class BgDraft {
             Column {
                 Tag("BACKGROUND"); Spacer(Modifier.height(4.dp))
                 T("自定义背景", Fs.HERO, w = 800, lh = 1.3f)
-                T(if (has) "先在预览里调好（可双指缩放、拖动），满意了再点「应用」" else "选一张图片作为全局背景", 13, p.s)
+                T(if (has) "先在预览里调好（可双指缩放、拖动），满意了再点「应用」" else "选一张图片作为全局背景", 13, p.s, lines = 2)
                 Spacer(Modifier.height(16.dp))
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Box(Modifier.fillMaxWidth(if (Screen.wide) .42f else .62f).aspectRatio(ratio).clipToBounds().backdrop().pointerInput(has) {
@@ -214,12 +214,8 @@ class BgDraft {
                         }
                     }) {
                         BgLayer(draft = dr)
-                        Column(Modifier.padding(10.dp)) {
-                            T("NEKOPLAY", 13, w = 900); Spacer(Modifier.height(8.dp))
-                            Box(Modifier.size(48.dp).background(p.ph).nb(1.dp, p.k)); Spacer(Modifier.height(6.dp))
-                            T("歌曲标题", 12, w = 800); T("歌手名", 11, p.s)
-                        }
-                        if (!has) Box(Modifier.matchParentSize().press { pick() }, contentAlignment = Alignment.Center) { T("点击选择图片", 13, p.s, 700) }
+                        PreviewSkeleton(has)
+                        if (!has) Box(Modifier.matchParentSize().press { pick() }, contentAlignment = Alignment.Center) { Box(Modifier.background(p.k).padding(horizontal = 12.dp, vertical = 7.dp)) { T("点击选择图片", 13, p.page, 700) } }
                         Box(Modifier.matchParentSize().border(2.dp, p.k))
                         if (dr.changed) Box(Modifier.align(Alignment.TopEnd).padding(6.dp).background(p.p).padding(horizontal = 6.dp, vertical = 2.dp)) { T("预览中", 11, Color.White, 700) }
                     }
@@ -256,5 +252,63 @@ class BgDraft {
     Column(Modifier.fillMaxWidth().bottomLine().padding(vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) { T(label, 16, w = 600, modifier = Modifier.weight(1f)); T(value, 13, p.p, 600, mono = true) }
         NSlider(v, range, onChange = onChange)
+    }
+}
+
+/**
+ * 预览框里的「预载框架」：按真实首页的布局画一套骨架（顶栏、标签、推荐卡、歌曲行、底部播放条），
+ * 栏位用和真实界面一样的半透明底，内容块用淡色占位，这样能直接看出背景放上去后整体的样子。
+ */
+@Composable private fun PreviewSkeleton(has: Boolean) {
+    val p = c
+    val bar = if (has) p.bar.copy(alpha = UiPref.barAlpha) else p.bar
+    val blk = p.k.copy(alpha = .10f)   // 占位块
+    val txt = p.k.copy(alpha = .22f)   // 占位文字条
+    val line = if (Look.flat) Color.Transparent else p.k.copy(alpha = .35f)
+    @Composable fun Bar(w: Float, h: Dp = 6.dp, col: Color = txt) = Box(Modifier.fillMaxWidth(w).height(h).background(col))
+    Column(Modifier.fillMaxSize()) {
+        // 顶栏
+        Row(Modifier.fillMaxWidth().background(bar).drawBehind { drawRect(line, Offset(0f, size.height - 1f), Size(size.width, 1f)) }.padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+            T("NEKOPLAY", 10, w = 900, modifier = Modifier.weight(1f))
+            Box(Modifier.size(9.dp).border(1.dp, txt)); Spacer(Modifier.width(7.dp))
+            Box(Modifier.size(14.dp).background(blk))
+        }
+        Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp)) {
+            // 标签
+            Row(Modifier.padding(vertical = 7.dp)) {
+                Box(Modifier.width(26.dp).height(9.dp).background(p.p.copy(alpha = .85f))); Spacer(Modifier.width(5.dp))
+                repeat(3) { Box(Modifier.width(22.dp).height(9.dp).background(blk)); Spacer(Modifier.width(5.dp)) }
+            }
+            // 每日推荐卡
+            Box(Modifier.fillMaxWidth().aspectRatio(2.1f).background(blk).border(1.dp, line)) {
+                Column(Modifier.align(Alignment.BottomStart).padding(6.dp)) { Bar(.45f, 7.dp, p.k.copy(alpha = .4f)); Spacer(Modifier.height(4.dp)); Bar(.28f) }
+            }
+            Spacer(Modifier.height(7.dp))
+            // 两张小卡
+            Row {
+                repeat(2) { i ->
+                    Column(Modifier.weight(1f)) { Box(Modifier.fillMaxWidth().aspectRatio(1f).background(blk)); Spacer(Modifier.height(4.dp)); Bar(.7f); Spacer(Modifier.height(3.dp)); Bar(.4f, 5.dp) }
+                    if (i == 0) Spacer(Modifier.width(7.dp))
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            // 歌曲行
+            repeat(4) {
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(18.dp).background(blk)); Spacer(Modifier.width(6.dp))
+                    Column(Modifier.weight(1f)) { Bar(.62f); Spacer(Modifier.height(3.dp)); Bar(.36f, 5.dp) }
+                    Box(Modifier.width(14.dp).height(5.dp).background(txt))
+                }
+            }
+        }
+        // 底部播放条
+        Column(Modifier.fillMaxWidth().background(bar)) {
+            Row(Modifier.fillMaxWidth().height(2.dp)) { Box(Modifier.weight(.3f).fillMaxHeight().background(p.p)); Box(Modifier.weight(.7f).fillMaxHeight().background(txt)) }
+            Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(18.dp).background(blk)); Spacer(Modifier.width(6.dp))
+                Column(Modifier.weight(1f)) { Bar(.5f, 6.dp, p.k.copy(alpha = .4f)); Spacer(Modifier.height(3.dp)); Bar(.3f, 5.dp) }
+                Box(Modifier.size(8.dp).background(txt)); Spacer(Modifier.width(7.dp)); Box(Modifier.size(8.dp).background(txt))
+            }
+        }
     }
 }
