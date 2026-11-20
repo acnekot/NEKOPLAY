@@ -88,6 +88,20 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
     override fun pixels(img: ImageBitmap): IntArray { val b = img.asAndroidBitmap(); val px = IntArray(b.width * b.height); b.getPixels(px, 0, b.width, 0, 0, b.width, b.height); return px }
     override fun fromPixels(px: IntArray, w: Int, h: Int): ImageBitmap = android.graphics.Bitmap.createBitmap(px, w, h, android.graphics.Bitmap.Config.ARGB_8888).asImageBitmap()
     override fun scaled(img: ImageBitmap, w: Int, h: Int): ImageBitmap = android.graphics.Bitmap.createScaledBitmap(img.asAndroidBitmap(), w, h, true).asImageBitmap()
+    override fun savePicture(img: ImageBitmap, name: String): String {
+        val v = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "$name.png"); put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+            if (Build.VERSION.SDK_INT >= 29) put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/NEKOPLAY")
+        }
+        if (Build.VERSION.SDK_INT < 29) {
+            val dir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_PICTURES), "NEKOPLAY").apply { mkdirs() }
+            val f = File(dir, "$name.png"); f.outputStream().use { img.asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+            android.media.MediaScannerConnection.scanFile(ctx, arrayOf(f.path), null, null); return f.path
+        }
+        val uri = ctx.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v) ?: throw Exception("无法写入相册")
+        ctx.contentResolver.openOutputStream(uri)!!.use { img.asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        return "相册 / Pictures/NEKOPLAY"
+    }
     override fun saveJpeg(img: ImageBitmap, file: File) { file.outputStream().use { img.asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) } }
 
     @Composable override fun imagePicker(onPick: (ByteArray) -> Unit): () -> Unit {

@@ -33,7 +33,7 @@ object LyricNotify {
                     continue
                 }
                 val lines = LyricCache.peek(t.id) ?: runCatching { LyricCache.get(t.id) }.getOrNull() ?: continue
-                val line = DeskLyric.lineAt(lines, Engine.position.value)?.first ?: ""
+                val line = DeskLyric.lineAt(lines, Engine.position.value + LyricOffset.of(t.id))?.first ?: ""
                 if (line == last && t.id == lastTrack) continue
                 last = line; lastTrack = t.id
                 audio.setLyric(line.ifEmpty { null })

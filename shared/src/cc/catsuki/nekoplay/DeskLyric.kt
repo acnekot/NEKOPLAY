@@ -48,7 +48,8 @@ object DeskLyric {
     val p = c
     val st by Engine.state.collectAsState()
     val t = st.current
-    val pos by Engine.position.collectAsState()
+    val raw by Engine.position.collectAsState()
+    val pos = raw + (t?.let { LyricOffset.of(it.id) } ?: 0)
     DisposableEffect(Unit) { Engine.fastPos++; onDispose { Engine.fastPos-- } }
     var lines by remember(t?.id) { mutableStateOf(t?.let { LyricCache.peek(it.id) }) }
     LaunchedEffect(t?.id) { if (t != null && lines == null) lines = runCatching { LyricCache.get(t.id) }.getOrDefault(emptyList()) }
@@ -98,4 +99,21 @@ object DeskLyric {
         }
         if (sub.isNotEmpty()) BasicText(sub, style = main.copy(fontSize = (DeskLyric.size * .55f).sp, fontWeight = FontWeight(600), color = Color.White.copy(alpha = .85f)), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
     }
+}
+
+
+/** 歌词时间偏移：每首歌单独记（毫秒，正数 = 歌词提前出现） */
+object LyricOffset {
+    private val map = mutableStateMapOf<String, Long>()
+    private val k get() = Plat.prefs("lyricOffset")
+    fun of(id: String): Long = map[id] ?: k.getLong(id, 0L).also { if (it != 0L) map[id] = it }
+    fun set(id: String, ms: Long) { map[id] = ms; k.edit().apply { if (ms == 0L) remove(id) else putLong(id, ms) }.apply() }
+}
+
+fun offsetSheet(nav: Nav, t: Track) {
+    val cur = LyricOffset.of(t.id)
+    fun label(ms: Long) = (if (ms > 0) "提前 " else if (ms < 0) "推后 " else "") + if (ms == 0L) "不偏移" else "%.1f 秒".format(kotlin.math.abs(ms) / 1000f)
+    fun step(d: Long) = SheetItem((if (d > 0) "歌词提前 " else "歌词推后 ") + "%.1f 秒".format(kotlin.math.abs(d) / 1000f)) { LyricOffset.set(t.id, cur + d); offsetSheet(nav, t) }
+    nav.sheet = SheetSpec("歌词偏移 · ${label(cur)}", "歌词比歌慢就提前，比歌快就推后；每首歌单独记住", listOf(step(500), step(100), step(-100), step(-500)) +
+        (if (cur != 0L) listOf(SheetItem("重置", danger = true) { LyricOffset.set(t.id, 0); nav.toast = "已重置歌词偏移" }) else emptyList()))
 }

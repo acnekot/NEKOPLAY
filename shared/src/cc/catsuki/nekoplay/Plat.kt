@@ -98,6 +98,8 @@ interface PlatImpl {
     fun fromPixels(px: IntArray, w: Int, h: Int): ImageBitmap
     fun scaled(img: ImageBitmap, w: Int, h: Int): ImageBitmap
     fun saveJpeg(img: ImageBitmap, file: File)
+    /** 存一张 PNG 到相册 / 图片文件夹，返回给人看的位置 */
+    fun savePicture(img: ImageBitmap, name: String): String
     /** 下载歌曲存放的目录 */
     fun downloadDir(): File = File(filesDir, "downloads")
     /** 下载完通知系统媒体库（Android 让其它播放器也能看到） */

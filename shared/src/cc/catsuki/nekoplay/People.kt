@@ -47,6 +47,8 @@ fun trackActions(nav: Nav, t: Track, fromPl: String? = null) {
         if (Downloads.has(t.id)) add(SheetItem("删除下载", danger = true) { Downloads.delete(t.id); nav.toast = "已删除下载" })
         else add(SheetItem("下载…") { downloadSheet(nav, listOf(t)) })
         add(SheetItem("查看评论") { nav.comments = t })
+        add(SheetItem("歌词卡片") { nav.player = false; nav.push(Page.LyricCard(t)) })
+        if (Engine.state.value.current?.id == t.id) add(SheetItem("歌词偏移" + LyricOffset.of(t.id).let { if (it == 0L) "" else "（%+.1f 秒）".format(it / 1000f) }) { offsetSheet(nav, t) })
         add(SheetItem("效果器 / 均衡器") { nav.player = false; nav.push(Page.Effects) })
         add(SheetItem("相似歌曲") { nav.player = false; nav.push(Page.Detail("simi", t.id, "相似：${t.title}", t.cover)) })
         add(SheetItem("包含这首歌的歌单") { nav.player = false; nav.push(Page.Playlists("simi", t.id, "相关歌单")) })

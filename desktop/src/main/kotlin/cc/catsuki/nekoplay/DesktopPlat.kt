@@ -59,6 +59,12 @@ class DesktopPlat : PlatImpl {
         surf.canvas.drawImageRect(src, org.jetbrains.skia.Rect.makeWH(src.width.toFloat(), src.height.toFloat()), org.jetbrains.skia.Rect.makeWH(w.toFloat(), h.toFloat()), org.jetbrains.skia.SamplingMode.LINEAR, null, true)
         return surf.makeImageSnapshot().toComposeImageBitmap()
     }
+    override fun savePicture(img: ImageBitmap, name: String): String {
+        val dir = File(System.getProperty("user.home"), "Pictures/NEKOPLAY").apply { mkdirs() }
+        val f = File(dir, name.replace(Regex("[\\\\/:*?\"<>|]"), "_") + ".png")
+        val data = org.jetbrains.skia.Image.makeFromBitmap(img.asSkiaBitmap()).encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG) ?: throw Exception("编码失败")
+        f.writeBytes(data.bytes); return f.absolutePath
+    }
     override fun saveJpeg(img: ImageBitmap, file: File) {
         val data = org.jetbrains.skia.Image.makeFromBitmap(img.asSkiaBitmap()).encodeToData(org.jetbrains.skia.EncodedImageFormat.JPEG, 90) ?: return
         file.writeBytes(data.bytes)

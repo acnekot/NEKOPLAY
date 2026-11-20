@@ -248,7 +248,8 @@ object LyricCache {
     LaunchedEffect(t.id) { if (lines == null) lines = try { LyricCache.get(t.id) } catch (e: Exception) { emptyList() } }
     // 看得见时进度刷新加快（逐字高亮更顺），藏在封面后面时不加快
     DisposableEffect(active) { if (active) Engine.fastPos++; onDispose { if (active) Engine.fastPos-- } }
-    val pos by Engine.position.collectAsState()
+    val raw by Engine.position.collectAsState()
+    val pos = raw + LyricOffset.of(t.id)
     val l = lines
     val p = c
     if (l == null || l.isEmpty()) {
