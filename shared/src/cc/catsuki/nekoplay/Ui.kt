@@ -456,9 +456,6 @@ fun img(url: String?, px: Int): String? {
     if (url == null) return null
     val b = when { px <= 160 -> 160; px <= 256 -> 256; px <= 512 -> 512; else -> 768 }
     val base = url.substringBefore('?')
-    // QQ 音乐的图：尺寸写在文件名里（T002R500x500M000…），只有 150 / 300 / 500 / 800 几档
-    if (base.contains("kugou.com") && base.contains("/480/")) { val q = when { px <= 160 -> 150; px <= 256 -> 240; else -> 480 }; return base.replace("/480/", "/$q/") }
-    if (base.contains("gtimg.cn") && base.contains("R500x500")) { val q = when { px <= 160 -> 150; px <= 300 -> 300; px <= 512 -> 500; else -> 800 }; return base.replace("R500x500", "R${q}x$q") }
     return if (base.contains("/obj/")) "$base?imageView=1&thumbnail=${b}x$b&type=webp" else "$base?param=${b}y$b"
 }
 
