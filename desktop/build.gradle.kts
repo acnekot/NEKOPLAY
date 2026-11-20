@@ -42,7 +42,9 @@ compose.desktop {
             modules("java.sql", "jdk.unsupported", "jdk.management") // jdk.management：性能浮窗读 CPU
             // 播放内核 libmpv：打包时放进 resources/<系统>/（由 GitHub Actions 下载），装好就能直接播放
             appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
-            windows { menuGroup = "NEKOPLAY"; shortcut = true; upgradeUuid = "8f2a6c3e-5b1d-4e7a-9c40-3d2f1a6b7e91" }
+            windows { menuGroup = "NEKOPLAY"; shortcut = true; upgradeUuid = "8f2a6c3e-5b1d-4e7a-9c40-3d2f1a6b7e91"; iconFile.set(project.file("icons/icon.ico")) }
+            macOS { iconFile.set(project.file("icons/icon.icns")) }
+            linux { iconFile.set(project.file("icons/icon.png")) }
         }
     }
 }

@@ -1,5 +1,7 @@
 package cc.catsuki.nekoplay
 
+import androidx.compose.ui.graphics.toComposeImageBitmap
+
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -47,15 +49,12 @@ fun main() {
         val state = rememberWindowState(size = DpSize(w.dp, h.dp), position = if (System.getenv("NEKOPLAY_W") != null) androidx.compose.ui.window.WindowPosition(0.dp, 0.dp) else androidx.compose.ui.window.WindowPosition.PlatformDefault)
         val quit = { Engine.savePosition(); exitApplication() }
         var visible by remember { mutableStateOf(true) }
-        // 后台留存：托盘图标（蓝色方块）+ 菜单；双击 / 「显示窗口」把窗口叫回来
-        val trayIcon = remember {
-            val b = androidx.compose.ui.graphics.ImageBitmap(32, 32)
-            val cv = androidx.compose.ui.graphics.Canvas(b)
-            cv.drawRect(0f, 0f, 32f, 32f, androidx.compose.ui.graphics.Paint().apply { color = androidx.compose.ui.graphics.Color(0xFF1A4BE0) })
-            cv.drawRect(10f, 8f, 14f, 24f, androidx.compose.ui.graphics.Paint().apply { color = androidx.compose.ui.graphics.Color.White })
-            cv.drawRect(18f, 8f, 22f, 24f, androidx.compose.ui.graphics.Paint().apply { color = androidx.compose.ui.graphics.Color.White })
-            androidx.compose.ui.graphics.painter.BitmapPainter(b)
+        // 应用图标（音符猫）：窗口、任务栏和托盘共用
+        val appIcon = remember {
+            val bytes = Thread.currentThread().contextClassLoader.getResourceAsStream("icon.png")!!.readBytes()
+            androidx.compose.ui.graphics.painter.BitmapPainter(org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap())
         }
+        val trayIcon = appIcon
         val st by Engine.state.collectAsState()
         // 系统不支持托盘（部分 Linux 桌面）时就不藏窗口，直接退出
         val trayOk = remember { runCatching { java.awt.SystemTray.isSupported() }.getOrDefault(false) }
@@ -70,7 +69,7 @@ fun main() {
         }
         val close = { if (UiPref.tray && trayOk) visible = false else quit() }
         // 无边框窗口：标题栏、最小化 / 最大化 / 关闭按钮和拖边改大小都自己画
-        Window(onCloseRequest = close, state = state, visible = visible, title = "NEKOPLAY", undecorated = true,
+        Window(onCloseRequest = close, state = state, visible = visible, title = "NEKOPLAY", icon = appIcon, undecorated = true,
             onPreviewKeyEvent = { e ->
                 if (e.type != KeyEventType.KeyDown) false
                 else if (e.key == Key.Escape) DesktopPlat.back()   // Esc = 返回
