@@ -19,14 +19,24 @@ import java.awt.Window
 object SideMode {
     private const val PEEK = 4
     private var normal: Rectangle? = null
+    private var wasMax = false
+    private var wasHalf = 0
+    /** 调试模式下把侧拉的计算结果写到程序目录的 side-debug.txt，方便查不同缩放比例下的问题 */
+    fun log(s: String) = if (!Debug.on) Unit else runCatching {
+        val dir = System.getProperty("compose.application.resources.dir")?.let { java.io.File(it).parentFile?.parentFile } ?: return@runCatching
+        java.io.File(dir, "side-debug.txt").appendText("${System.currentTimeMillis() % 100000} $s\n")
+    }
     /** 进入时所在屏幕的可用区域（去掉任务栏） */
     var area = Rectangle()
 
     fun enter(w: Window, side: Int) {
         if (SidePref.active == 0) {
+            wasMax = WinFrame.maxed; wasHalf = WinFrame.half
             if (WinFrame.maxed || WinFrame.half != 0) WinFrame.restore(w)
             normal = w.bounds
             area = WinFrame.usable(Point(w.x + w.width / 2, w.y + 20), w)
+            val gc = w.graphicsConfiguration
+            log("enter side=$side area=$area win=${w.bounds} gc=${gc.bounds} ins=${java.awt.Toolkit.getDefaultToolkit().getScreenInsets(gc)} scale=${gc.defaultTransform.scaleX}")
         }
         SidePref.active = side
         w.isAlwaysOnTop = true
@@ -37,6 +47,8 @@ object SideMode {
         SidePref.active = 0
         w.isAlwaysOnTop = false
         normal?.let { w.bounds = it }
+        // 进入前是最大化 / 半屏的，退出后恢复回去
+        if (wasMax) WinFrame.maximize(w) else if (wasHalf != 0) WinFrame.snap(w, wasHalf, Point(area.x + area.width / 2, area.y + 10))
         w.toFront()
     }
 
@@ -47,7 +59,7 @@ object SideMode {
         val hidden = if (SidePref.active < 0) u.x - wd + PEEK else u.x + u.width - PEEK
         val x = (hidden + (shown - hidden) * f).toInt()
         val r = Rectangle(x, u.y, wd, u.height)
-        if (w.bounds != r) w.bounds = r
+        if (w.bounds != r) { w.bounds = r; if (f == 1f || f == 0f) log("place f=$f want=$r got=${w.bounds}") }
     }
 }
 
@@ -72,8 +84,8 @@ object SideMode {
             val inside = m != null && Rectangle(b.x - 6, b.y - 6, b.width + 12, b.height + 12).contains(m)
             val atEdge = m != null && m.y in u.y..(u.y + u.height) && (if (side < 0) m.x <= u.x + 1 else m.x >= u.x + u.width - 2)
             val now = System.currentTimeMillis()
-            if (inside || atEdge) { outSince = 0; show = true }
-            else if (show) { if (outSince == 0L) outSince = now; if (now - outSince > 450 && now > grace) show = false }
+            if (inside || atEdge) { outSince = 0; if (!show) SideMode.log("show m=$m b=$b"); show = true }
+            else if (show) { if (outSince == 0L) outSince = now; if (now - outSince > 450 && now > grace) { show = false; SideMode.log("hide m=$m b=$b") } }
             val target = if (show) 1f else 0f
             val moving = f != target
             if (moving) {

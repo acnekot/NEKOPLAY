@@ -12,6 +12,12 @@ import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.Tray
@@ -99,7 +105,10 @@ fun main() {
 @androidx.compose.runtime.Composable
 private fun androidx.compose.ui.window.ApplicationScope.DeskLyricWindow() {
     val ws = rememberWindowState(size = DpSize(860.dp, 140.dp),
-        position = if (DeskLyric.x >= 0) androidx.compose.ui.window.WindowPosition(DeskLyric.x.dp, DeskLyric.y.dp) else androidx.compose.ui.window.WindowPosition(androidx.compose.ui.Alignment.BottomCenter))
+        position = if (DeskLyric.x >= 0) androidx.compose.ui.window.WindowPosition(DeskLyric.x.dp, DeskLyric.y.dp) else WinFrame.usable().let { u ->
+            // 默认放在屏幕下方偏上一点，避开最大化窗口底部的播放控制
+            androidx.compose.ui.window.WindowPosition((u.x + (u.width - 860) / 2).dp, (u.y + u.height - 140 - 150).dp)
+        })
     Window(onCloseRequest = { DeskLyric.on = false; DeskLyric.save() }, state = ws, title = "NEKOPLAY Lyrics", undecorated = true, transparent = true,
         alwaysOnTop = true, focusable = false, resizable = false) {
         androidx.compose.runtime.LaunchedEffect(DeskLyric.locked) { ClickThrough.set(window, DeskLyric.locked) }
@@ -142,41 +151,77 @@ object ClickThrough {
 
 
 /** 系统托盘：图标 + 右键菜单（中文字体），双击 / 单击图标打开窗口 */
-@androidx.compose.runtime.Composable
+@Composable
 private fun NekoTray(playing: Boolean, tip: String, show: () -> Unit, quit: () -> Unit) {
+    // 托盘菜单自己用 Compose 画：AWT 的原生菜单在部分 Windows 上中文显示成方块，换字体也没用
     val img = remember { javax.imageio.ImageIO.read(Thread.currentThread().contextClassLoader.getResourceAsStream("icon.png")) }
-    val font = remember {
-        val names = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toSet()
-        java.awt.Font(listOf("Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei").firstOrNull { it in names } ?: java.awt.Font.DIALOG, java.awt.Font.PLAIN, 12)
-    }
     val showS by rememberUpdatedState(show); val quitS by rememberUpdatedState(quit)
-    val play = remember { java.awt.MenuItem() }
-    val lyric = remember { java.awt.MenuItem() }
-    val unlock = remember { java.awt.MenuItem("解锁桌面歌词") }
+    var menuAt by remember { mutableStateOf<java.awt.Point?>(null) }
     val icon = remember {
-        val menu = java.awt.PopupMenu().apply { this.font = font }
-        fun item(label: String, act: () -> Unit) = java.awt.MenuItem(label).apply { addActionListener { java.awt.EventQueue.invokeLater(act) } }
-        menu.add(item("显示窗口") { showS() }); menu.addSeparator()
-        play.addActionListener { java.awt.EventQueue.invokeLater { Engine.toggle() } }; menu.add(play)
-        menu.add(item("上一首") { Engine.prev() }); menu.add(item("下一首") { Engine.next() }); menu.addSeparator()
-        lyric.addActionListener { java.awt.EventQueue.invokeLater { DeskLyric.on = !DeskLyric.on; DeskLyric.save() } }; menu.add(lyric)
-        unlock.addActionListener { java.awt.EventQueue.invokeLater { DeskLyric.locked = false; DeskLyric.save() } }; menu.add(unlock)
-        menu.addSeparator(); menu.add(item("退出") { quitS() })
         val size = java.awt.SystemTray.getSystemTray().trayIconSize
-        java.awt.TrayIcon(img.getScaledInstance(size.width, size.height, java.awt.Image.SCALE_SMOOTH), "NEKOPLAY", menu).apply {
+        java.awt.TrayIcon(img.getScaledInstance(size.width, size.height, java.awt.Image.SCALE_SMOOTH), "NEKOPLAY").apply {
             isImageAutoSize = false
-            addActionListener { java.awt.EventQueue.invokeLater { showS() } }
             addMouseListener(object : java.awt.event.MouseAdapter() {
-                override fun mouseClicked(e: java.awt.event.MouseEvent) { if (e.button == java.awt.event.MouseEvent.BUTTON1) java.awt.EventQueue.invokeLater { showS() } }
+                override fun mouseReleased(e: java.awt.event.MouseEvent) {
+                    val p = e.locationOnScreen
+                    if (e.button == java.awt.event.MouseEvent.BUTTON3 || e.isPopupTrigger) java.awt.EventQueue.invokeLater { menuAt = p }
+                    else if (e.button == java.awt.event.MouseEvent.BUTTON1) java.awt.EventQueue.invokeLater { showS() }
+                }
             })
         }
     }
-    play.label = if (playing) "暂停" else "播放"
-    lyric.label = if (DeskLyric.on) "关闭桌面歌词" else "打开桌面歌词"
-    unlock.isEnabled = DeskLyric.on && DeskLyric.locked
     icon.toolTip = tip.take(120)
     DisposableEffect(Unit) {
         runCatching { java.awt.SystemTray.getSystemTray().add(icon) }
         onDispose { runCatching { java.awt.SystemTray.getSystemTray().remove(icon) } }
+    }
+    menuAt?.let { at -> TrayMenu(at, playing, { menuAt = null }, showS, quitS) }
+}
+
+/** 托盘右键菜单：BenchLab 风格的小窗口，出现在鼠标旁边，点别处就关 */
+@Composable
+private fun TrayMenu(at: java.awt.Point, playing: Boolean, close: () -> Unit, show: () -> Unit, quit: () -> Unit) {
+    val items = buildList<Pair<String, (() -> Unit)?>> {
+        add("显示窗口" to show); add("" to null)
+        add((if (playing) "暂停" else "播放") to { Engine.toggle() })
+        add("上一首" to { Engine.prev() }); add("下一首" to { Engine.next() }); add("" to null)
+        if (Features.on("desk")) {
+            add((if (DeskLyric.on) "关闭桌面歌词" else "打开桌面歌词") to { DeskLyric.on = !DeskLyric.on; DeskLyric.save() })
+            if (DeskLyric.on && DeskLyric.locked) add("解锁桌面歌词" to { DeskLyric.locked = false; DeskLyric.save() })
+            add("" to null)
+        }
+        add("退出" to quit)
+    }
+    val w = 180; val h = items.sumOf { (if (it.second == null) 9 else 36).toInt() } + 8
+    // 放在鼠标旁边，不超出屏幕可用区域（任务栏在上 / 下 / 左 / 右都行）
+    val u = WinFrame.usable(at)
+    val x = (at.x - w).coerceIn(u.x, u.x + u.width - w)
+    val y = (if (at.y - h >= u.y) at.y - h else at.y).coerceIn(u.y, u.y + u.height - h)
+    val ws = rememberWindowState(size = DpSize(w.dp, h.dp), position = androidx.compose.ui.window.WindowPosition(x.dp, y.dp))
+    Window(onCloseRequest = close, state = ws, title = "NEKOPLAY", undecorated = true, resizable = false, alwaysOnTop = true) {
+        LaunchedEffect(Unit) {
+            window.toFront(); window.requestFocus()
+            window.addWindowFocusListener(object : java.awt.event.WindowFocusListener {
+                override fun windowGainedFocus(e: java.awt.event.WindowEvent?) {}
+                override fun windowLostFocus(e: java.awt.event.WindowEvent?) { close() }
+            })
+        }
+        NekoTheme {
+            val p = c
+            androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize().background(p.page).nbf(2.dp, p.k).padding(4.dp)) {
+                items.forEach { (label, act) ->
+                    if (act == null) androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxWidth().height(9.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxWidth().height(1.dp).background(p.l2))
+                    } else {
+                        val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        val hover by src.collectIsHoveredAsState()
+                        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxWidth().height(36.dp).background(if (hover) p.k else androidx.compose.ui.graphics.Color.Transparent)
+                            .hoverable(src).press { close(); act() }.padding(horizontal = 14.dp), contentAlignment = androidx.compose.ui.Alignment.CenterStart) {
+                            T(label, 14, if (hover) p.tagFg else if (label == "退出") p.bad else p.k)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

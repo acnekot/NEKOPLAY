@@ -493,7 +493,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
     LaunchedEffect(Unit) { while (isActive) { mem = withContext(Dispatchers.IO) { Plat.impl.memInfo() }; delay(2000) } }
     val sysDark = androidx.compose.foundation.isSystemInDarkTheme()
     val p = c
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp)) {
+    LazyColumn(Modifier.widthIn(max = 860.dp).fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp)) {
       when (sec) {
        null -> {
         item { Group("ACCOUNT") }

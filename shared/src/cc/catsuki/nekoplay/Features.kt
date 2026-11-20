@@ -43,7 +43,7 @@ object Features {
 /** 设置 → 功能管理 */
 @Composable fun FeaturesPage() {
     val p = c
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp)) {
+    LazyColumn(Modifier.widthIn(max = 860.dp).fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp)) {
         item { T("关掉的功能会隐藏它的按钮、菜单和设置，也不再在后台运行", 13, p.s, lh = 1.4f, modifier = Modifier.padding(bottom = 10.dp)) }
         items(Features.list, key = { it.id }) { f -> SwitchRow(f.name, f.desc, Features.on(f.id)) { Features.set(f.id, it) } }
     }

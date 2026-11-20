@@ -136,7 +136,7 @@ class BtnCtx(val t: Track, val st: PlayState, val showTr: Boolean, val toggleTr:
     val nav = LocalNav.current
     val p = c
     var isPc by remember { mutableStateOf(Plat.isDesktop) }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp)) {
+    LazyColumn(Modifier.widthIn(max = 860.dp).fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp)) {
         item {
             ChipRow(listOf(if (Plat.isDesktop) "手机 / 侧拉" else "竖屏", if (Plat.isDesktop) "PC 宽屏" else "横屏 / 平板"), if (isPc) 1 else 0) { isPc = it == 1 }
             Spacer(Modifier.height(14.dp))
