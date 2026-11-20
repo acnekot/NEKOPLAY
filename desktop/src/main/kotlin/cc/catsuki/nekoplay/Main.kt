@@ -34,6 +34,9 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import okio.Path.Companion.toOkioPath
 
 fun main() {
+    // REC 分支：程序目录下有 rec/script.txt 就进入演示录制模式（离屏渲染，不开窗口）
+    val recScript = Rec.script()
+    if (recScript != null) RecMode.on = true
     Plat.impl = DesktopPlat()
     // 渲染方式：默认显卡（Direct3D）。软件渲染省约 170MB 内存，但实测 175% 缩放下主页约 30 帧、开了背景模糊的播放页只有约 9 帧，
     // 只适合不在乎流畅度、想省内存的情况；设置里可以切换，重启生效
@@ -50,10 +53,17 @@ fun main() {
                 .header("Referer", "https://music.163.com/").build() else r)
         }.build()
         ImageLoader.Builder(ctx)
-            .memoryCache { MemoryCache.Builder().maxSizeBytes((if (UiPref.lowMem) 12L else 24L) * 1024 * 1024).build() }
+            .memoryCache { MemoryCache.Builder().maxSizeBytes((if (RecMode.on) 400L else if (UiPref.lowMem) 12L else 24L) * 1024 * 1024).build() }
             .diskCache { DiskCache.Builder().directory(Plat.impl.cacheDir.resolve("img").toOkioPath()).maxSizeBytes(300L * 1024 * 1024).build() }
             .components { add(OkHttpNetworkFetcherFactory(callFactory = { client })) }
             .build()
+    }
+    if (recScript != null) {
+        // 等歌单加载（最多 15 秒），然后开录；录完直接退出
+        val t0 = System.currentTimeMillis()
+        while (Store.playlists.value.isEmpty() && System.currentTimeMillis() - t0 < 15_000) Thread.sleep(200)
+        runCatching { Rec.run(recScript) }.onFailure { e -> Rec.dir?.resolve("log.txt")?.appendText("ERROR ${e.stackTraceToString()}\n") }
+        kotlin.system.exitProcess(0)
     }
     val w = (System.getenv("NEKOPLAY_W") ?: System.getProperty("nekoplay.width"))?.toIntOrNull() ?: 1280
     val h = (System.getenv("NEKOPLAY_H") ?: System.getProperty("nekoplay.height"))?.toIntOrNull() ?: 800

@@ -214,3 +214,19 @@ object WinFrame {
         }
     }
 }
+
+
+/** 录制用的标题栏：和真实标题栏长得一样，但不依赖真实窗口（离屏渲染里没有窗口） */
+@Composable fun RecTitleBar() {
+    Box(Modifier.fillMaxWidth().height(60.dp)) {
+        Row(Modifier.fillMaxSize().padding(start = 26.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            T("NEKOPLAY", Fs.HEAD + 2, w = 900, ls = .01f)
+            Spacer(Modifier.weight(1f))
+            TopActions(40.dp, 20.dp, 28.dp)
+            Spacer(Modifier.width(10.dp))
+            CaptionClick(onClick = {}) { col -> line(col, -8f, 0f, 8f, 0f) }
+            CaptionClick(onClick = {}) { col -> square(col, -2f, 2f, 11f); line(col, -3f, -6f, 6f, -6f); line(col, 6f, -6f, 6f, 3f) }
+            CaptionClick(hoverFg = Color(0xFFE81123), onClick = {}) { col -> line(col, -8f, -8f, 8f, 8f); line(col, 8f, -8f, -8f, 8f) }
+        }
+    }
+}

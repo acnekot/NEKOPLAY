@@ -109,11 +109,13 @@ object Store {
     }
 
     fun addRecent(t: Track) {
+        if (RecMode.on) return
         recents.value = (listOf(t) + recents.value.filter { it.id != t.id }).take(100)
         writeTracks("recents", recents.value)
     }
 
     fun saveQueue(q: List<Track>, i: Int, pos: Long) {
+        if (RecMode.on) return
         writeTracks("queue", q)
         prefs.edit().putInt("qi", i).putLong("qp", pos).apply()
     }

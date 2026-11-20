@@ -83,6 +83,9 @@ interface Audio {
     fun applyFx(fx: Fx)
 }
 
+/** 演示录制模式（REC 分支）：不上报听歌、不写最近播放和队列，避免录制时改动用户数据 */
+object RecMode { @Volatile var on = false }
+
 interface PlatImpl {
     val name: String               // "android" / "desktop"
     val filesDir: File

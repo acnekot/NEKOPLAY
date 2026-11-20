@@ -37,7 +37,7 @@ class DesktopPlat : PlatImpl {
         font("inter_700", FontWeight.W700), font("inter_800", FontWeight.W800), font("inter_900", FontWeight.W900))
     override val mono = FontFamily(font("mono_400", FontWeight.W400), font("mono_500", FontWeight.W500), font("mono_600", FontWeight.W600), font("mono_700", FontWeight.W700))
     override val liveBlur = true
-    override val audio: Audio = MpvAudio()
+    override val audio: Audio = if (RecMode.on) RecAudio() else MpvAudio()
 
     override fun decodeImage(path: String, maxSide: Int): ImageBitmap? {
         val img = org.jetbrains.skia.Image.makeFromEncoded(File(path).readBytes()).toComposeImageBitmap()

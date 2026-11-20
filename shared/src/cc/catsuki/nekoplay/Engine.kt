@@ -162,21 +162,21 @@ object Engine {
         reportId = null
         val sec = listenedMs / 1000; listenedMs = 0
         state.value.queue.firstOrNull { it.id == id }?.let { if (Features.on("stats")) Stats.add(it, sec) }
-        if (sec >= 30 && Ncm.loggedIn && !id.startsWith("local:")) scope.launch { Ncm.scrobble(id, sec) }
+        if (sec >= 30 && Ncm.loggedIn && !id.startsWith("local:") && !RecMode.on) scope.launch { Ncm.scrobble(id, sec) }
     }
 
     private fun load(i: Int, autoplay: Boolean, startMs: Long = 0) {
         val t = state.value.queue.getOrNull(i) ?: return
         reportPrev()
         reportId = t.id
-        if (autoplay && Ncm.loggedIn && !t.local) scope.launch { Ncm.scrobbleStart(t.id) }
+        if (autoplay && Ncm.loggedIn && !t.local && !RecMode.on) scope.launch { Ncm.scrobbleStart(t.id) }
         dropNext()
         state.value = state.value.copy(index = i, loading = true, format = "", kbps = 0, want = autoplay)
         opened = false
         audio.pause() // 换歌时先停掉上一首，避免取地址期间旧歌还在响
         info.value = null; localKbps = 0
         position.value = startMs
-        Store.addRecent(t)
+        if (!RecMode.on) Store.addRecent(t)
         loadJob?.cancel()
         // 切歌淡入：先静音，真正出声时再渐变上来
         if (autoplay && fadeMs > 0) { fadeJob?.cancel(); audio.volume = 0f; rampOnPlay = true } else if (!rampOnPlay) audio.volume = Vol.v
@@ -345,5 +345,5 @@ object Engine {
 
     fun clearUpcoming() { dropNext(); val s = state.value; s.current?.let { state.value = s.copy(queue = listOf(it), index = 0) } }
 
-    fun savePosition() { val s = state.value; if (s.index >= 0) Store.saveQueue(s.queue, s.index, audio.position) }
+    fun savePosition() { if (RecMode.on) return; val s = state.value; if (s.index >= 0) Store.saveQueue(s.queue, s.index, audio.position) }
 }
