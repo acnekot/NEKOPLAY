@@ -367,9 +367,9 @@ fun listMeta(l: List<Track>) = "${two(l.size)} 首 · ${fmt(l.sumOf { it.duratio
 /** 当前是不是宽屏（PC）布局，由 Root 按窗口宽度更新 */
 object Screen { var wide by mutableStateOf(false) }
 
-/** 操作按钮行：手机占满一行；宽屏只占右边一半，避免按钮拉得太长 */
+/** 操作按钮行：手机占满一行；宽屏固定 520 宽、靠左和封面对齐，避免按钮拉得太长 */
 @Composable fun ActionRow(content: @Composable RowScope.() -> Unit) {
-    if (Screen.wide) Row(Modifier.fillMaxWidth()) { Spacer(Modifier.weight(1f)); Row(Modifier.weight(1f), content = content) }
+    if (Screen.wide) Row(Modifier.fillMaxWidth()) { Row(Modifier.width(520.dp), content = content) }
     else Row(Modifier.fillMaxWidth(), content = content)
 }
 
