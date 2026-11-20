@@ -151,13 +151,15 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
         BoxWithConstraints(Modifier.fillMaxSize().backdrop()) {
             // 窗口宽度 ≥ 900dp：PC 三栏布局；否则就是手机布局（拖动窗口大小会实时切换）
             val wide = maxWidth >= 900.dp
-            SideEffect { Screen.wide = wide }
+            SideEffect { Screen.wide = wide; Screen.short = maxHeight < 720.dp }
             BgLayer()
             Column(Modifier.fillMaxSize()) {
             chrome?.invoke()
             Box(Modifier.weight(1f).fillMaxWidth()) {
             if (wide) WideLayout() else Column(Modifier.fillMaxSize()) {
-                if (chrome == null) TopBar()
+                if (chrome == null) androidx.compose.animation.AnimatedVisibility(!(Screen.short && nav.player),
+                    enter = androidx.compose.animation.expandVertically(spring(1f, Anim.stiff(Spring.StiffnessMediumLow))),
+                    exit = androidx.compose.animation.shrinkVertically(spring(1f, Anim.stiff(Spring.StiffnessMediumLow)))) { TopBar() }
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
                     val w = constraints.maxWidth.toFloat()
                     val sub = remember { Animatable(0f) }

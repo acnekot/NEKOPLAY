@@ -97,15 +97,17 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             BgLayer()
             val h = constraints.maxHeight.toFloat()
             val wideP = maxWidth >= 900.dp
-            Column(Modifier.fillMaxSize()) {
+            // 矮屏时顶栏收起了，播放页自己躲开状态栏
+            Column(Modifier.fillMaxSize().then(if (Screen.short && !wideP) Modifier.statusBarsPadding() else Modifier)) {
                 // 顶栏：按住下拉可以跟手收起
-                if (!wideP) Row(Modifier.fillMaxWidth().height(48.dp).pointerInput(Unit) {
+                if (!wideP) Row(Modifier.fillMaxWidth().height(if (Screen.short) 40.dp else 48.dp).pointerInput(Unit) {
                     detectVerticalDragGestures(onDragEnd = {
                         scope.launch { if (drag.value > h * .18f) nav.player = false else drag.animateTo(0f, spring(1f, Anim.stiff(Spring.StiffnessMediumLow))) }
                     }) { _, dy -> scope.launch { drag.snapTo((drag.value + dy).coerceAtLeast(0f)) } }
                 }.drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp) }
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { T(if (lt > .5f && !wideP) "LYRICS" else if (st.fm) "PERSONAL FM" else "NOW PLAYING", 12, p.k.copy(alpha = .5f), 700, mono = true, ls = .14f) }
+                    // 矮屏不显示 NOW PLAYING / LYRICS 标题，省出高度给封面
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { if (!Screen.short) T(if (lt > .5f && !wideP) "LYRICS" else if (st.fm) "PERSONAL FM" else "NOW PLAYING", 12, p.k.copy(alpha = .5f), 700, mono = true, ls = .14f) }
                     // 顶栏右侧槽位（默认放「译」，只在歌词页显示）
                     if (t != null) { val x = BtnCtx(t, st, showTr) { showTr = !showTr }
                         PlayerLayout.keys(false, "top").forEach { k -> Box(if (k == "tr") Modifier.graphicsLayer { alpha = lt } else Modifier) { PBtn(k, x) } } }

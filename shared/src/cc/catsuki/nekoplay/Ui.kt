@@ -374,7 +374,11 @@ fun listMeta(l: List<Track>) = "${two(l.size)} 首 · ${fmt(l.sumOf { it.duratio
 @Suppress("unused") private fun Float.r() = roundToInt()
 
 /** 当前是不是宽屏（PC）布局，由 Root 按窗口宽度更新 */
-object Screen { var wide by mutableStateOf(false) }
+object Screen {
+    var wide by mutableStateOf(false)
+    /** 矮屏（窗口高度 < 720dp，比如 4.7 寸以下的 iPhone）：打开播放页时收起顶栏，把高度让给封面 */
+    var short by mutableStateOf(false)
+}
 
 /** 操作按钮行：手机占满一行；宽屏靠右，播放全部和随机播放一样大（和列表右侧的时长对齐） */
 @Composable fun ActionRow(content: @Composable RowScope.() -> Unit) {
