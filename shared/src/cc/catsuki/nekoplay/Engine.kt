@@ -39,6 +39,10 @@ object Engine {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var loadJob: Job? = null
     var quality by androidx.compose.runtime.mutableIntStateOf(3) // 默认无损，见 Ncm.LEVELS（界面会跟着刷新）
+    /** 用流量时的音质（-1 = 和 Wi-Fi 一样） */
+    var qualityCell by androidx.compose.runtime.mutableIntStateOf(-1)
+    /** 现在实际用的音质：按流量计费的网络下用流量音质 */
+    val q: Int get() = if (qualityCell >= 0 && Plat.impl.metered()) qualityCell else quality
     /** 歌词页可见时进度刷新加快到 50ms（高亮扫过更平滑），平时 250ms */
     @Volatile var fastPos = 0
     val isPlaying get() = audio.isPlaying
@@ -68,6 +72,7 @@ object Engine {
     fun init() {
         prefs = Plat.prefs("ui")
         quality = prefs!!.getInt("q2", 3)
+        qualityCell = prefs!!.getInt("qCell", -1)
         fadeMs = prefs!!.getInt("fade", 300)
         audio.listener = object : Audio.Listener {
             override fun onPlaying(p: Boolean) {
@@ -128,7 +133,7 @@ object Engine {
                     audio.open(null, cacheKey(t.id, hit.first), startMs, autoplay, t)
                     state.value = state.value.copy(format = hit.second, kbps = 0, cached = true)
                 } else {
-                    val s = Ncm.stream(t.id, quality)
+                    val s = Ncm.stream(t.id, q)
                     audio.open(s.url, cacheKey(t.id, s.level), startMs, autoplay, t)
                     prefs?.edit()?.putString("fmt_${cacheKey(t.id, s.level)}", s.format)?.apply()
                     state.value = state.value.copy(format = s.format, kbps = s.kbps, cached = false)
@@ -228,9 +233,10 @@ object Engine {
 
     /** 找已经完整缓存好的档位：从选中档位往下找（也接受更高档位） → (档位, 格式) */
     private fun cachedLevel(id: String): Pair<String, String>? {
-        val order = Ncm.LEVELS.reversed().sortedBy { kotlin.math.abs(Ncm.LEVELS.indexOf(it) - quality) }
+        val q = q
+        val order = Ncm.LEVELS.reversed().sortedBy { kotlin.math.abs(Ncm.LEVELS.indexOf(it) - q) }
         for (lv in order) {
-            if (Ncm.LEVELS.indexOf(lv) > quality + 1) continue
+            if (Ncm.LEVELS.indexOf(lv) > q + 1) continue
             val key = cacheKey(id, lv)
             if (audio.isCached(key)) return lv to (prefs?.getString("fmt_$key", "") ?: "")
         }
@@ -242,7 +248,7 @@ object Engine {
         val s = state.value
         if (s.mode == Mode.SHUFFLE || s.queue.size < 2) return
         val n = s.queue[(s.index + 1) % s.queue.size]
-        scope.launch { runCatching { if (cachedLevel(n.id) == null) Ncm.stream(n.id, quality) } }
+        scope.launch { runCatching { if (cachedLevel(n.id) == null) Ncm.stream(n.id, q) } }
     }
 
     fun cacheBytes(): Long = runCatching { audio.cacheBytes() }.getOrDefault(0)
@@ -254,6 +260,13 @@ object Engine {
         prefs?.edit()?.putInt("q2", q)?.apply()
         val s = state.value
         if (s.current != null) load(s.index, audio.isPlaying, audio.position)
+    }
+
+    fun changeCellQuality(v: Int) {
+        qualityCell = v
+        prefs?.edit()?.putInt("qCell", v)?.apply()
+        val s = state.value
+        if (s.current != null && Plat.impl.metered()) load(s.index, audio.isPlaying, audio.position)
     }
 
     fun clearUpcoming() { val s = state.value; s.current?.let { state.value = s.copy(queue = listOf(it), index = 0) } }

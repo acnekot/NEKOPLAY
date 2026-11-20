@@ -539,7 +539,8 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { SwitchRow("逐字高亮", "有逐字歌词的歌，当前句一个字一个字亮起来", UiPref.karaoke) { UiPref.karaoke = it; UiPref.save() } }
         item { SwitchRow("远处歌词模糊", "离当前句较远的行轻微模糊（更有层次，略耗性能）", UiPref.lyricBlur) { UiPref.lyricBlur = it; UiPref.save() } }
         item { Group("PLAYBACK") }
-        item { NavRow("音质", "在线播放的档位，拿不到时自动降一档", Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav) } }
+        item { NavRow(if (Plat.isDesktop) "音质" else "Wi-Fi 音质", "在线播放的档位，拿不到时自动降一档", Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav) } }
+        if (!Plat.isDesktop) item { NavRow("流量音质", "用手机流量时换成这个档位", if (Engine.qualityCell < 0) "同 Wi-Fi" else Ncm.LEVEL_LABELS[Engine.qualityCell]) { cellQualitySheet(nav) } }
         item { NavRow("效果器", "10 段均衡器、低音增强、环绕、响度", if (FxStore.fx.on) FxStore.fx.preset else "关") { nav.push(Page.Effects) } }
         item { val dls by Downloads.items.collectAsState(); NavRow("本地下载", "按当前音质下载，附带歌词 · ${Downloads.dir.absolutePath}", "${dls.size} 首") { nav.push(Page.DlList) } }
         item { SetLine("播放页按钮", "选择播放页底部那排要显示的按钮") { MultiChipRow(UiPref.BTN_NAMES, { UiPref.BTN_KEYS[it] in UiPref.btns }) { UiPref.toggleBtn(UiPref.BTN_KEYS[it]) } } }

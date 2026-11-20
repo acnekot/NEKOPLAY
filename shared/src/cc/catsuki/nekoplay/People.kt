@@ -371,6 +371,11 @@ private fun Modifier.drawBehindLines(col: Color, left: Boolean, top: Boolean) = 
     }
 
 /** 音质选择菜单（设置页和播放页共用） */
+fun cellQualitySheet(nav: Nav) {
+    nav.sheet = SheetSpec("流量音质", "用手机流量时自动换成这个档位，省流量", listOf(SheetItem((if (Engine.qualityCell < 0) "✓  " else "    ") + "和 Wi-Fi 一样") { Engine.changeCellQuality(-1); nav.toast = "流量音质：和 Wi-Fi 一样" }) +
+        Ncm.LEVEL_LABELS.mapIndexed { i, l -> SheetItem((if (i == Engine.qualityCell) "✓  " else "    ") + l) { Engine.changeCellQuality(i); nav.toast = "流量音质：$l" } }.reversed())
+}
+
 fun qualitySheet(nav: Nav) {
     nav.sheet = SheetSpec("选择音质", "选中的档位拿不到时会自动降一档；无损和 Hi-Res 需要会员", Ncm.LEVEL_LABELS.mapIndexed { i, l ->
         SheetItem((if (i == Engine.quality) "✓  " else "    ") + l) { Engine.changeQuality(i); nav.toast = "音质：$l" }
