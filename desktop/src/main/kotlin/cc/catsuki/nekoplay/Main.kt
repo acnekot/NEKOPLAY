@@ -9,6 +9,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
@@ -78,6 +79,8 @@ fun main() {
             onPreviewKeyEvent = { e ->
                 if (e.type != KeyEventType.KeyDown) false
                 else if (e.key == Key.Escape) DesktopPlat.back()   // Esc = 返回
+                // 调试模式下 Ctrl+Shift+T 在鼠标位置打开托盘菜单（测试用，不用去点任务栏）
+                else if (Debug.on && e.key == Key.T && e.isCtrlPressed && e.isShiftPressed) { TrayState.menuAt = java.awt.MouseInfo.getPointerInfo().location; true }
                 else Keys.handleCtrl(e.key, e.isCtrlPressed || e.isMetaPressed)
             },
             // 空格、方向键：先让输入框处理，没人用才当快捷键
@@ -156,7 +159,6 @@ private fun NekoTray(playing: Boolean, tip: String, show: () -> Unit, quit: () -
     // 托盘菜单自己用 Compose 画：AWT 的原生菜单在部分 Windows 上中文显示成方块，换字体也没用
     val img = remember { javax.imageio.ImageIO.read(Thread.currentThread().contextClassLoader.getResourceAsStream("icon.png")) }
     val showS by rememberUpdatedState(show); val quitS by rememberUpdatedState(quit)
-    var menuAt by remember { mutableStateOf<java.awt.Point?>(null) }
     val icon = remember {
         val size = java.awt.SystemTray.getSystemTray().trayIconSize
         java.awt.TrayIcon(img.getScaledInstance(size.width, size.height, java.awt.Image.SCALE_SMOOTH), "NEKOPLAY").apply {
@@ -164,7 +166,7 @@ private fun NekoTray(playing: Boolean, tip: String, show: () -> Unit, quit: () -
             addMouseListener(object : java.awt.event.MouseAdapter() {
                 override fun mouseReleased(e: java.awt.event.MouseEvent) {
                     val p = e.locationOnScreen
-                    if (e.button == java.awt.event.MouseEvent.BUTTON3 || e.isPopupTrigger) java.awt.EventQueue.invokeLater { menuAt = p }
+                    if (e.button == java.awt.event.MouseEvent.BUTTON3 || e.isPopupTrigger) java.awt.EventQueue.invokeLater { TrayState.menuAt = p }
                     else if (e.button == java.awt.event.MouseEvent.BUTTON1) java.awt.EventQueue.invokeLater { showS() }
                 }
             })
@@ -175,8 +177,10 @@ private fun NekoTray(playing: Boolean, tip: String, show: () -> Unit, quit: () -
         runCatching { java.awt.SystemTray.getSystemTray().add(icon) }
         onDispose { runCatching { java.awt.SystemTray.getSystemTray().remove(icon) } }
     }
-    menuAt?.let { at -> TrayMenu(at, playing, { menuAt = null }, showS, quitS) }
+    TrayState.menuAt?.let { at -> TrayMenu(at, playing, { TrayState.menuAt = null }, showS, quitS) }
 }
+
+object TrayState { var menuAt by mutableStateOf<java.awt.Point?>(null) }
 
 /** 托盘右键菜单：BenchLab 风格的小窗口，出现在鼠标旁边，点别处就关 */
 @Composable
