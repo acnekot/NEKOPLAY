@@ -6,8 +6,7 @@ jobs:
     steps:
       - env: { GH_TOKEN: "${{ github.token }}" }
         run: |
-          gh release view v0.7.3 -R media-kit/libmpv-darwin-build --json assets -q '.assets[].name' | grep -i macos
           mkdir t && cd t
-          gh release download v0.7.3 -R media-kit/libmpv-darwin-build --pattern "*macos-universal-audio-default.tar.gz" || gh release download v0.7.3 -R media-kit/libmpv-darwin-build --pattern "*macos-arm64-audio-default.tar.gz"
-          ls -la; tar xzf *.tar.gz; find . -type f | head -50
-          for f in $(find . -name "*.dylib" -type f | head -40); do echo "== $f"; otool -L "$f" | head -20; vtool -show-build "$f" | grep -E "minos|platform" | head -2; lipo -archs "$f"; done
+          gh release download v0.7.3 -R media-kit/libmpv-darwin-build --pattern "libmpv-libs_v0.7.3_macos-universal-audio-default.tar.gz"
+          tar xzf *.tar.gz; find . | head -40
+          for f in $(find . -name "*.dylib" -type f | head -40); do echo "== $f"; otool -L "$f" | head -14; vtool -show-build "$f" | grep -E "minos" | head -1; lipo -archs "$f"; done
