@@ -104,7 +104,7 @@ object Boot {
     fun reloadPrefs() {
         val ui = Plat.prefs("ui")
         Anim.level = ui.getInt("anim", 1)
-        ThemePref.load(); Typo.load(); Look.load(); LyricPref.load(); AnimStyle.load(); UiPref.load(); Vol.load(); Monet.load(); Sleep.load(); DeskLyric.load(); DiscordPref.load(); Debug.load(); Features.load(); PlayerLayout.load(); SidePref.load()
+        ThemePref.load(); Typo.load(); Look.load(); LyricPref.load(); AnimStyle.load(); UiPref.load(); Vol.load(); Monet.load(); Sleep.load(); DeskLyric.load(); DiscordPref.load(); Debug.load(); Features.load(); PlayerLayout.load(); SidePref.load(); DlPref.load()
         Perf.overlay.value = ui.getBoolean("perf", false)
         Store.reloadLiked(); FxStore.init(); HomeLayout.init()
     }

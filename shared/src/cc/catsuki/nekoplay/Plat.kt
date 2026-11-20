@@ -104,6 +104,10 @@ interface PlatImpl {
     fun savePicture(img: ImageBitmap, name: String): String
     /** 下载歌曲存放的目录 */
     fun downloadDir(): File = File(filesDir, "downloads")
+    /** 下载位置的常用选项（名字 to 路径），设置里直接点选 */
+    fun dirPresets(): List<Pair<String, String>> = emptyList()
+    /** 弹出系统的选文件夹窗口；不支持的平台直接回调 null */
+    fun pickFolder(start: String?, done: (String?) -> Unit) { done(null) }
     /** 下载完通知系统媒体库（Android 让其它播放器也能看到） */
     fun mediaScan(f: File) {}
     /** 系统壁纸取出的主色（Android 12+），其它平台 null */

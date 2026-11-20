@@ -581,6 +581,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { SwitchRow("无缝播放", "快播完时提前把下一首接上，歌和歌之间不会断一下（现场专辑、连续曲目）", Engine.gapless) { Engine.changeGapless(it) } }
        }
        "storage" -> {
+        if (Features.on("dl")) item { NavRow("下载位置", "新下载的歌放在哪个文件夹；已经下载的不会移动", Downloads.dir.absolutePath.let { if (it.length > 28) "…" + it.takeLast(27) else it }) { dirSheet(nav) } }
         if (Features.on("dl")) item { val dls by Downloads.items.collectAsState(); NavRow("本地下载", "按当前音质下载，附带歌词 · ${Downloads.dir.absolutePath}", "${dls.size} 首") { nav.push(Page.DlList) } }
         if (Features.on("local")) item { val loc by LocalMusic.list.collectAsState(); NavRow("本地音乐", "扫描手机 / 电脑里的歌", "${loc.size} 首") { nav.push(Page.Local) } }
         item {

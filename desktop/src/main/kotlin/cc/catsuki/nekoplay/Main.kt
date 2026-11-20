@@ -98,6 +98,7 @@ fun main() {
                     Root(chrome = { TitleBar(state, close) })
                     ResizeEdges(state)
                     SideTracker()
+                    FolderPickHost()
                 }
             }
         }

@@ -66,6 +66,10 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
         if (android.os.Build.VERSION.SDK_INT >= 30 && (pub.isDirectory || pub.mkdirs()) && runCatching { File(pub, ".probe").apply { writeText("") }.delete() }.getOrDefault(false)) return pub
         return File(ctx.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) ?: ctx.filesDir, "NEKOPLAY")
     }
+    override fun dirPresets(): List<Pair<String, String>> {
+        val ext = android.os.Environment.getExternalStorageDirectory().absolutePath
+        return listOf("音乐/NEKOPLAY" to "$ext/Music/NEKOPLAY", "下载/NEKOPLAY" to "$ext/Download/NEKOPLAY", "音乐" to "$ext/Music")
+    }
     override fun metered(): Boolean = runCatching { ctx.getSystemService(android.net.ConnectivityManager::class.java).isActiveNetworkMetered }.getOrDefault(false)
     override fun scanLocal(): List<LocalSong> {
         val out = ArrayList<LocalSong>()

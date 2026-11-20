@@ -143,6 +143,12 @@ class DesktopPlat : PlatImpl {
 
     /** CPU：JVM 报告的本进程占用；内存：已提交的内存（接近任务管理器里的值） */
     override fun downloadDir(): File = File(System.getProperty("user.home"), "Music/NEKOPLAY")
+    override fun dirPresets(): List<Pair<String, String>> {
+        val home = System.getProperty("user.home")
+        return listOf("音乐/NEKOPLAY" to "$home${File.separator}Music${File.separator}NEKOPLAY", "下载/NEKOPLAY" to "$home${File.separator}Downloads${File.separator}NEKOPLAY")
+    }
+    /** 选文件夹：用应用内的选择器（文件夹模式），和选图片同一套界面，也能粘贴路径、收藏位置 */
+    override fun pickFolder(start: String?, done: (String?) -> Unit) { FolderPick.req = start to done }
     override fun cpuMem(): Pair<Float, Long>? = runCatching {
         val os = java.lang.management.ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean
         val cpu = (os.processCpuLoad * 100).toFloat().coerceAtLeast(0f)

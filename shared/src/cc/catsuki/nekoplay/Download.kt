@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.background
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -61,7 +63,9 @@ object Downloads {
         }
     }
 
-    val dir: File get() = Plat.impl.downloadDir().also { it.mkdirs() }
+    /** 下载位置：设置里选过就用选的（写不进去时退回默认），没选就用平台默认 */
+    val dir: File get() = (DlPref.custom.takeIf { it.isNotBlank() }?.let { File(it) }
+        ?.takeIf { (it.isDirectory || it.mkdirs()) && it.canWrite() } ?: Plat.impl.downloadDir()).also { it.mkdirs() }
 
     fun has(id: String) = items.value.any { it.track.id == id }
     fun file(id: String): File? = items.value.firstOrNull { it.track.id == id }?.let { File(it.path) }?.takeIf { it.exists() }
@@ -178,7 +182,9 @@ fun downloadSheet(nav: Nav, list: List<Track>) {
                 Tag("DOWNLOADS"); Spacer(Modifier.height(4.dp))
                 T("本地下载", Fs.HERO, w = 800, lh = 1.3f)
                 T("${two(items.size)} 首 · %.0f MB".format(total / 1048576.0), 12, p.s, mono = true, ls = .04f)
-                T(Downloads.dir.absolutePath, 12, p.s, lines = 2)
+                val nav = LocalNav.current
+                // 点路径可以改下载位置
+                T(Downloads.dir.absolutePath + "  ✎", 12, p.s, lines = 2, modifier = Modifier.press { dirSheet(nav) })
                 Spacer(Modifier.height(14.dp))
                 if (list.isNotEmpty()) ActionRow {
                     PrimaryBar("播放全部", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
@@ -231,4 +237,31 @@ fun downloadSheet(nav: Nav, list: List<Track>) {
             TrackRow(t, st.current?.id == t.id, items[i].format, onLong = { trackActions(nav, t) }) { Engine.playList(list, i) }
         }
     }
+}
+
+
+/** 自定义下载位置（空 = 平台默认）；已经下载的歌留在原来的位置 */
+object DlPref {
+    var custom by mutableStateOf("")
+    fun load() { custom = Plat.prefs("ui").getString("dlDir", null) ?: "" }
+    fun set(path: String) { custom = path; Plat.prefs("ui").edit().putString("dlDir", path).apply() }
+}
+
+/** 选择下载位置 */
+fun dirSheet(nav: Nav) {
+    val def = Plat.impl.downloadDir().absolutePath
+    fun mark(path: String) = if ((DlPref.custom.ifBlank { def }) == path) "✓  " else "    "
+    fun pick(path: String) {
+        val f = java.io.File(path)
+        if ((f.isDirectory || f.mkdirs()) && f.canWrite()) { DlPref.set(if (path == def) "" else path); nav.toast = "下载位置：$path" }
+        else nav.toast = "这个文件夹写不进去，换一个吧"
+    }
+    nav.sheet = SheetSpec("下载位置", "新下载的歌放到这里；已经下载的歌不会移动", buildList {
+        add(SheetItem(mark(def) + "默认 · $def") { DlPref.set(""); nav.toast = "已恢复默认下载位置" })
+        Plat.impl.dirPresets().filter { it.second != def }.forEach { (n, path) -> add(SheetItem(mark(path) + "$n · $path") { pick(path) }) }
+        if (Plat.isDesktop) add(SheetItem("选择文件夹…") {
+            Plat.impl.pickFolder(DlPref.custom.ifBlank { def }) { it?.let { p -> pick(p) } }
+        })
+        add(SheetItem("输入路径…") { nav.input = InputSpec("下载位置", "完整的文件夹路径") { s -> if (s.isNotBlank()) pick(s.trim()) } })
+    })
 }
