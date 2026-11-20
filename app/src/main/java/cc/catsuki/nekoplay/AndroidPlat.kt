@@ -66,6 +66,7 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
         if (android.os.Build.VERSION.SDK_INT >= 30 && (pub.isDirectory || pub.mkdirs()) && runCatching { File(pub, ".probe").apply { writeText("") }.delete() }.getOrDefault(false)) return pub
         return File(ctx.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) ?: ctx.filesDir, "NEKOPLAY")
     }
+    override fun systemSeed(): Int? = if (android.os.Build.VERSION.SDK_INT >= 31) ctx.getColor(android.R.color.system_accent1_500) else null
     override fun mediaScan(f: File) { android.media.MediaScannerConnection.scanFile(ctx, arrayOf(f.absolutePath), null, null) }
     private val kvs = HashMap<String, KV>()
     override fun prefs(name: String): KV = kvs.getOrPut(name) { SpKV(ctx.getSharedPreferences(name, Context.MODE_PRIVATE)) }

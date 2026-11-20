@@ -34,7 +34,7 @@ import java.io.File
 object Bg {
     /** 显示用的图（已经按模糊值处理好）；src 是原图 */
     var image by mutableStateOf<ImageBitmap?>(null)
-    private var src: ImageBitmap? = null
+    private var src by mutableStateOf<ImageBitmap?>(null)
     private var job: kotlinx.coroutines.Job? = null
     private val bgScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main)
     var blur by mutableFloatStateOf(0f)      // 0..30 dp
