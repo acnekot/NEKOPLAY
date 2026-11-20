@@ -136,6 +136,7 @@ object Engine {
         // 音质参数：开始播放后读一次（读不到就过一会再试）
         scope.launch { while (isActive) { if (info.value == null && audio.isPlaying) info.value = audio.info()?.let { if (it.kbps == 0 && localKbps > 0) it.copy(kbps = localKbps) else it }; delay(700) } }
         scope.launch { while (isActive) { maybeQueueNext(); delay(1000) } }
+        scope.launch { var t0 = System.currentTimeMillis(); while (isActive) { delay(1000); val now = System.currentTimeMillis(); if (audio.isPlaying) listenedMs += (now - t0).coerceAtMost(3000); t0 = now } }
         scope.launch { while (isActive) { val p = audio.position; if (audio.isPlaying || position.value != p) position.value = p; runCatching { buffered.value = if (state.value.cached) Long.MAX_VALUE else audio.buffered }; delay(if (fastPos > 0) 50 else 250) } }
         Store.restoreQueue()?.let { (q, i, pos) -> state.value = state.value.copy(queue = q, index = i); load(i, false, pos) }
     }
@@ -151,10 +152,13 @@ object Engine {
 
     /** 上一首听了多久：切歌时回传给网易云（听满 30 秒或播完才算一次） */
     private var reportId: String? = null
+    /** 这首实际听了多久（按播放时间累加，拖动进度不算） */
+    private var listenedMs = 0L
     private fun reportPrev() {
         val id = reportId ?: return
         reportId = null
-        val sec = audio.position / 1000
+        val sec = listenedMs / 1000; listenedMs = 0
+        state.value.queue.firstOrNull { it.id == id }?.let { Stats.add(it, sec) }
         if (sec >= 30 && Ncm.loggedIn && !id.startsWith("local:")) scope.launch { Ncm.scrobble(id, sec) }
     }
 

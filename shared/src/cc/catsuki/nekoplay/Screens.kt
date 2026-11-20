@@ -266,6 +266,7 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
         if (liked != null) item { ListRow({ LikedCover(liked.cover, 56.dp) }, "我喜欢", "${two(liked.count)} 首") { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
         item { ListRow({ RecentCover(rec.firstOrNull()?.cover, 56.dp) }, "最近播放", listMeta(rec)) { nav.push(Page.Detail("recent", "recent", "最近播放")) } }
         item { val dls by Downloads.items.collectAsState(); ListRow({ IconCover(NIcons.download, 56.dp) }, "本地下载", "${two(dls.size)} 首") { nav.push(Page.DlList) } }
+        item { ListRow({ IconCover(NIcons.chart, 56.dp) }, "听歌统计", "本机的播放次数和时长") { nav.push(Page.Stats) } }
         item { val loc by LocalMusic.list.collectAsState(); ListRow({ IconCover(NIcons.disc, 56.dp) }, "本地音乐", if (loc.isEmpty()) "扫描手机 / 电脑里的歌" else "${two(loc.size)} 首") { nav.push(Page.Local) } }
         if (prof == null) item {
             Column(Modifier.padding(vertical = 24.dp)) {
