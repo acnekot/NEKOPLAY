@@ -1,4 +1,5 @@
-# NEKOPLAY 实机演示脚本（REC 分支）：4K 120fps，30 秒，配乐 Lament Rain 87.66s 起
+# NEKOPLAY 实机演示脚本（REC 分支）：4K 120fps，30 秒，配乐 Lament Rain 1:27.66 起
+# 歌词时间点（视频秒）：19.0「For the world, you are about to enter…」23.4「and unlock the future.」25.9「Are you ready?」26.8「Don't be afraid.」
 # 放到程序目录 rec/script.txt，启动 NEKOPLAY.exe 就开始录制
 size 1920 1080 2
 fps 120
@@ -6,32 +7,30 @@ duration 30
 play liked "Lament Rain" 87660
 cursor 1500 820
 
-# 0–8.4s 间奏：主页 → 我喜欢 → 滚动列表
+# 0–8.4s 间奏：主页 → 我喜欢 → 滚动 → 设置 / 播放页布局
 0.6  move 700 410 1.0
-2.0  click 100 348 0.8
-3.6  move 1000 700 0.5
-4.2  scroll 7 1.6
-6.1  scroll -7 1.0
-7.4  click 40 1038 0.8
-# 8.4–18.6s 渐强：播放页，歌词滚动；歌词旁竖栏：译、播放列表
-8.9  move 1200 560 1.3
-10.8 move 578 531 0.7
-11.8 click
-12.8 click
-13.7 click 578 819 0.7
-15.2 move 1750 600 0.5
-15.8 scroll 6 1.4
-17.6 click 578 819 0.5
-# 18.6–22.8s 副歌：评论区快速滚动
-18.3 click 578 771 0.3
-19.2 move 1250 620 0.3
-19.6 scroll 14 1.8
-21.6 click 578 771 0.3
-# 22.8s 空一拍：收起播放页；23.4s 重拍：设置 → 布局 → 播放页布局
-22.6 click 30 90 0.2
-23.4 key settings
-23.9 click 300 444 0.4
-24.9 click 300 210 0.4
-# 26.4s 回到播放页收尾
-26.4 key player
-26.9 move 1880 1000 0.8
+1.8  click 100 348 0.7
+3.0  move 1000 700 0.4
+3.4  scroll 6 1.2
+4.7  scroll -6 0.8
+5.6  key settings
+6.0  click 300 444 0.4
+6.9  click 300 210 0.4
+# 8.4s 渐强：打开播放页
+8.0  click 40 1038 0.4
+8.9  move 1200 560 1.0
+# 歌词旁竖栏：译（点两下，回到原状态）、播放列表、评论
+10.2 move 578 531 0.6
+11.0 click
+11.9 click
+12.6 click 578 819 0.6
+13.7 move 1750 600 0.4
+14.2 scroll 5 1.0
+15.3 click 578 819 0.4
+15.9 click 578 771 0.3
+16.6 move 1250 620 0.3
+16.9 scroll 12 1.1
+18.0 click 578 771 0.3
+# 18.6s 副歌：回到歌词，跟着歌词走
+18.6 move 1100 640 1.2
+24.5 move 1880 1000 1.2

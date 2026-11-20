@@ -107,7 +107,7 @@ object Rec {
             var sc: Triple<Float, Double, Double>? = null                   // 格数、开始、时长
             var ei = 0
             val total = (dur * fps).toInt()
-            val step = if (pass == 0) 3 else 1
+            val step = if (pass == 0) 6 else 1
             for (fr in 0 until total) {
                 val t = fr.toDouble() / fps
                 vtMs = (t * 1000).toLong()
