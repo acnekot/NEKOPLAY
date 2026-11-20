@@ -20,9 +20,9 @@ kotlin {
             // 和安卓 / 桌面共用同一份界面与逻辑代码
             kotlin.srcDir("../shared/src")
             dependencies {
-                implementation(compose.runtime)
-                implementation(compose.foundation)
-                implementation(compose.ui)
+                implementation("org.jetbrains.compose.runtime:runtime:1.12.2")
+                implementation("org.jetbrains.compose.foundation:foundation:1.12.2")
+                implementation("org.jetbrains.compose.ui:ui:1.12.2")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
                 implementation("io.coil-kt.coil3:coil-compose:3.3.0")
                 implementation("io.coil-kt.coil3:coil-network-ktor3:3.3.0")

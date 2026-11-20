@@ -93,7 +93,7 @@ class IosAudio(cacheRoot: File) : Audio {
             if (ok) {
                 val fm = NSFileManager.defaultManager
                 fm.removeItemAtPath(target.path, null)
-                fm.moveItemAtPath(loc!!.path!!, target.path, null)
+                fm.moveItemAtPath(loc.path!!, target.path, null)
                 trim()
             }
             NSOperationQueue.mainQueue.addOperationWithBlock { downloading.remove(key) }

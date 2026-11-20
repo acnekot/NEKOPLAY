@@ -2,6 +2,7 @@ package com.google.zxing.qrcode
 
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.common.BitMatrix
+import java.io.toNSData
 import kotlinx.cinterop.*
 import platform.CoreGraphics.*
 import platform.CoreImage.*
@@ -12,7 +13,7 @@ class QRCodeWriter {
     fun encode(text: String, @Suppress("UNUSED_PARAMETER") f: BarcodeFormat, w: Int, h: Int): BitMatrix {
         val filter = CIFilter.filterWithName("CIQRCodeGenerator")!!
         filter.setDefaults()
-        filter.setValue((text as NSString).dataUsingEncoding(NSUTF8StringEncoding), forKey = "inputMessage")
+        filter.setValue(text.encodeToByteArray().toNSData(), forKey = "inputMessage")
         filter.setValue("L", forKey = "inputCorrectionLevel")
         val img = filter.outputImage!!
         // CoreImage 自带 1 格留白
