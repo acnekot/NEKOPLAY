@@ -521,7 +521,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { SecRow("功能管理", "开关内置插件：${Features.list.count { Features.on(it.id) }}/${Features.list.size} 已开启") { nav.push(Page.Feats) } }
         item { SecRow("数据", "WebDAV 备份、听歌统计") { nav.push(Page.SetSub("data")) } }
         item { SecRow("高级", "性能、内存、调试") { nav.push(Page.SetSub("adv")) } }
-        item { SecRow("关于", "原生版 0.3.0") { nav.push(Page.SetSub("about")) } }
+        item { SecRow("关于", "0.3.0") { nav.push(Page.SetSub("about")) } }
        }
        "look" -> {
         item { SwitchRow("跟随系统", "跟随系统的深浅色设置", ThemePref.mode == 0) { ThemePref.set(if (it) 0 else if (sysDark) 2 else 1) } }
@@ -646,7 +646,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         if (Debug.on) item { NavRow("请求记录", "最近的接口请求和返回内容", "${Debug.reqs.collectAsState().value.size} 条") { nav.push(Page.DebugLog) } }
        }
        "about" -> {
-        item { NavRow("版本", null, "原生版 0.3.0", clickable = false) {} }
+        item { NavRow("版本", null, "0.3.0", clickable = false) {} }
         item { NavRow("源代码", "github.com/acnekot/NEKOPLAY", null, clickable = false) {} }
        }
       }

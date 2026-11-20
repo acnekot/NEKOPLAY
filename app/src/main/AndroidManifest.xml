@@ -10,7 +10,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <application
         android:name=".App"
-        android:label="NEKOPLAY 原生"
+        android:label="NEKOPLAY"
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/Launch">
         <activity android:name=".MainActivity" android:exported="true"
