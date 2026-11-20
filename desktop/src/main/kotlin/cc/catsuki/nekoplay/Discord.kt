@@ -30,7 +30,7 @@ object DiscordRpc {
 
     private fun tick() {
         val id = DiscordPref.clientId.trim()
-        if (!DiscordPref.on || id.isEmpty()) { if (conn != null) { clear(); close() }; DiscordPref.status = if (DiscordPref.on) "请先填 Client ID" else ""; return }
+        if (!DiscordPref.on || !Features.on("discord") || id.isEmpty()) { if (conn != null) { clear(); close() }; DiscordPref.status = if (DiscordPref.on) "请先填 Client ID" else ""; return }
         if (conn == null || connectedId != id) { close(); connect(id) }
         val st = Engine.state.value; val t = st.current
         val pos = Engine.position.value

@@ -265,9 +265,9 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
         }
         if (liked != null) item { ListRow({ LikedCover(liked.cover, 56.dp) }, "我喜欢", "${two(liked.count)} 首") { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
         item { ListRow({ RecentCover(rec.firstOrNull()?.cover, 56.dp) }, "最近播放", listMeta(rec)) { nav.push(Page.Detail("recent", "recent", "最近播放")) } }
-        item { val dls by Downloads.items.collectAsState(); ListRow({ IconCover(NIcons.download, 56.dp) }, "本地下载", "${two(dls.size)} 首") { nav.push(Page.DlList) } }
-        item { ListRow({ IconCover(NIcons.chart, 56.dp) }, "听歌统计", "本机的播放次数和时长") { nav.push(Page.Stats) } }
-        item { val loc by LocalMusic.list.collectAsState(); ListRow({ IconCover(NIcons.disc, 56.dp) }, "本地音乐", if (loc.isEmpty()) "扫描手机 / 电脑里的歌" else "${two(loc.size)} 首") { nav.push(Page.Local) } }
+        if (Features.on("dl")) item { val dls by Downloads.items.collectAsState(); ListRow({ IconCover(NIcons.download, 56.dp) }, "本地下载", "${two(dls.size)} 首") { nav.push(Page.DlList) } }
+        if (Features.on("stats")) item { ListRow({ IconCover(NIcons.chart, 56.dp) }, "听歌统计", "本机的播放次数和时长") { nav.push(Page.Stats) } }
+        if (Features.on("local")) item { val loc by LocalMusic.list.collectAsState(); ListRow({ IconCover(NIcons.disc, 56.dp) }, "本地音乐", if (loc.isEmpty()) "扫描手机 / 电脑里的歌" else "${two(loc.size)} 首") { nav.push(Page.Local) } }
         if (prof == null) item {
             Column(Modifier.padding(vertical = 24.dp)) {
                 T("NOT LOGGED IN", 12, c.s, mono = true, lines = 2, ls = .06f, lh = 1.7f)
@@ -340,7 +340,7 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                 ActionRow {
                     PrimaryBar("播放全部", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(list, 0, shuffle = true) }
-                    if (p.kind != "recent" && list.isNotEmpty()) {
+                    if (p.kind != "recent" && list.isNotEmpty() && Features.on("dl")) {
                         Spacer(Modifier.width(10.dp))
                         Box(Modifier.size(48.dp).press(.96f, true) {
                             downloadSheet(nav, list)
@@ -480,7 +480,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
 }
 
 // ======================= 设置 =======================
-@Composable fun SettingsPage() {
+@Composable fun SettingsPage(sec: String? = null) {
     val nav = LocalNav.current
     val prof by Store.profile.collectAsState()
     val prefs = remember { Plat.prefs("ui") }
@@ -494,6 +494,8 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
     val sysDark = androidx.compose.foundation.isSystemInDarkTheme()
     val p = c
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp)) {
+      when (sec) {
+       null -> {
         item { Group("ACCOUNT") }
         item {
             Row(Modifier.fillMaxWidth().bottomLine(p.k, 2.dp).press { prof?.let { nav.push(Page.User(it.uid, it.name)) } }.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -509,13 +511,24 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                 else LinkBtn("退出登录", 14, p.bad) { Store.logout(); nav.toast = "已退出网易云音乐" }
             }
         }
-        item { Group("APPEARANCE") }
+        item { Group("SETTINGS") }
+        item { SecRow("外观", "主题、深色、字体、取色、背景、动效") { nav.push(Page.SetSub("look")) } }
+        item { SecRow("布局", "首页模块、播放页按钮的位置") { nav.push(Page.SetSub("layout")) } }
+        item { SecRow("歌词", "字号、当前句位置、逐字高亮" + if (Plat.isDesktop) "、桌面歌词" else "、通知栏歌词") { nav.push(Page.SetSub("lyric")) } }
+        item { SecRow("播放", "音质、效果器、淡入淡出、无缝播放") { nav.push(Page.SetSub("play")) } }
+        item { SecRow("存储", "下载、本地音乐、播放缓存") { nav.push(Page.SetSub("storage")) } }
+        if (Plat.isDesktop) item { SecRow("桌面", "托盘、侧拉模式、Discord、快捷键") { nav.push(Page.SetSub("desktop")) } }
+        item { SecRow("功能管理", "开关内置插件：${Features.list.count { Features.on(it.id) }}/${Features.list.size} 已开启") { nav.push(Page.Feats) } }
+        item { SecRow("数据", "WebDAV 备份、听歌统计") { nav.push(Page.SetSub("data")) } }
+        item { SecRow("高级", "性能、内存、调试") { nav.push(Page.SetSub("adv")) } }
+        item { SecRow("关于", "原生版 0.3.0") { nav.push(Page.SetSub("about")) } }
+       }
+       "look" -> {
         item { SwitchRow("跟随系统", "跟随系统的深浅色设置", ThemePref.mode == 0) { ThemePref.set(if (it) 0 else if (sysDark) 2 else 1) } }
         item { SwitchRow("深色模式", "切换为暗色界面", if (ThemePref.mode == 0) sysDark else ThemePref.mode == 2, ThemePref.mode != 0) { ThemePref.set(if (it) 2 else 1) } }
         item { NavRow("主题", "界面风格：BenchLab 粗线框 / 无边框", Look.NAMES[Look.style]) { nav.sheet = SheetSpec("选择主题", null, Look.NAMES.mapIndexed { i, n -> SheetItem((if (i == Look.style) "✓  " else "    ") + n) { Look.set(i) } }) } }
         item { NavRow("字体", "默认 Inter 无衬线；也可以改用系统字体", if (Typo.sans == 0) "系统字体" else "Inter") { Typo.set(1 - Typo.sans) } }
         item { MonetSettings() }
-        item { NavRow("首页布局", "调整首页模块的顺序，或关掉不需要的", "${HomeLayout.visible.size}/${HomeLayout.ALL.size}") { nav.push(Page.HomeLayout) } }
         item { NavRow("自定义背景", "选一张图片，可调模糊、透明度、位置和大小", if (Bg.on) "已设置" else "未设置") { nav.push(Page.Background) } }
         if (Bg.on) item {
             SetLine("栏位不透明度", "有自定义背景时，侧边栏、顶栏、播放条的不透明度") {
@@ -526,7 +539,21 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
             }
         }
         item { NavRow("动效", "动画形式和速度", "${AnimStyle.labels[AnimStyle.style]} · ${Anim.labels[Anim.level]}") { nav.push(Page.Tuning) } }
-        item { Group("LYRICS") }
+       }
+       "layout" -> {
+        item { NavRow("首页布局", "调整首页模块的顺序，或关掉不需要的", "${HomeLayout.visible.size}/${HomeLayout.ALL.size}") { nav.push(Page.HomeLayout) } }
+        item { NavRow("播放页布局", "每个按钮放在哪、什么顺序；手机和 PC 各一套", null) { nav.push(Page.BtnLayout) } }
+        item {
+            SetLine("PC 播放页封面大小", "宽屏播放页左边封面占可用空间的比例") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { NSlider(UiPref.coverPct.toFloat(), 50f..100f, onDone = { UiPref.save() }) { UiPref.coverPct = it.toInt() } }
+                    Spacer(Modifier.width(10.dp)); T("${UiPref.coverPct}%", 14, p.p, 700, mono = true)
+                }
+            }
+        }
+        item { SwitchRow("进度条显示缓存", "进度条上用深一点的颜色标出已经下载好的部分", UiPref.showBuffer) { UiPref.showBuffer = it; UiPref.save() } }
+       }
+       "lyric" -> {
         item {
             SetLine("歌词字号", "歌词页、播放页右栏") {
                 T("今も頭上を回って輝く", LyricPref.size.toFloat(), p.k, 800)
@@ -537,18 +564,22 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
             }
         }
         item { SetLine("当前句位置", "正在唱的那一句停在哪：顶部、第二行（上面保留上一句）、偏上或居中") { ChipRow(LyricPref.ANCHORS, LyricPref.anchor) { LyricPref.changeAnchor(it) } } }
-        if (!Plat.isDesktop) item { SwitchRow("通知栏歌词", "播放通知里显示当前这句歌词；也会发送状态栏歌词（魅族协议，配合状态栏歌词模块）", DeskLyric.notify) { DeskLyric.notify = it; DeskLyric.save() } }
         item { SwitchRow("逐字高亮", "有逐字歌词的歌，当前句一个字一个字亮起来", UiPref.karaoke) { UiPref.karaoke = it; UiPref.save() } }
         item { SwitchRow("远处歌词模糊", "离当前句较远的行轻微模糊（更有层次，略耗性能）", UiPref.lyricBlur) { UiPref.lyricBlur = it; UiPref.save() } }
-        item { Group("PLAYBACK") }
+        if (!Plat.isDesktop) item { SwitchRow("通知栏歌词", "播放通知里显示当前这句歌词；也会发送状态栏歌词（魅族协议，配合状态栏歌词模块）", DeskLyric.notify) { DeskLyric.notify = it; DeskLyric.save() } }
+        if (Features.on("desk")) item { SwitchRow("桌面歌词", "置顶的悬浮歌词窗：鼠标移上去可以切歌、调字号、锁定；托盘菜单也能开关", DeskLyric.on) { DeskLyric.on = it; DeskLyric.save() } }
+        if (Features.on("desk") && DeskLyric.on) item { SwitchRow("锁定桌面歌词", "锁定后不能拖动，鼠标点击会穿过歌词（Windows）", DeskLyric.locked) { DeskLyric.locked = it; DeskLyric.save() } }
+       }
+       "play" -> {
         item { NavRow(if (Plat.isDesktop) "音质" else "Wi-Fi 音质", "在线播放的档位，拿不到时自动降一档", Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav) } }
         if (!Plat.isDesktop) item { NavRow("流量音质", "用手机流量时换成这个档位", if (Engine.qualityCell < 0) "同 Wi-Fi" else Ncm.LEVEL_LABELS[Engine.qualityCell]) { cellQualitySheet(nav) } }
         item { NavRow("效果器", "10 段均衡器、低音增强、环绕、响度", if (FxStore.fx.on) FxStore.fx.preset else "关") { nav.push(Page.Effects) } }
-        item { val dls by Downloads.items.collectAsState(); NavRow("本地下载", "按当前音质下载，附带歌词 · ${Downloads.dir.absolutePath}", "${dls.size} 首") { nav.push(Page.DlList) } }
         item { val ms = listOf(0, 150, 300, 800); SetLine("淡入淡出", "暂停、继续和切歌时音量渐变") { ChipRow(listOf("关", "短", "中", "长"), ms.indexOf(Engine.fadeMs).coerceAtLeast(0)) { Engine.setFade(ms[it]) } } }
         item { SwitchRow("无缝播放", "快播完时提前把下一首接上，歌和歌之间不会断一下（现场专辑、连续曲目）", Engine.gapless) { Engine.changeGapless(it) } }
-        item { SetLine("播放页按钮", "选择播放页底部那排要显示的按钮") { MultiChipRow(UiPref.BTN_NAMES, { UiPref.BTN_KEYS[it] in UiPref.btns }) { UiPref.toggleBtn(UiPref.BTN_KEYS[it]) } } }
-        item { SwitchRow("进度条显示缓存", "进度条上用深一点的颜色标出已经下载好的部分", UiPref.showBuffer) { UiPref.showBuffer = it; UiPref.save() } }
+       }
+       "storage" -> {
+        if (Features.on("dl")) item { val dls by Downloads.items.collectAsState(); NavRow("本地下载", "按当前音质下载，附带歌词 · ${Downloads.dir.absolutePath}", "${dls.size} 首") { nav.push(Page.DlList) } }
+        if (Features.on("local")) item { val loc by LocalMusic.list.collectAsState(); NavRow("本地音乐", "扫描手机 / 电脑里的歌", "${loc.size} 首") { nav.push(Page.Local) } }
         item {
             NavRow("播放缓存", "听过的歌存在本地，再听不用重新下载（上限 1GB）", "%.0f MB".format(cacheSize / 1048576.0)) {
                 nav.sheet = SheetSpec("播放缓存", "已用 %.0f MB / 1024 MB".format(cacheSize / 1048576.0), listOf(SheetItem("清空播放缓存", danger = true) {
@@ -556,23 +587,35 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                 }))
             }
         }
-        if (Plat.isDesktop) {
-            item { Group("DESKTOP") }
-            item { SwitchRow("后台留存", "关闭窗口时缩到系统托盘继续播放；托盘图标可以播放 / 暂停、切歌、退出", UiPref.tray) { UiPref.tray = it; UiPref.save() } }
-            item { SwitchRow("桌面歌词", "置顶的悬浮歌词窗：鼠标移上去可以切歌、调字号、锁定；托盘菜单也能开关", DeskLyric.on) { DeskLyric.on = it; DeskLyric.save() } }
-            if (DeskLyric.on) item { SwitchRow("锁定桌面歌词", "锁定后不能拖动，鼠标点击会穿过歌词（Windows）", DeskLyric.locked) { DeskLyric.locked = it; DeskLyric.save() } }
-            item { SwitchRow("Discord 状态", "在 Discord 上显示正在听的歌（需要打开 Discord 客户端）" + if (DiscordPref.status.isNotEmpty()) " · ${DiscordPref.status}" else "", DiscordPref.on) { DiscordPref.on = it; DiscordPref.save() } }
-            if (DiscordPref.on) item {
-                SetLine("Discord Client ID", "在 discord.com/developers 新建一个应用（名字会显示成「正在听 xxx」），把 Application ID 填这里") {
-                    Box(Modifier.fillMaxWidth().height(40.dp).nbf(1.dp, p.k).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
-                        if (DiscordPref.clientId.isEmpty()) T("Application ID", 13, p.s, mono = true)
-                        BasicTextField(DiscordPref.clientId, { DiscordPref.clientId = it.filter { ch -> ch.isDigit() }; DiscordPref.save() }, Modifier.fillMaxWidth(), singleLine = true,
-                            textStyle = TextStyle(color = p.k, fontSize = Fs.SUB.sp, fontFamily = Mono), cursorBrush = SolidColor(p.p))
-                    }
+       }
+       "desktop" -> {
+        item { SwitchRow("后台留存", "关闭窗口时缩到系统托盘继续播放；托盘图标可以播放 / 暂停、切歌、退出", UiPref.tray) { UiPref.tray = it; UiPref.save() } }
+        item { NavRow("侧拉模式", "窗口变成手机宽度贴在屏幕边上，鼠标离开就收起；也可以右键左上角 NEKOPLAY 进入", if (SidePref.active != 0) "使用中" else null) { SidePref.menu(nav) } }
+        item {
+            SetLine("侧拉宽度", "侧拉模式下窗口的宽度") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { NSlider(SidePref.width.toFloat(), 360f..560f, onDone = { SidePref.save() }) { SidePref.width = it.toInt() } }
+                    Spacer(Modifier.width(10.dp)); T("${SidePref.width}", 14, p.p, 700, mono = true)
                 }
             }
-            item { NavRow("快捷键", "播放、切歌、音量等键盘操作", "${Keys.HELP.size} 个") { nav.push(Page.KeyMap) } }
         }
+        if (Features.on("discord")) item { SwitchRow("Discord 状态", "在 Discord 上显示正在听的歌（需要打开 Discord 客户端）" + if (DiscordPref.status.isNotEmpty()) " · ${DiscordPref.status}" else "", DiscordPref.on) { DiscordPref.on = it; DiscordPref.save() } }
+        if (Features.on("discord") && DiscordPref.on) item {
+            SetLine("Discord Client ID", "在 discord.com/developers 新建一个应用（名字会显示成「正在听 xxx」），把 Application ID 填这里") {
+                Box(Modifier.fillMaxWidth().height(40.dp).nbf(1.dp, p.k).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
+                    if (DiscordPref.clientId.isEmpty()) T("Application ID", 13, p.s, mono = true)
+                    BasicTextField(DiscordPref.clientId, { DiscordPref.clientId = it.filter { ch -> ch.isDigit() }; DiscordPref.save() }, Modifier.fillMaxWidth(), singleLine = true,
+                        textStyle = TextStyle(color = p.k, fontSize = Fs.SUB.sp, fontFamily = Mono), cursorBrush = SolidColor(p.p))
+                }
+            }
+        }
+        item { NavRow("快捷键", "播放、切歌、音量等键盘操作", "${Keys.HELP.size} 个") { nav.push(Page.KeyMap) } }
+       }
+       "data" -> {
+        if (Features.on("webdav")) item { NavRow("WebDAV 备份", "设置、喜欢和最近播放备份到网盘，换设备一键恢复", if (Backup.last > 0) java.text.SimpleDateFormat("MM-dd HH:mm").format(java.util.Date(Backup.last)) else "未备份") { nav.push(Page.Backup) } }
+        if (Features.on("stats")) item { NavRow("听歌统计", "本机的播放次数和时长", null) { nav.push(Page.Stats) } }
+       }
+       "adv" -> {
         item { Group("PERFORMANCE") }
         item { val ps by Perf.stat.collectAsState(); T(Perf.line(ps), 11, p.s, mono = true, lines = 3, lh = 1.5f, modifier = Modifier.padding(vertical = 10.dp)) }
         item { val po by Perf.overlay.collectAsState(); SwitchRow("性能浮窗", "在所有页面左下角显示 CPU、帧率和 GPU", po) { Perf.overlay.value = it; prefs.edit().putBoolean("perf", it).apply() } }
@@ -590,14 +633,20 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                 }
             }
         }
-        item { Group("DATA") }
-        item { NavRow("WebDAV 备份", "设置、喜欢和最近播放备份到网盘，换设备一键恢复", if (Backup.last > 0) java.text.SimpleDateFormat("MM-dd HH:mm").format(java.util.Date(Backup.last)) else "未备份") { nav.push(Page.Backup) } }
-        item { Group("ABOUT") }
-        item { NavRow("版本", null, "原生版 0.3.0", clickable = false) {} }
+        item { Group("DEBUG") }
         item { SwitchRow("调试模式", "出错时显示接口的真实返回（状态码、内容开头），并记录最近的请求", Debug.on) { Debug.set(it) } }
         if (Debug.on) item { NavRow("请求记录", "最近的接口请求和返回内容", "${Debug.reqs.collectAsState().value.size} 条") { nav.push(Page.DebugLog) } }
+       }
+       "about" -> {
+        item { NavRow("版本", null, "原生版 0.3.0", clickable = false) {} }
+        item { NavRow("源代码", "github.com/acnekot/NEKOPLAY", null, clickable = false) {} }
+       }
+      }
     }
 }
+
+/** 设置首页的分类入口 */
+@Composable private fun SecRow(title: String, sub: String, onClick: () -> Unit) = NavRow(title, sub, null, onClick = onClick)
 
 @Composable private fun Group(tag: String) = Box(Modifier.padding(top = 22.dp, bottom = 8.dp)) { Tag(tag) }
 

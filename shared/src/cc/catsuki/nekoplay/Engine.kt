@@ -161,7 +161,7 @@ object Engine {
         val id = reportId ?: return
         reportId = null
         val sec = listenedMs / 1000; listenedMs = 0
-        state.value.queue.firstOrNull { it.id == id }?.let { Stats.add(it, sec) }
+        state.value.queue.firstOrNull { it.id == id }?.let { if (Features.on("stats")) Stats.add(it, sec) }
         if (sec >= 30 && Ncm.loggedIn && !id.startsWith("local:")) scope.launch { Ncm.scrobble(id, sec) }
     }
 

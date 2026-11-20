@@ -83,8 +83,8 @@ import androidx.compose.ui.unit.dp
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             if (liked != null) item { SideList("我喜欢", (top as? Page.Detail)?.id == liked.id, { LikedCover(liked.cover, 32.dp) }) { nav.stack.clear(); nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
             item { SideList("最近播放", (top as? Page.Detail)?.kind == "recent", { RecentCover(rec.firstOrNull()?.cover, 32.dp) }) { nav.stack.clear(); nav.push(Page.Detail("recent", "recent", "最近播放")) } }
-            item { SideList("本地音乐", top == Page.Local, { IconCover(NIcons.disc, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.Local) } }
-            item { SideList("本地下载", top == Page.DlList, { IconCover(NIcons.download, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.DlList) } }
+            if (Features.on("local")) item { SideList("本地音乐", top == Page.Local, { IconCover(NIcons.disc, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.Local) } }
+            if (Features.on("dl")) item { SideList("本地下载", top == Page.DlList, { IconCover(NIcons.download, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.DlList) } }
             items(pls.filter { !it.liked }, key = { "sp" + it.id }) { pl ->
                 SideList(pl.name, (top as? Page.Detail)?.id == pl.id, { Cover(pl.cover, 32.dp, pl.name, decodeSize = 64.dp) }) { nav.stack.clear(); nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
             }
@@ -227,7 +227,7 @@ import androidx.compose.ui.unit.dp
             val on = t != null && t.id in liked
             BarBtn(if (on) NIcons.heart else NIcons.heartLine, on) { if (t != null) Store.toggleLike(t) { nav.toast = it } }
             BarBtn(NIcons.comment, false) { if (t != null) nav.comments = t }
-            if (Plat.isDesktop) BarText("桌", DeskLyric.on) { DeskLyric.on = !DeskLyric.on; DeskLyric.save(); nav.toast = if (DeskLyric.on) "已打开桌面歌词" else "已关闭桌面歌词" }
+            if (Features.on("desk")) BarText("桌", DeskLyric.on) { DeskLyric.on = !DeskLyric.on; DeskLyric.save(); nav.toast = if (DeskLyric.on) "已打开桌面歌词" else "已关闭桌面歌词" }
             BarText("词", nav.side == 1) { nav.side = if (nav.side == 1) 0 else 1 }
             BarBtn(NIcons.queue, nav.side == 2) { nav.side = if (nav.side == 2) 0 else 2 }
             Spacer(Modifier.width(8.dp))

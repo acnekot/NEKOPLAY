@@ -66,7 +66,7 @@ fun main() {
         val show = { visible = true; state.isMinimized = false; winRef[0]?.toFront(); Unit }
         if (UiPref.tray && trayOk) NekoTray(st.playing, st.current?.let { "${it.title} - ${it.artist}" } ?: "NEKOPLAY", show, quit)
         val close = { if (UiPref.tray && trayOk) visible = false else quit() }
-        if (DeskLyric.on) DeskLyricWindow()
+        if (DeskLyric.on && Features.on("desk")) DeskLyricWindow()
         // 无边框窗口：标题栏、最小化 / 最大化 / 关闭按钮和拖边改大小都自己画
         Window(onCloseRequest = close, state = state, visible = visible, title = "NEKOPLAY", icon = appIcon, undecorated = true,
             onPreviewKeyEvent = { e ->
@@ -86,6 +86,7 @@ fun main() {
                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
                     Root(chrome = { TitleBar(state, close) })
                     ResizeEdges(state)
+                    SideTracker()
                 }
             }
         }

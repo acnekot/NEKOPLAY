@@ -33,6 +33,7 @@ import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowState
 import java.awt.Cursor
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import java.awt.MouseInfo
 
 /**
@@ -47,7 +48,10 @@ import java.awt.MouseInfo
     fun toggleMax() { if (max) WinFrame.restore(window) else WinFrame.maximize(window) }
     // 整条标题栏都能拖（按钮、头像除外）；双击最大化 / 还原。自己处理拖动，比 WindowDraggableArea 的判定范围大
     var lastDown by remember { mutableStateOf(0L) }
-    Box(Modifier.fillMaxWidth().height(60.dp).pointerInput(max) {
+    val side = SidePref.active != 0
+    Box(Modifier.fillMaxWidth().height(60.dp).pointerInput(max, side) {
+        // 侧拉模式：窗口位置固定，不能拖也不能最大化
+        if (side) return@pointerInput
         awaitEachGesture {
             awaitFirstDown()
             val now = System.currentTimeMillis()
@@ -82,12 +86,22 @@ import java.awt.MouseInfo
     }) {
         Row(Modifier.fillMaxSize().padding(start = 26.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            T("NEKOPLAY", Fs.HEAD + 2, w = 900, ls = .01f, modifier = Modifier.press { nav.player = false; nav.stack.clear(); nav.tab = 0 })
+            // 右键 NEKOPLAY：侧拉模式菜单
+            T("NEKOPLAY", Fs.HEAD + 2, w = 900, ls = .01f, modifier = Modifier.pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                        if (e.type == androidx.compose.ui.input.pointer.PointerEventType.Press && e.buttons.isSecondaryPressed) { e.changes.forEach { it.consume() }; SidePref.menu(nav) }
+                    }
+                }
+            }.press { nav.player = false; nav.stack.clear(); nav.tab = 0 })
             Spacer(Modifier.weight(1f))
             TopActions(40.dp, 20.dp, 28.dp)
             Spacer(Modifier.width(10.dp))
-            CaptionClick(onClick = { state.isMinimized = true }) { col -> line(col, -8f, 0f, 8f, 0f) }
-            CaptionClick(onClick = { toggleMax() }) { col ->
+            if (!side) CaptionClick(onClick = { state.isMinimized = true }) { col -> line(col, -8f, 0f, 8f, 0f) }
+            // 侧拉模式：这个位置换成「退出侧拉」（两个方框 → 一个箭头）
+            if (side) CaptionClick(onClick = { SidePref.exit?.invoke() }) { col -> if (SidePref.active < 0) { line(col, -4f, -7f, 4f, 0f); line(col, 4f, 0f, -4f, 7f) } else { line(col, 4f, -7f, -4f, 0f); line(col, -4f, 0f, 4f, 7f) } }
+            else CaptionClick(onClick = { toggleMax() }) { col ->
                 if (!max) square(col, 0f, 0f, 14f)
                 else { square(col, -2f, 2f, 11f); line(col, -3f, -6f, 6f, -6f); line(col, 6f, -6f, 6f, 3f) }
             }
@@ -117,7 +131,7 @@ private fun DrawScope.square(col: Color, ox: Float, oy: Float, s: Float) {
 
 /** 无边框窗口拖边 / 拖角改大小（最大化时不生效） */
 @Composable fun FrameWindowScope.ResizeEdges(state: WindowState) {
-    if (WinFrame.maxed || WinFrame.half != 0) return
+    if (WinFrame.maxed || WinFrame.half != 0 || SidePref.active != 0) return
     val e = 5.dp
     Box(Modifier.fillMaxSize()) {
         Edge(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(e), Cursor.N_RESIZE_CURSOR, top = true)

@@ -103,11 +103,10 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                 }.drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp) }
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { T(if (lt > .5f && !wideP) "LYRICS" else if (st.fm) "PERSONAL FM" else "NOW PLAYING", 12, p.k.copy(alpha = .5f), 700, mono = true, ls = .14f) }
-                    Box(Modifier.size(44.dp).graphicsLayer { alpha = if (wideP) 1f else lt }.press { if (lt > .9f || wideP) showTr = !showTr }, contentAlignment = Alignment.Center) {
-                        Box(Modifier.size(28.dp).background(if (showTr) p.k else Color.Transparent).nbf(1.dp, p.k), contentAlignment = Alignment.Center) {
-                            T("译", 13, if (showTr) p.tagFg else p.k, 700)
-                        }
-                    }
+                    // 顶栏右侧槽位（默认放「译」，只在歌词页显示）
+                    if (t != null) { val x = BtnCtx(t, st, showTr) { showTr = !showTr }
+                        PlayerLayout.keys(false, "top").forEach { k -> Box(if (k == "tr") Modifier.graphicsLayer { alpha = lt } else Modifier) { PBtn(k, x) } } }
+                    else Spacer(Modifier.width(44.dp))
                 }
                 if (t == null) { Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { T("NO TRACK", 12, p.s, mono = true, ls = .08f) }; return@Column }
                 // 宽窗口（PC / 平板横屏）：左边封面 + 信息 + 控制，右边歌词
@@ -148,13 +147,9 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     if (lt < .45f) Column(Modifier.width(coverDp).graphicsLayer {
                         translationX = (w - coverNow) / 2; translationY = nowTop + coverNow + 18 * dp - 12 * dp * lt; alpha = (1 - lt / .45f).coerceIn(0f, 1f)
                     }) {
-                        val liked by Store.likedIds.collectAsState()
-                        val on = t.id in liked
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             T(t.title, 24, w = 800, lh = 1.25f, lines = 2, modifier = Modifier.weight(1f).press(onLong = { copy(t.title, "歌名") }) {})
-                            Box(Modifier.size(44.dp).offset(x = 10.dp).press(.85f, true) { Store.toggleLike(t) { nav.toast = it } }, contentAlignment = Alignment.Center) {
-                                NIcon(if (on) NIcons.heart else NIcons.heartLine, 24.dp, if (on) p.p else p.k)
-                            }
+                            Row(Modifier.offset(x = 10.dp)) { SlotRow(false, "title", BtnCtx(t, st, showTr) { showTr = !showTr }, 0.dp) }
                         }
                         T(t.artist, 15, p.s, lh = 1.3f, lines = 2, modifier = Modifier.press(onLong = { copy(t.artist, "歌手") }) { openArtists(nav, t) })
                         // 点音质这一行可以换音质
@@ -167,14 +162,17 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                         translationX = cl + cs + 12 * dp; translationY = ct + (cs - 38 * dp) / 2; alpha = ((lt - .75f) / .25f).coerceIn(0f, 1f)
                     }) { T(t.title, 16, w = 800, lh = 1.25f, lines = 2, modifier = Modifier.press(onLong = { copy(t.title, "歌名") }) {}); T(t.artist, 13, p.s, lh = 1.3f, modifier = Modifier.press(onLong = { copy(t.artist, "歌手") }) { openArtists(nav, t) }) }
                     // 控制组（两页位置完全一致）
-                    Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(with(d) { ctrlH.toDp() })) { Controls(t, st) }
+                    val bx = BtnCtx(t, st, showTr) { showTr = !showTr }
+                    Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(with(d) { ctrlH.toDp() })) {
+                        Controls(t, st) { SlotRow(false, "left", bx); Spacer(Modifier.weight(1f)); SlotRow(false, "right", bx) }
+                    }
                 }
             }
         }
     }
 }
 
-@Composable private fun Controls(t: Track, st: PlayState, btns: Boolean = true) {
+@Composable private fun Controls(t: Track, st: PlayState, row: (@Composable RowScope.() -> Unit)? = null) {
     val nav = LocalNav.current
     val liked by Store.likedIds.collectAsState()
     var scrub by remember { mutableStateOf<Float?>(null) }
@@ -192,36 +190,8 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             Spacer(Modifier.width(26.dp))
             SquareBtn(NIcons.next) { Engine.next() }
         }
-        if (btns) { Spacer(Modifier.height(10.dp)); Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) { PlayerBtnItems(t, st) { Spacer(Modifier.weight(1f)) } } }
+        if (row != null) { Spacer(Modifier.height(10.dp)); Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically, content = row) }
     }
-}
-
-@Composable private fun ModeBtn(st: PlayState) {
-    val nav = LocalNav.current
-    Box(Modifier.size(44.dp).press(haptic = true) { Engine.cycleMode(); nav.toast = listOf("列表循环", "单曲循环", "随机播放")[Engine.state.value.mode.ordinal] }, contentAlignment = Alignment.Center) {
-        NIcon(when (st.mode) { Mode.LOOP_ALL -> NIcons.modeSeq; Mode.LOOP_ONE -> NIcons.modeOne; Mode.SHUFFLE -> NIcons.modeShuffle }, 22.dp)
-    }
-}
-
-/** 播放页功能按钮（模式 / 定时 / 下载 / 更多 / 评论 / 队列），手机横排，PC 竖排放在左边 */
-@Composable private fun PlayerBtnItems(t: Track, st: PlayState, mode: Boolean = true, fill: @Composable () -> Unit) {
-    val nav = LocalNav.current
-    // 按钮可以在设置里开关：左边放模式 / 定时，右边放下载 / 更多 / 评论 / 队列
-    val b = UiPref.btns
-            if (mode && "mode" in b) { ModeBtn(st); Spacer(Modifier.size(6.dp)) }
-            if ("sleep" in b) SleepBtn()
-            fill()
-            if ("dl" in b) {
-                val dls by Downloads.items.collectAsState(); val act by Downloads.active.collectAsState()
-                val has = dls.any { it.track.id == t.id }; val ing = t.id in act
-                Box(Modifier.size(44.dp).press(haptic = true) { if (has) nav.toast = "已经下载过了" else if (!ing) downloadSheet(nav, listOf(t)) }, contentAlignment = Alignment.Center) {
-                    if (ing) T(act[t.id]!!.let { if (it < 0) "…" else "%.0f".format(it * 100) }, 12, c.p, 700, mono = true) else NIcon(NIcons.download, 22.dp, if (has) c.p else c.k)
-                }
-                Spacer(Modifier.size(6.dp))
-            }
-            if ("more" in b) { Box(Modifier.size(44.dp).press(haptic = true) { trackActions(nav, t) }, contentAlignment = Alignment.Center) { NIcon(NIcons.more, 22.dp) }; Spacer(Modifier.size(6.dp)) }
-            if ("comment" in b) { Box(Modifier.size(44.dp).press(haptic = true) { nav.comments = t }, contentAlignment = Alignment.Center) { NIcon(NIcons.comment, 22.dp) }; Spacer(Modifier.size(6.dp)) }
-            if ("queue" in b) Box(Modifier.size(44.dp).press(haptic = true) { nav.queue = true }, contentAlignment = Alignment.Center) { NIcon(NIcons.queue, 22.dp) }
 }
 
 /** 缓冲超过 0.4 秒才显示加载点 */
@@ -642,12 +612,16 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
     val copy = rememberCopy()
     val nav = LocalNav.current
     val p = c
-    val liked by Store.likedIds.collectAsState()
+    val bx = BtnCtx(t, st, showTr, toggleTr)
     Row(Modifier.fillMaxSize()) {
-        BoxWithConstraints(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
             // 封面宽度 = 进度条宽度（控制区左右各留 22 的内边距，所以外框比封面宽 44）
-            // 左栏变窄（开了评论 / 队列）时封面跟着缩，保证外框放得下，封面始终和进度条等宽
-            val cover = minOf(maxWidth - 44.dp - 48.dp, maxHeight - 290.dp, 520.dp).coerceAtLeast(160.dp)
+            // 左边留 48 给收起按钮，右边是按钮竖栏（类似 Hydrogen）；封面大小在设置里按百分比调
+            val sideKeys = PlayerLayout.keys(true, "side")
+            val sideW = if (sideKeys.isEmpty()) 0.dp else 52.dp
+            val full = minOf(maxWidth - 44.dp - 56.dp - sideW - 16.dp, maxHeight - 290.dp, 560.dp)
+            val cover = (full * (UiPref.coverPct / 100f)).coerceAtLeast(160.dp)
+            Row(Modifier.padding(start = 56.dp), verticalAlignment = Alignment.Bottom) {
             Column(Modifier.width(cover + 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Cover(t.cover, cover, t.title)
                 Spacer(Modifier.height(22.dp))
@@ -660,30 +634,18 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
                           else (ainfo?.let { if (it.kbps == 0 && st.kbps > 0) it.copy(kbps = st.kbps) else it }?.line() ?: "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}") + "${if (st.cached) " · 缓存" else ""} ▾",
                             11, p.s, mono = true, ls = .06f, modifier = Modifier.padding(top = 6.dp).press { qualitySheet(nav) })
                     }
-                    // 右侧一列：喜欢，下面是歌词翻译开关（和封面右边缘对齐）
-                    Column(Modifier.offset(x = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        val on = t.id in liked
-                        Box(Modifier.size(44.dp).press(.85f, true) { Store.toggleLike(t) { nav.toast = it } }, contentAlignment = Alignment.Center) {
-                            NIcon(if (on) NIcons.heart else NIcons.heartLine, 24.dp, if (on) p.p else p.k)
-                        }
-                        Box(Modifier.size(44.dp).press(.9f) { toggleTr() }, contentAlignment = Alignment.Center) {
-                            Box(Modifier.size(24.dp).background(if (showTr) p.k else Color.Transparent).nbf(1.dp, p.k), contentAlignment = Alignment.Center) {
-                                T("译", 12, if (showTr) p.tagFg else p.k, 700)
-                            }
-                        }
-                        // PC：播放模式放在译下面
-                        if ("mode" in UiPref.btns) ModeBtn(st)
-                    }
+                    // 右侧一列：歌名右侧槽位（默认 喜欢 / 译 / 播放模式），和封面右边缘对齐
+                    Column(Modifier.offset(x = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) { SlotCol(true, "info", bx, 0.dp) }
                 }
                 Spacer(Modifier.height(10.dp))
-                Box(Modifier.fillMaxWidth()) { Controls(t, st, btns = false) }
+                val bottom = PlayerLayout.keys(true, "bottom")
+                Box(Modifier.fillMaxWidth()) { Controls(t, st, if (bottom.isEmpty()) null else ({ Spacer(Modifier.weight(1f)); SlotRow(true, "bottom", bx); Spacer(Modifier.weight(1f)) })) }
+            }
+            // 按钮竖栏：贴在封面区右边、和控制条底部对齐，往上排
+            if (sideKeys.isNotEmpty()) Column(Modifier.padding(start = 8.dp, bottom = 4.dp).width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) { SlotCol(true, "side", bx, 4.dp) }
             }
             // 收起播放页（也可以按 Esc）
             Box(Modifier.align(Alignment.TopStart).padding(8.dp).size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp, p.s) }
-            // 功能按钮竖排在左边，和收起按钮对齐，往下让出一段
-            Column(Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                PlayerBtnItems(t, st, mode = false) { Spacer(Modifier.height(18.dp)) }
-            }
         }
         // 右栏：歌词；打开评论时换成评论（从右边滑进来）
         Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {

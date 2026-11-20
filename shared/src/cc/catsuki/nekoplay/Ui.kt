@@ -208,6 +208,8 @@ object NIcons {
     const val gear = "s|M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"
     const val up = "s|M5 15l7-7 7 7"
     const val down = "s|M5 9l7 7 7-7"
+    const val image = "s|M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9.5a1 1 0 1 0 0.01 0"
+    const val shift = "s|M12 4v16M6 8l-3 4 3 4M18 8l3 4-3 4"
     const val trash = "s|M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"
     const val comment = "s|M4 5h16v11H10l-5 4v-4H4z"
     const val more = "f|M4 10.5h3.5v3.5H4zM10.25 10.5h3.5v3.5h-3.5zM16.5 10.5H20v3.5h-3.5z"
@@ -382,14 +384,15 @@ object UiPref {
     var barAlpha by mutableFloatStateOf(.5f)    // 有背景时栏位的不透明度
     var lowMem by mutableStateOf(false)         // 省内存模式
     var tray by mutableStateOf(true)            // 桌面：关闭窗口时留在托盘继续播放
+    var coverPct by mutableIntStateOf(80)       // PC 播放页封面大小（占可用空间的百分比）
     /** 播放页底下那排按钮显示哪些 */
     val BTN_KEYS = listOf("mode", "sleep", "dl", "more", "comment", "queue")
     val BTN_NAMES = listOf("播放模式", "定时关闭", "下载", "更多", "评论", "播放列表")
     var btns by mutableStateOf(setOf("mode", "sleep", "more", "comment", "queue"))
     fun toggleBtn(key: String) { btns = if (key in btns) btns - key else btns + key; k.edit().putStringSet("btns", btns).apply() }
     private val k get() = Plat.prefs("ui")
-    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true) }
-    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).apply() }
+    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true); coverPct = k.getInt("coverPct", 80) }
+    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).putInt("coverPct", coverPct).apply() }
 }
 
 /** 歌词字号（设置里可调，歌词页 / 右栏 / 播放页都用它） */
