@@ -43,8 +43,8 @@ import java.awt.MouseInfo
 @Composable fun FrameWindowScope.TitleBar(state: WindowState, onClose: () -> Unit) {
     val nav = LocalNav.current
     val p = c
-    val max = state.placement == WindowPlacement.Maximized
-    fun toggleMax() { state.placement = if (max) WindowPlacement.Floating else WindowPlacement.Maximized }
+    val max = WinFrame.maxed || WinFrame.half != 0
+    fun toggleMax() { if (max) WinFrame.restore(window) else WinFrame.maximize(window) }
     // 整条标题栏都能拖（按钮、头像除外）；双击最大化 / 还原。自己处理拖动，比 WindowDraggableArea 的判定范围大
     var lastDown by remember { mutableStateOf(0L) }
     Box(Modifier.fillMaxWidth().height(60.dp).pointerInput(max) {
@@ -54,7 +54,7 @@ import java.awt.MouseInfo
             if (now - lastDown < 350) { lastDown = 0; toggleMax(); return@awaitEachGesture }
             lastDown = now
             val start = MouseInfo.getPointerInfo().location
-            val w0 = window.location
+            var w0 = window.location
             var moved = false
             while (true) {
                 val ev = awaitPointerEvent()
@@ -62,14 +62,22 @@ import java.awt.MouseInfo
                 val p0 = MouseInfo.getPointerInfo().location
                 val dx = p0.x - start.x; val dy = p0.y - start.y
                 if (!moved && dx * dx + dy * dy < 16) continue
-                if (!moved && max) {
-                    // 最大化时拖动：先还原，再让窗口跟着鼠标走
-                    state.placement = WindowPlacement.Floating
+                if (!moved && (WinFrame.maxed || WinFrame.half != 0)) {
+                    // 最大化 / 贴边时拖动：还原成原来的大小，鼠标仍按比例落在标题栏同一位置
+                    val b = window.bounds
+                    val fx = (start.x - b.x).toFloat() / b.width.coerceAtLeast(1)
+                    WinFrame.restore(window, keepPos = false)
+                    val r = window.bounds
+                    window.setLocation(start.x - (r.width * fx).toInt(), start.y - (start.y - b.y))
+                    w0 = window.location
                 }
                 moved = true
                 window.setLocation(w0.x + dx, w0.y + dy)
+                WinFrame.preview(p0)
                 ev.changes.forEach { it.consume() }
             }
+            // 松手：拖到屏幕顶边 = 最大化，拖到左 / 右边 = 占半屏（和 Windows 的贴边一样，但不会盖住任务栏）
+            if (moved) WinFrame.drop(window, MouseInfo.getPointerInfo().location)
         }
     }) {
         Row(Modifier.fillMaxSize().padding(start = 26.dp, end = 8.dp),
@@ -109,7 +117,7 @@ private fun DrawScope.square(col: Color, ox: Float, oy: Float, s: Float) {
 
 /** 无边框窗口拖边 / 拖角改大小（最大化时不生效） */
 @Composable fun FrameWindowScope.ResizeEdges(state: WindowState) {
-    if (state.placement != WindowPlacement.Floating) return
+    if (WinFrame.maxed || WinFrame.half != 0) return
     val e = 5.dp
     Box(Modifier.fillMaxSize()) {
         Edge(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(e), Cursor.N_RESIZE_CURSOR, top = true)
@@ -149,4 +157,46 @@ private fun DrawScope.square(col: Color, ox: Float, oy: Float, s: Float) {
             }
         }
     })
+}
+
+
+/**
+ * 无边框窗口的最大化 / 贴边：系统的「最大化」会把任务栏盖住，所以自己算屏幕的可用区域（去掉任务栏）来摆窗口。
+ * half：0 不贴边，-1 左半屏，1 右半屏。
+ */
+object WinFrame {
+    var maxed by mutableStateOf(false)
+    var half by mutableIntStateOf(0)
+    private var normal: java.awt.Rectangle? = null
+
+    /** 某个点所在屏幕的可用区域（去掉任务栏） */
+    fun usable(at: java.awt.Point? = null, w: java.awt.Window? = null): java.awt.Rectangle {
+        val ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+        val gc = at?.let { p -> ge.screenDevices.map { it.defaultConfiguration }.firstOrNull { it.bounds.contains(p) } } ?: w?.graphicsConfiguration ?: ge.defaultScreenDevice.defaultConfiguration
+        val b = gc.bounds; val ins = java.awt.Toolkit.getDefaultToolkit().getScreenInsets(gc)
+        return java.awt.Rectangle(b.x + ins.left, b.y + ins.top, b.width - ins.left - ins.right, b.height - ins.top - ins.bottom)
+    }
+    private fun remember(w: java.awt.Window) { if (!maxed && half == 0) normal = w.bounds }
+
+    fun maximize(w: java.awt.Window, at: java.awt.Point? = null) { remember(w); w.bounds = usable(at, w); maxed = true; half = 0 }
+    fun snap(w: java.awt.Window, side: Int, at: java.awt.Point) {
+        remember(w); val u = usable(at, w)
+        w.bounds = java.awt.Rectangle(if (side < 0) u.x else u.x + u.width / 2, u.y, u.width / 2, u.height); half = side; maxed = false
+    }
+    fun restore(w: java.awt.Window, keepPos: Boolean = true) {
+        normal?.let { n -> w.bounds = if (keepPos) n else java.awt.Rectangle(w.x, w.y, n.width, n.height) }
+        maxed = false; half = 0
+    }
+    /** 拖动中：暂时不画预览，只记录 */
+    fun preview(p: java.awt.Point) {}
+    fun drop(w: java.awt.Window, p: java.awt.Point) {
+        val u = usable(p, w)
+        when {
+            p.y <= u.y + 2 -> maximize(w, p)
+            p.x <= u.x + 2 -> snap(w, -1, p)
+            p.x >= u.x + u.width - 3 -> snap(w, 1, p)
+            // 标题栏拖到屏幕上方外面了：拉回来，保证还能抓到
+            w.y < u.y -> w.setLocation(w.x, u.y)
+        }
+    }
 }

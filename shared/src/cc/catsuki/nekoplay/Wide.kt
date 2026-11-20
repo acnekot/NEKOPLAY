@@ -75,13 +75,8 @@ import androidx.compose.ui.unit.dp
         SideItem(NIcons.radio, "私人 FM", top is Page.Fm) { nav.player = false; nav.stack.clear(); nav.push(Page.Fm) }
         SideItem(NIcons.chart, "发现 · 排行榜", top is Page.Playlists && top.kind == "top") { nav.player = false; nav.stack.clear(); nav.push(Page.Playlists("top", "", "排行榜")) }
         Spacer(Modifier.height(14.dp))
-        // 进入曲库时：歌单列表放大、往右飞进曲库，这里留空；离开曲库再滑回来
-        val inLib = nav.stack.isEmpty() && nav.tab == 1
+        // 歌单列表一直显示（不再和曲库联动）
         Box(Modifier.weight(1f).fillMaxWidth()) {
-        androidx.compose.animation.AnimatedVisibility(!inLib, Modifier.fillMaxSize(),
-            enter = fadeIn(tween(240, 80)) + androidx.compose.animation.slideInHorizontally(spring(1f, Anim.stiff(androidx.compose.animation.core.Spring.StiffnessMediumLow))) { -it / 3 },
-            exit = fadeOut(tween(200)) + androidx.compose.animation.scaleOut(tween(260), targetScale = 1.35f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f))
-                + androidx.compose.animation.slideOutHorizontally(tween(260)) { it * 2 / 3 }) {
         Column(Modifier.fillMaxSize()) {
         Box(Modifier.padding(horizontal = 18.dp)) { TagRow("PLAYLISTS", 0.dp) }
         Spacer(Modifier.height(6.dp))
@@ -93,7 +88,6 @@ import androidx.compose.ui.unit.dp
             items(pls.filter { !it.liked }, key = { "sp" + it.id }) { pl ->
                 SideList(pl.name, (top as? Page.Detail)?.id == pl.id, { Cover(pl.cover, 32.dp, pl.name, decodeSize = 64.dp) }) { nav.stack.clear(); nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
             }
-        }
         }
         }
         }
@@ -126,10 +120,7 @@ import androidx.compose.ui.unit.dp
     val nav = LocalNav.current
     val key: Any = nav.stack.lastOrNull() ?: "tab${nav.tab}"
     AnimatedContent(key, Modifier.fillMaxSize(), transitionSpec = {
-        // 进曲库：内容从侧边栏的位置放大移进来（和侧边栏歌单飞出去接上）
-        if (targetState == "tab1") (fadeIn(tween(240)) + androidx.compose.animation.scaleIn(spring(1f, Anim.stiff(androidx.compose.animation.core.Spring.StiffnessMediumLow)), initialScale = .78f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, .35f))
-            + androidx.compose.animation.slideInHorizontally(spring(1f, Anim.stiff(androidx.compose.animation.core.Spring.StiffnessMediumLow))) { -it / 3 }) togetherWith fadeOut(tween(110))
-        else fadeIn(tween(160)) togetherWith fadeOut(tween(110))
+        fadeIn(tween(160)) togetherWith fadeOut(tween(110))
     }, label = "wide") { k ->
         Box(Modifier.fillMaxSize()) {
             when (k) {
@@ -236,6 +227,7 @@ import androidx.compose.ui.unit.dp
             val on = t != null && t.id in liked
             BarBtn(if (on) NIcons.heart else NIcons.heartLine, on) { if (t != null) Store.toggleLike(t) { nav.toast = it } }
             BarBtn(NIcons.comment, false) { if (t != null) nav.comments = t }
+            if (Plat.isDesktop) BarText("桌", DeskLyric.on) { DeskLyric.on = !DeskLyric.on; DeskLyric.save(); nav.toast = if (DeskLyric.on) "已打开桌面歌词" else "已关闭桌面歌词" }
             BarText("词", nav.side == 1) { nav.side = if (nav.side == 1) 0 else 1 }
             BarBtn(NIcons.queue, nav.side == 2) { nav.side = if (nav.side == 2) 0 else 2 }
             Spacer(Modifier.width(8.dp))

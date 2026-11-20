@@ -61,18 +61,10 @@ fun main() {
         val st by Engine.state.collectAsState()
         // 系统不支持托盘（部分 Linux 桌面）时就不藏窗口，直接退出
         val trayOk = remember { runCatching { java.awt.SystemTray.isSupported() }.getOrDefault(false) }
-        if (UiPref.tray && trayOk) Tray(trayIcon, tooltip = st.current?.let { "${it.title} - ${it.artist}" } ?: "NEKOPLAY", onAction = { visible = true; state.isMinimized = false }) {
-            Item("显示窗口") { visible = true; state.isMinimized = false }
-            Separator()
-            Item(if (st.playing) "暂停" else "播放") { Engine.toggle() }
-            Item("上一首") { Engine.prev() }
-            Item("下一首") { Engine.next() }
-            Separator()
-            Item(if (DeskLyric.on) "关闭桌面歌词" else "打开桌面歌词") { DeskLyric.on = !DeskLyric.on; DeskLyric.save() }
-            if (DeskLyric.on && DeskLyric.locked) Item("解锁桌面歌词") { DeskLyric.locked = false; DeskLyric.save() }
-            Separator()
-            Item("退出") { quit() }
-        }
+        // 托盘：自己用 AWT 建（Compose 的 Tray 菜单在 Windows 上中文会显示成方块，这里给菜单指定中文字体）
+        val winRef = remember { arrayOfNulls<java.awt.Window>(1) }
+        val show = { visible = true; state.isMinimized = false; winRef[0]?.toFront(); Unit }
+        if (UiPref.tray && trayOk) NekoTray(st.playing, st.current?.let { "${it.title} - ${it.artist}" } ?: "NEKOPLAY", show, quit)
         val close = { if (UiPref.tray && trayOk) visible = false else quit() }
         if (DeskLyric.on) DeskLyricWindow()
         // 无边框窗口：标题栏、最小化 / 最大化 / 关闭按钮和拖边改大小都自己画
@@ -85,6 +77,7 @@ fun main() {
             // 空格、方向键：先让输入框处理，没人用才当快捷键
             onKeyEvent = { e -> e.type == KeyEventType.KeyDown && !e.isCtrlPressed && !e.isAltPressed && Keys.handlePlain(e.key) }) {
             window.minimumSize = java.awt.Dimension(360, 560)
+            winRef[0] = window
             // 最小化时释放图片内存缓存并回收一次，把内存还给系统
             androidx.compose.runtime.LaunchedEffect(state.isMinimized) {
                 if (state.isMinimized && UiPref.lowMem) { SingletonImageLoader.get(coil3.PlatformContext.INSTANCE).memoryCache?.clear(); System.gc() }
@@ -143,5 +136,46 @@ object ClickThrough {
             val ex = u.GetWindowLongW(h, -20)
             u.SetWindowLongW(h, -20, if (on) ex or 0x20 or 0x80000 else ex and 0x20.inv())
         }
+    }
+}
+
+
+/** 系统托盘：图标 + 右键菜单（中文字体），双击 / 单击图标打开窗口 */
+@androidx.compose.runtime.Composable
+private fun NekoTray(playing: Boolean, tip: String, show: () -> Unit, quit: () -> Unit) {
+    val img = remember { javax.imageio.ImageIO.read(Thread.currentThread().contextClassLoader.getResourceAsStream("icon.png")) }
+    val font = remember {
+        val names = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().availableFontFamilyNames.toSet()
+        java.awt.Font(listOf("Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei").firstOrNull { it in names } ?: java.awt.Font.DIALOG, java.awt.Font.PLAIN, 12)
+    }
+    val showS by rememberUpdatedState(show); val quitS by rememberUpdatedState(quit)
+    val play = remember { java.awt.MenuItem() }
+    val lyric = remember { java.awt.MenuItem() }
+    val unlock = remember { java.awt.MenuItem("解锁桌面歌词") }
+    val icon = remember {
+        val menu = java.awt.PopupMenu().apply { this.font = font }
+        fun item(label: String, act: () -> Unit) = java.awt.MenuItem(label).apply { addActionListener { java.awt.EventQueue.invokeLater(act) } }
+        menu.add(item("显示窗口") { showS() }); menu.addSeparator()
+        play.addActionListener { java.awt.EventQueue.invokeLater { Engine.toggle() } }; menu.add(play)
+        menu.add(item("上一首") { Engine.prev() }); menu.add(item("下一首") { Engine.next() }); menu.addSeparator()
+        lyric.addActionListener { java.awt.EventQueue.invokeLater { DeskLyric.on = !DeskLyric.on; DeskLyric.save() } }; menu.add(lyric)
+        unlock.addActionListener { java.awt.EventQueue.invokeLater { DeskLyric.locked = false; DeskLyric.save() } }; menu.add(unlock)
+        menu.addSeparator(); menu.add(item("退出") { quitS() })
+        val size = java.awt.SystemTray.getSystemTray().trayIconSize
+        java.awt.TrayIcon(img.getScaledInstance(size.width, size.height, java.awt.Image.SCALE_SMOOTH), "NEKOPLAY", menu).apply {
+            isImageAutoSize = false
+            addActionListener { java.awt.EventQueue.invokeLater { showS() } }
+            addMouseListener(object : java.awt.event.MouseAdapter() {
+                override fun mouseClicked(e: java.awt.event.MouseEvent) { if (e.button == java.awt.event.MouseEvent.BUTTON1) java.awt.EventQueue.invokeLater { showS() } }
+            })
+        }
+    }
+    play.label = if (playing) "暂停" else "播放"
+    lyric.label = if (DeskLyric.on) "关闭桌面歌词" else "打开桌面歌词"
+    unlock.isEnabled = DeskLyric.on && DeskLyric.locked
+    icon.toolTip = tip.take(120)
+    DisposableEffect(Unit) {
+        runCatching { java.awt.SystemTray.getSystemTray().add(icon) }
+        onDispose { runCatching { java.awt.SystemTray.getSystemTray().remove(icon) } }
     }
 }

@@ -185,6 +185,7 @@ object NIcons {
     const val heartLine = "s|M12 20l-7.5-7.3A4.8 4.8 0 0 1 12 6.2a4.8 4.8 0 0 1 7.5 6.5z"
     const val folder = "s|M3 6h7l2 2h9v11H3z"
     const val locate = "s|M12 2v4M12 18v4M2 12h4M18 12h4M7 12a5 5 0 1 0 10 0a5 5 0 1 0 -10 0M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"
+    const val lock = "s|M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3"
     const val moon = "s|M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"
     const val clock = "s|M4 12a8 8 0 1 0 16 0a8 8 0 1 0 -16 0M12 8v4l3 2"
     const val clockSmall = "s|M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0M12 7v5l3 2"
