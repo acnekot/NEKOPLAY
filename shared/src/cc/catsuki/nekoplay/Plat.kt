@@ -20,6 +20,8 @@ interface KV {
     fun getBoolean(k: String, d: Boolean): Boolean
     fun getStringSet(k: String, d: Set<String>?): Set<String>?
     fun edit(): Ed
+    /** 全部键值（备份用） */
+    fun all(): Map<String, Any?>
     interface Ed {
         fun putString(k: String, v: String?): Ed
         fun putInt(k: String, v: Int): Ed

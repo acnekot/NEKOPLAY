@@ -579,6 +579,8 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                 }
             }
         }
+        item { Group("DATA") }
+        item { NavRow("WebDAV 备份", "设置、喜欢和最近播放备份到网盘，换设备一键恢复", if (Backup.last > 0) java.text.SimpleDateFormat("MM-dd HH:mm").format(java.util.Date(Backup.last)) else "未备份") { nav.push(Page.Backup) } }
         item { Group("ABOUT") }
         item { NavRow("版本", null, "原生版 0.2.0", clickable = false) {} }
     }

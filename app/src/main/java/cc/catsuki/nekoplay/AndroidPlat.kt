@@ -186,12 +186,16 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
 
 /** SharedPreferences 套一层 KV */
 private class SpKV(val sp: android.content.SharedPreferences) : KV {
-    override fun getString(k: String, d: String?) = sp.getString(k, d)
-    override fun getInt(k: String, d: Int) = sp.getInt(k, d)
-    override fun getLong(k: String, d: Long) = sp.getLong(k, d)
-    override fun getFloat(k: String, d: Float) = sp.getFloat(k, d)
-    override fun getBoolean(k: String, d: Boolean) = sp.getBoolean(k, d)
-    override fun getStringSet(k: String, d: Set<String>?): Set<String>? = sp.getStringSet(k, d)
+    // 读的时候容忍类型不对（从电脑版备份恢复的值可能是字符串），转不过来就用默认值
+    private fun raw(k: String): Any? = sp.all[k]
+    override fun getString(k: String, d: String?) = raw(k)?.let { if (it is Set<*>) it.joinToString("\u0001") else it.toString() } ?: d
+    override fun getInt(k: String, d: Int) = when (val v = raw(k)) { is Int -> v; is Number -> v.toInt(); is String -> v.toIntOrNull() ?: v.toFloatOrNull()?.toInt() ?: d; else -> d }
+    override fun getLong(k: String, d: Long) = when (val v = raw(k)) { is Long -> v; is Number -> v.toLong(); is String -> v.toLongOrNull() ?: d; else -> d }
+    override fun getFloat(k: String, d: Float) = when (val v = raw(k)) { is Float -> v; is Number -> v.toFloat(); is String -> v.toFloatOrNull() ?: d; else -> d }
+    override fun getBoolean(k: String, d: Boolean) = when (val v = raw(k)) { is Boolean -> v; is String -> v.toBooleanStrictOrNull() ?: d; else -> d }
+    @Suppress("UNCHECKED_CAST")
+    override fun getStringSet(k: String, d: Set<String>?): Set<String>? = when (val v = raw(k)) { is Set<*> -> v as Set<String>; is String -> if (v.isEmpty()) emptySet() else v.split('\u0001').toSet(); else -> d }
+    override fun all(): Map<String, Any?> = sp.all
     override fun edit(): KV.Ed = E(sp.edit())
     private class E(val e: android.content.SharedPreferences.Editor) : KV.Ed {
         override fun putString(k: String, v: String?) = apply { e.putString(k, v) }

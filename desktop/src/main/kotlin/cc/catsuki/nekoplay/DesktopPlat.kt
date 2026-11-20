@@ -167,6 +167,7 @@ private class FileKV(val f: File) : KV {
     private val p = Properties().apply { if (f.exists()) runCatching { f.inputStream().use { load(it) } } }
     private fun save() = synchronized(p) { runCatching { f.outputStream().use { p.store(it, null) } } }
     override fun getString(k: String, d: String?) = p.getProperty(k) ?: d
+    override fun all(): Map<String, Any?> = synchronized(p) { p.stringPropertyNames().associateWith { p.getProperty(it) } }
     override fun getInt(k: String, d: Int) = p.getProperty(k)?.toIntOrNull() ?: d
     override fun getLong(k: String, d: Long) = p.getProperty(k)?.toLongOrNull() ?: d
     override fun getFloat(k: String, d: Float) = p.getProperty(k)?.toFloatOrNull() ?: d

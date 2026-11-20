@@ -46,6 +46,9 @@ object Store {
         if (!f.exists()) null else JSONArray(f.readText()).let { a -> (0 until a.length()).map { Track.fromJson(a.getJSONObject(it)) } }
     } catch (_: Exception) { null }
 
+    fun reloadLiked() { likedIds.value = prefs.getStringSet("liked", emptySet())!! }
+    /** 备份恢复用：直接换掉最近播放 */
+    fun restoreRecents(l: List<Track>) { recents.value = l; writeTracks("recents", l) }
     private fun writeTracks(name: String, l: List<Track>) = io.launch {
         runCatching { File(dir, "$name.json").writeText(JSONArray(l.map { it.toJson() }).toString()) }
     }
