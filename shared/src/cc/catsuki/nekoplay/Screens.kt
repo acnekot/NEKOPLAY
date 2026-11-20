@@ -1,5 +1,6 @@
 package cc.catsuki.nekoplay
 
+import kotlin.math.roundToInt
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -526,6 +527,17 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { SwitchRow("跟随系统", "跟随系统的深浅色设置", ThemePref.mode == 0) { ThemePref.set(if (it) 0 else if (sysDark) 2 else 1) } }
         item { SwitchRow("深色模式", "切换为暗色界面", if (ThemePref.mode == 0) sysDark else ThemePref.mode == 2, ThemePref.mode != 0) { ThemePref.set(if (it) 2 else 1) } }
         item { NavRow("主题", "界面风格：BenchLab 粗线框 / 无边框", Look.NAMES[Look.style]) { nav.sheet = SheetSpec("选择主题", null, Look.NAMES.mapIndexed { i, n -> SheetItem((if (i == Look.style) "✓  " else "    ") + n) { Look.set(i) } }) } }
+        item {
+            // 拖动时只改数字，松手才应用（边拖边缩放会让滑条跑出手指下面）
+            var draft by remember { mutableIntStateOf(UiPref.scale) }
+            SetLine("界面缩放", "整个界面连同文字一起放大或缩小；小屏手机调小能看到更多内容") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { NSlider(draft.toFloat(), 60f..150f, onDone = { UiPref.scale = draft; UiPref.save() }) { draft = (it / 5f).roundToInt() * 5 } }
+                    Spacer(Modifier.width(10.dp)); T("$draft%", 14, p.p, 700, mono = true)
+                    if (draft != 100) { Spacer(Modifier.width(8.dp)); T("重置", 13, p.s, modifier = Modifier.press { draft = 100; UiPref.scale = 100; UiPref.save() }) }
+                }
+            }
+        }
         item { NavRow("字体", "默认 Inter 无衬线；也可以改用系统字体", if (Typo.sans == 0) "系统字体" else "Inter") { Typo.set(1 - Typo.sans) } }
         item { MonetSettings() }
         item { NavRow("自定义背景", "选一张图片，可调模糊、透明度、位置和大小", if (Bg.on) "已设置" else "未设置") { nav.push(Page.Background) } }

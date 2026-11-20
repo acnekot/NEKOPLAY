@@ -95,7 +95,10 @@ object ThemePref {
     val cover = st.current?.cover
     LaunchedEffect(Monet.mode, Monet.hue, if (Monet.mode == 3) cover else null, Bg.on, Bg.source) { Monet.refresh(cover) }
     val base = if (dark) Dark else Light
-    CompositionLocalProvider(LocalPal provides animPal(if (Monet.on) Monet.apply(base) else base), content = content)
+    // 全局缩放：整个界面（含文字）按比例放大缩小
+    val d = androidx.compose.ui.platform.LocalDensity.current
+    val dens = remember(d, UiPref.scale) { androidx.compose.ui.unit.Density(d.density * UiPref.scale / 100f, d.fontScale) }
+    CompositionLocalProvider(LocalPal provides animPal(if (Monet.on) Monet.apply(base) else base), androidx.compose.ui.platform.LocalDensity provides dens, content = content)
 }
 
 /** 配色切换（换歌跟封面变色）时背景层和主色做一个渐变 */
@@ -246,9 +249,10 @@ private fun vector(spec: String): ImageVector = iconCache.getOrPut(spec) {
 @Composable fun PrimaryBar(label: String, icon: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     // 宽屏按钮行里：和「随机播放」一样大的方块按钮
     val compact = LocalCompactAction.current
-    Row(modifier.then(if (compact) Modifier.width(ACTION_W) else Modifier).press(.96f, true, onClick = onClick).height(48.dp).background(c.p).padding(horizontal = if (compact) 14.dp else 18.dp),
+    Row(modifier.then(if (compact) Modifier.width(ACTION_W) else Modifier).press(.96f, true, onClick = onClick).height(48.dp).background(c.p).padding(horizontal = if (compact) 14.dp else if (Screen.narrow) 8.dp else 18.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (compact) Arrangement.Center else Arrangement.Start) {
         if (compact) { NIcon(icon, 16.dp, Color.White); Spacer(Modifier.width(6.dp)); T(label, 15, Color.White, 700) }
+        else if (Screen.narrow) { Spacer(Modifier.weight(1f)); NIcon(icon, 15.dp, Color.White); Spacer(Modifier.width(5.dp)); T(label, 14, Color.White, 700, lines = 1); Spacer(Modifier.weight(1f)) }
         else { T(label, 16, Color.White, 700, modifier = Modifier.weight(1f)); NIcon(icon, 22.dp, Color.White) }
     }
 }
@@ -378,6 +382,8 @@ object Screen {
     var wide by mutableStateOf(false)
     /** 矮屏（窗口高度 < 720dp，比如 4.7 寸以下的 iPhone）：打开播放页时收起顶栏，把高度让给封面 */
     var short by mutableStateOf(false)
+    /** 窄屏（宽度 < 360dp，比如 iPhone SE 一代）：按钮文字缩小、少留边 */
+    var narrow by mutableStateOf(false)
 }
 
 /** 操作按钮行：手机占满一行；宽屏靠右，播放全部和随机播放一样大（和列表右侧的时长对齐） */
@@ -399,6 +405,7 @@ object UiPref {
     var karaoke by mutableStateOf(true)         // 逐字高亮
     var barAlpha by mutableFloatStateOf(.5f)    // 有背景时栏位的不透明度
     var lowMem by mutableStateOf(false)         // 省内存模式
+    var scale by mutableIntStateOf(100)        // 全局缩放（%）
     var tray by mutableStateOf(true)            // 桌面：关闭窗口时留在托盘继续播放
     var autoHideSide by mutableStateOf(true)    // PC 播放页按钮竖栏：鼠标靠近才显示
     var coverPct by mutableIntStateOf(80)       // PC 播放页封面大小（占可用空间的百分比）
@@ -408,8 +415,8 @@ object UiPref {
     var btns by mutableStateOf(setOf("mode", "sleep", "more", "comment", "queue"))
     fun toggleBtn(key: String) { btns = if (key in btns) btns - key else btns + key; k.edit().putStringSet("btns", btns).apply() }
     private val k get() = Plat.prefs("ui")
-    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true); coverPct = k.getInt("coverPct", 80); autoHideSide = k.getBoolean("sideAuto", true) }
-    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).putInt("coverPct", coverPct).putBoolean("sideAuto", autoHideSide).apply() }
+    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true); coverPct = k.getInt("coverPct", 80); autoHideSide = k.getBoolean("sideAuto", true); scale = k.getInt("scale", 100).coerceIn(60, 150) }
+    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).putInt("coverPct", coverPct).putBoolean("sideAuto", autoHideSide).putInt("scale", scale).apply() }
 }
 
 /** 歌词字号（设置里可调，歌词页 / 右栏 / 播放页都用它） */

@@ -35,6 +35,8 @@ class IosAudio(cacheRoot: File) : Audio {
     private var artworkFor: String? = null
 
     init {
+        // 旧版本存成 .a 的缓存放不了，清掉
+        dir.listFiles()?.filter { it.name.endsWith(".a") }?.forEach { it.delete() }
         runCatching {
             val s = AVAudioSession.sharedInstance()
             s.setCategory(AVAudioSessionCategoryPlayback, null)
@@ -61,31 +63,36 @@ class IosAudio(cacheRoot: File) : Audio {
                 if (buffering != lastBuffering) { lastBuffering = buffering; listener?.onBuffering(buffering) }
                 val c = cur
                 if (c != null && c.status == AVPlayerItemStatusFailed && reportedError != c) {
-                    reportedError = c; listener?.onError(c.error?.localizedDescription ?: "播放失败")
+                    reportedError = c; player.pause(); lastPlaying = false; listener?.onPlaying(false); listener?.onBuffering(false)
+                    listener?.onError(c.error?.localizedDescription ?: "播放失败")
                 }
                 delay(200)
             }
         }
     }
 
-    private fun keyFile(key: String) = File(dir, key.encodeToByteArray().fold(1125899906842597L) { h, b -> 31 * h + b }.toULong().toString(16) + ".a")
+    private fun hash(key: String) = key.encodeToByteArray().fold(1125899906842597L) { h, b -> 31 * h + b }.toULong().toString(16)
+    /** 缓存文件带上原来的扩展名（.flac / .mp3 / .m4a）：系统播放器靠扩展名认格式，认不出就「无法打开」 */
+    private fun cachedFile(key: String): File? { val h = hash(key) + "."; return dir.listFiles()?.firstOrNull { it.name.startsWith(h) && !it.name.endsWith(".part") } }
+    private fun extOf(url: String) = url.substringBefore('?').substringAfterLast('/').substringAfterLast('.', "").lowercase().takeIf { it in setOf("flac", "mp3", "m4a", "aac", "mp4", "wav") }
 
     private fun itemFor(url: String?, key: String): AVPlayerItem? {
-        val f = keyFile(key)
+        val f = cachedFile(key)
         val u = when {
-            f.exists() -> NSURL.fileURLWithPath(f.path)
+            f != null -> NSURL.fileURLWithPath(f.path)
             url == null -> return null
             url.startsWith("/") -> NSURL.fileURLWithPath(url)
             else -> NSURL.URLWithString(url) ?: return null
         }
-        if (!f.exists() && url != null && url.startsWith("http")) fetch(url, key)
+        if (f == null && url != null && url.startsWith("http")) fetch(url, key)
         return AVPlayerItem(uRL = u)
     }
 
     /** 整首下载进缓存（和播放并行）；下完以后下次就读本地 */
     private fun fetch(url: String, key: String) {
+        val ext = extOf(url) ?: return // 认不出格式的不缓存，免得存了也放不了
         if (!downloading.add(key)) return
-        val target = keyFile(key)
+        val target = File(dir, hash(key) + "." + ext)
         val req = NSMutableURLRequest.requestWithURL(NSURL.URLWithString(url) ?: return)
         req.setValue("Mozilla/5.0", forHTTPHeaderField = "User-Agent")
         NSURLSession.sharedSession.downloadTaskWithRequest(req) { loc, resp, err ->
@@ -133,14 +140,14 @@ class IosAudio(cacheRoot: File) : Audio {
     override fun seek(ms: Long) {
         player.seekToTime(CMTimeMakeWithSeconds(ms / 1000.0, 1000), CMTimeMake(0, 1), CMTimeMake(0, 1)) { _ -> updateNowPlaying() }
     }
-    override val isPlaying get() = player.timeControlStatus != AVPlayerTimeControlStatusPaused
+    override val isPlaying get() = player.timeControlStatus != AVPlayerTimeControlStatusPaused && cur?.status != AVPlayerItemStatusFailed
     override val idle get() = cur == null
     override val position: Long get() = CMTimeGetSeconds(player.currentTime()).let { if (it.isNaN()) 0 else (it * 1000).toLong() }
     override val buffered: Long get() {
         val r = cur?.loadedTimeRanges?.lastOrNull() as? NSValue ?: return 0
         return r.CMTimeRangeValue.useContents { (CMTimeGetSeconds(start.readValue()) + CMTimeGetSeconds(duration.readValue())) * 1000 }.toLong()
     }
-    override fun isCached(key: String) = keyFile(key).exists()
+    override fun isCached(key: String) = cachedFile(key) != null
     override fun cacheBytes(): Long = dir.listFiles()?.sumOf { it.length() } ?: 0
     override fun clearCache() { dir.listFiles()?.forEach { it.delete() } }
     override var volume: Float get() = player.volume; set(v) { player.volume = v }

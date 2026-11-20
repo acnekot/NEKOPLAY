@@ -123,7 +123,9 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     val ctrlH = with(d) { 156.dp.toPx() } + bottomPad
                     val free = with(d) { maxHeight.toPx() } - ctrlH
                     val dp = with(d) { 1.dp.toPx() }
-                    val coverNow = (free - 150 * dp).coerceIn(120 * dp, w - 56 * dp) // 下面要留给歌名、歌手、音质三行
+                    // 下面要留给歌名、歌手、音质三行；矮屏这三行各只占一行，封面左右只留 12dp
+                    val sh = Screen.short
+                    val coverNow = (free - (if (sh) 106 else 150) * dp).coerceIn(120 * dp, w - (if (sh) 24 else 56) * dp)
                     val nowTop = ((free - coverNow - 84 * dp) / 2).coerceIn(8 * dp, 40 * dp)
                     val cs = lerp(coverNow, 48 * dp, lt)
                     val cl = lerp((w - coverNow) / 2, 18 * dp, lt)
@@ -153,10 +155,10 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                         translationX = (w - coverNow) / 2; translationY = nowTop + coverNow + 18 * dp - 12 * dp * lt; alpha = (1 - lt / .45f).coerceIn(0f, 1f)
                     }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            T(t.title, 24, w = 800, lh = 1.25f, lines = 2, modifier = Modifier.weight(1f).press(onLong = { copy(t.title, "歌名") }) {})
+                            T(t.title, if (sh) 21 else 24, w = 800, lh = 1.25f, lines = if (sh) 1 else 2, modifier = Modifier.weight(1f).press(onLong = { copy(t.title, "歌名") }) {})
                             Row(Modifier.offset(x = 10.dp)) { SlotRow(false, "title", BtnCtx(t, st, showTr) { showTr = !showTr }, 0.dp) }
                         }
-                        T(t.artist, 15, p.s, lh = 1.3f, lines = 2, modifier = Modifier.press(onLong = { copy(t.artist, "歌手") }) { openArtists(nav, t) })
+                        T(t.artist, if (sh) 14 else 15, p.s, lh = 1.3f, lines = if (sh) 1 else 2, modifier = Modifier.press(onLong = { copy(t.artist, "歌手") }) { openArtists(nav, t) })
                         // 点音质这一行可以换音质
                         val ainfo by Engine.info.collectAsState()
                         T(if (st.format.isEmpty()) Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)] + " ▾"
@@ -235,7 +237,13 @@ object LyricCache {
     }
 }
 
-@Composable fun Lyrics(t: Track, showTr: Boolean, active: Boolean = true, onBlank: (() -> Unit)? = null) {
+/** 歌词是否看得见（封面页时歌词透明挂在后面） */
+val LocalLyricsActive = compositionLocalOf { true }
+
+@Composable fun Lyrics(t: Track, showTr: Boolean, active: Boolean = true, onBlank: (() -> Unit)? = null) =
+    CompositionLocalProvider(LocalLyricsActive provides active) { LyricsBody(t, showTr, active, onBlank) }
+
+@Composable private fun LyricsBody(t: Track, showTr: Boolean, active: Boolean, onBlank: (() -> Unit)?) {
     // 按歌重建状态：缓存里有就直接显示，没有才去拉
     var lines by remember(t.id) { mutableStateOf(LyricCache.peek(t.id)) }
     LaunchedEffect(t.id) { if (lines == null) lines = try { LyricCache.get(t.id) } catch (e: Exception) { emptyList() } }
@@ -387,7 +395,8 @@ object LyricCache {
 @Composable private fun KaraokeLine(line: LyricLine, pos: Long) {
     val p = c
     val words = line.words ?: return
-    val playing = Engine.state.collectAsState().value.playing
+    // 歌词藏在封面后面时不逐帧推进（老设备上这是播放页卡顿的主要来源）
+    val playing = Engine.state.collectAsState().value.playing && LocalLyricsActive.current
     var now by remember { mutableLongStateOf(pos) }
     LaunchedEffect(pos, playing) {
         val base = pos; now = base

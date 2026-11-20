@@ -32,6 +32,8 @@ class AppDelegate @OverrideInit constructor() : UIResponder(), UIApplicationDele
 
     override fun application(application: UIApplication, didFinishLaunchingWithOptions: Map<Any?, *>?): Boolean {
         Plat.impl = IosPlat()
+        // 老设备第一次启动默认开「省内存模式」（图片缓存小、逐字高亮约 20 帧），设置里可以关
+        if (IosPlat.lowEnd) Plat.prefs("ui").let { if (!it.all().containsKey("lowMem")) it.edit().putBoolean("lowMem", true).apply() }
         Boot.init()
         Perf.start()
         Store.refreshAll()
@@ -42,8 +44,8 @@ class AppDelegate @OverrideInit constructor() : UIResponder(), UIApplicationDele
                     Root()
                     // 左边缘右滑 = 返回（iOS 没有返回键）
                     var dx = 0f
-                    Box(Modifier.align(Alignment.CenterStart).width(18.dp).fillMaxHeight().pointerInput(Unit) {
-                        detectHorizontalDragGestures(onDragStart = { dx = 0f }, onDragEnd = { if (dx > 80.dp.toPx()) IosPlat.back() }) { _, d -> dx += d }
+                    Box(Modifier.align(Alignment.CenterStart).width(22.dp).fillMaxHeight().pointerInput(Unit) {
+                        detectHorizontalDragGestures(onDragStart = { dx = 0f }, onDragEnd = { if (dx > 56.dp.toPx()) IosPlat.back() }) { _, d -> dx += d }
                     })
                 }
             }

@@ -151,7 +151,7 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
         BoxWithConstraints(Modifier.fillMaxSize().backdrop()) {
             // 窗口宽度 ≥ 900dp：PC 三栏布局；否则就是手机布局（拖动窗口大小会实时切换）
             val wide = maxWidth >= 900.dp
-            SideEffect { Screen.wide = wide; Screen.short = maxHeight < 720.dp }
+            SideEffect { Screen.wide = wide; Screen.short = maxHeight < 720.dp; Screen.narrow = maxWidth < 360.dp }
             BgLayer()
             Column(Modifier.fillMaxSize()) {
             chrome?.invoke()
@@ -299,9 +299,11 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     val nav = LocalNav.current
     val p = c
     Column(Modifier.fillMaxSize()) {
-    if (page !is Page.Search) Row(Modifier.fillMaxWidth().height(48.dp).drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx())) }.padding(start = 6.dp, end = 18.dp),
+    // 整条返回栏都能点（手机上只点箭头太难点中）
+    if (page !is Page.Search) Row(Modifier.fillMaxWidth().height(48.dp).drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx())) }
+        .press { nav.back() }.padding(start = 6.dp, end = 18.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(44.dp).press { nav.back() }, contentAlignment = Alignment.Center) { NIcon(NIcons.back, 20.dp) }
+        Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { NIcon(NIcons.back, 20.dp) }
         T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; Page.Local -> "LOCAL"; Page.Backup -> "BACKUP"; Page.DebugLog -> "DEBUG"; is Page.ArtistAlbums -> "ALBUMS"; Page.Stats -> "STATS"; is Page.SetSub -> "SETTINGS / " + page.sec.uppercase(); Page.Feats -> "FEATURES"; Page.BtnLayout -> "PLAYER LAYOUT"; is Page.LyricCard -> "CARD"; else -> "" }, 12, p.s, mono = true, ls = .1f)
     }
     Box(Modifier.weight(1f)) {

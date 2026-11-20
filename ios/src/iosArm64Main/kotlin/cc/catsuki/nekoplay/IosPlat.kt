@@ -35,6 +35,7 @@ class IosPlat : PlatImpl {
         private val backStack = ArrayList<Pair<() -> Boolean, () -> Unit>>()
         fun back(): Boolean { val h = backStack.lastOrNull { it.first() } ?: return false; h.second(); return true }
         fun canBack() = backStack.any { it.first() }
+        val lowEnd: Boolean = NSProcessInfo.processInfo.physicalMemory < 2_600_000_000uL
 
         val docs: File = File(NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).first() as String)
         private val support: File = File(NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, true).first() as String)
@@ -62,7 +63,8 @@ class IosPlat : PlatImpl {
             font("inter_700", FontWeight.W700), font("inter_800", FontWeight.W800), font("inter_900", FontWeight.W900))
     }
     override val mono by lazy { FontFamily(font("mono_400", FontWeight.W400), font("mono_500", FontWeight.W500), font("mono_600", FontWeight.W600), font("mono_700", FontWeight.W700)) }
-    override val liveBlur = true
+    /** 2GB 内存的老设备（iPhone SE 一代 / 6s）关掉实时模糊，省 GPU */
+    override val liveBlur = !lowEnd
     override val audio: Audio by lazy { IosAudio(cacheDir) }
 
     /** 下载放「文件」App 里能看到的位置：我的 iPhone / NEKOPLAY / NEKOPLAY */
