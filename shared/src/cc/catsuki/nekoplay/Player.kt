@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -258,6 +259,7 @@ object LyricCache {
     var measured by remember(l) { mutableStateOf(0) }
     val offs = remember(l) { List(l.size) { Animatable(0f) } }
     var settled by remember(l) { mutableStateOf(false) }
+    var lastCur by remember(l) { mutableIntStateOf(-1) }
     var ready by remember(l) { mutableStateOf(false) } // 第一次排好位置之前先不显示，避免从顶部闪一下
     val gap = with(LocalDensity.current) { 26.dp.toPx() }
     var vh by remember { mutableFloatStateOf(0f) }
@@ -274,8 +276,10 @@ object LyricCache {
             else -> -(if (cur > 0) tops[cur - 1] else 0f)
         }
         val first = (cur - 2).coerceAtLeast(0)
-        val jump = !settled // 刚打开歌词页：直接到位，不从顶部滚下来
-        settled = true
+        // 刚打开歌词页：直接到位，不从顶部滚下来。
+        // 句子没变、只是重新排版（窗口 / 栏宽变了、队列展开收起）：也直接到位，不然每行错开动画看起来像抽一下
+        val jump = !settled || cur == lastCur
+        settled = true; lastCur = cur
         if (jump) { l.indices.forEach { offs[it].snapTo(target) }; ready = true; return@LaunchedEffect }
         l.indices.forEach { i ->
             if (i < first || i > cur + 10) launch { offs[i].snapTo(target) }
@@ -619,9 +623,19 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
     var coverY by remember { mutableStateOf(-1f) }
     var rightY by remember { mutableStateOf(0f) }
     val dens = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // 队列栏展开 / 收起是动画：左栏宽度按「动画结束后」的目标来算，再平滑过渡。
+    // 之前按每一帧的实际宽度算，加上左栏比例瞬间切换，封面会先变大再变小（抽一下）
+    val queueOpen = nav.side == 2
+    val wl = if (queueOpen) 1.3f else 1f
+    val leftTarget = (maxWidth - if (queueOpen) 363.dp else 0.dp) * (wl / (wl + 1f))
+    val rightTarget = maxWidth - (if (queueOpen) 363.dp else 0.dp) - leftTarget
+    val leftW by animateDpAsState(leftTarget, spring(1f, Anim.stiff(Spring.StiffnessMediumLow)), label = "leftW")
+    val totalH = maxHeight
     Row(Modifier.fillMaxSize()) {
         // 开着队列时第三栏占走 360，左栏多分一点，封面不至于太小
-        BoxWithConstraints(Modifier.weight(if (nav.side == 2) 1.3f else 1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
+        Box(Modifier.width(leftW).fillMaxHeight().clipToBounds(), contentAlignment = Alignment.CenterStart) {
+            val maxWidth = leftTarget; val maxHeight = totalH
             // 封面宽度 = 进度条宽度（控制区左右各留 22 的内边距，所以外框比封面宽 44）
             // 左边留 48 给收起按钮，右边是按钮竖栏（类似 Hydrogen）；封面大小在设置里按百分比调
             val sideKeys = PlayerLayout.keys(true, "side")
@@ -629,10 +643,11 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
             // 百分比只按高度缩：开了队列 / 评论、左栏变窄时，封面先用满宽度，不会再被缩一遍变得很小
             val byW = maxWidth - 44.dp - 56.dp - sideW - 16.dp
             val byH = minOf(maxHeight - 290.dp, 560.dp) * (UiPref.coverPct / 100f)
-            val cover = minOf(byW, byH).coerceAtLeast(200.dp)
+            val cover by animateDpAsState(minOf(byW, byH).coerceAtLeast(200.dp), spring(1f, Anim.stiff(Spring.StiffnessMediumLow)), label = "cover")
             Row(Modifier.padding(start = 56.dp), verticalAlignment = Alignment.Bottom) {
             Column(Modifier.width(cover + 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.onGloballyPositioned { coverY = it.positionInRoot().y }) { Cover(t.cover, cover, t.title) }
+                // 解码尺寸固定：封面大小在动画时每帧都变，按实际尺寸解码会每帧重新加载图片、闪一下
+                Box(Modifier.onGloballyPositioned { coverY = it.positionInRoot().y }) { Cover(t.cover, cover, t.title, decodeSize = 560.dp) }
                 Spacer(Modifier.height(22.dp))
                 Row(Modifier.width(cover), verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f)) {
@@ -678,7 +693,8 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
                 else fadeIn(tween(200)) togetherWith (slideOutHorizontally(tween(200)) { it / 3 } + fadeOut(tween(160)))
             }, label = "right") { ct ->
                 if (ct != null) CommentsBody(ct) { nav.comments = null }
-                else Box(Modifier.fillMaxSize().padding(top = if (coverY < 0) 24.dp else with(dens) { (coverY - rightY).coerceAtLeast(0f).toDp() - 12.dp }.coerceAtLeast(0.dp), end = 24.dp)) { Lyrics(t, showTr) }
+                // 歌词栏按目标宽度排版：队列展开 / 收起的动画过程中不重新换行，不会跳动
+                else Box(Modifier.fillMaxHeight().wrapContentWidth(Alignment.Start, unbounded = true).width(rightTarget).padding(top = if (coverY < 0) 24.dp else with(dens) { (coverY - rightY).coerceAtLeast(0f).toDp() - 12.dp }.coerceAtLeast(0.dp), end = 24.dp)) { Lyrics(t, showTr) }
             }
         }
         // 第三栏：播放队列（看歌词的同时打开），从右边展开
@@ -695,5 +711,6 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
                 Box(Modifier.weight(1f)) { QueueList(st) }
             }
         }
+    }
     }
 }
