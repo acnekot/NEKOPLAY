@@ -604,6 +604,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         }
        }
        "desktop" -> {
+        if (UiPref.isMac) item { SwitchRow("窗口圆角", "窗口四角做成圆角（最大化和全屏时自动变回直角）", UiPref.round) { UiPref.round = it; UiPref.save() } }
         item { SwitchRow("后台留存", "关闭窗口时缩到系统托盘继续播放；托盘图标可以播放 / 暂停、切歌、退出", UiPref.tray) { UiPref.tray = it; UiPref.save() } }
         item { NavRow("侧拉模式", "窗口变成手机宽度贴在屏幕边上，鼠标离开就收起；也可以右键左上角 NEKOPLAY 进入", if (SidePref.active != 0) "使用中" else null) { SidePref.menu(nav) } }
         item {

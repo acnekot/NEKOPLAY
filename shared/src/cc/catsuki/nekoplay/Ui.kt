@@ -400,12 +400,15 @@ object Screen {
 
 /** 细节偏好（详细调整页） */
 object UiPref {
+    /** 是否在 macOS 上运行（窗口圆角只在 Mac 上提供） */
+    val isMac: Boolean by lazy { Plat.isDesktop && (System.getProperty("os.name") ?: "").lowercase().contains("mac") }
     var showBuffer by mutableStateOf(true)      // 进度条上显示已缓存的部分
     var lyricBlur by mutableStateOf(true)       // 歌词远处轻微模糊
     var karaoke by mutableStateOf(true)         // 逐字高亮
     var barAlpha by mutableFloatStateOf(.5f)    // 有背景时栏位的不透明度
     var lowMem by mutableStateOf(false)         // 省内存模式
     var scale by mutableIntStateOf(100)        // 全局缩放（%）
+    var round by mutableStateOf(true)          // macOS：窗口圆角
     var tray by mutableStateOf(true)            // 桌面：关闭窗口时留在托盘继续播放
     var autoHideSide by mutableStateOf(true)    // PC 播放页按钮竖栏：鼠标靠近才显示
     var coverPct by mutableIntStateOf(80)       // PC 播放页封面大小（占可用空间的百分比）
@@ -415,8 +418,8 @@ object UiPref {
     var btns by mutableStateOf(setOf("mode", "sleep", "more", "comment", "queue"))
     fun toggleBtn(key: String) { btns = if (key in btns) btns - key else btns + key; k.edit().putStringSet("btns", btns).apply() }
     private val k get() = Plat.prefs("ui")
-    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true); coverPct = k.getInt("coverPct", 80); autoHideSide = k.getBoolean("sideAuto", true); scale = k.getInt("scale", 100).coerceIn(60, 150) }
-    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).putInt("coverPct", coverPct).putBoolean("sideAuto", autoHideSide).putInt("scale", scale).apply() }
+    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true); coverPct = k.getInt("coverPct", 80); autoHideSide = k.getBoolean("sideAuto", true); scale = k.getInt("scale", 100).coerceIn(60, 150); round = k.getBoolean("round", true) }
+    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).putInt("coverPct", coverPct).putBoolean("sideAuto", autoHideSide).putInt("scale", scale).putBoolean("round", round).apply() }
 }
 
 /** 歌词字号（设置里可调，歌词页 / 右栏 / 播放页都用它） */

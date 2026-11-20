@@ -12,6 +12,7 @@ import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -78,7 +79,8 @@ fun main() {
         val close = { if (UiPref.tray && trayOk) { visible = false; Thread { Thread.sleep(1500); System.gc(); WinMem.trim() }.start() } else quit() }
         if (DeskLyric.on && Features.on("desk")) DeskLyricWindow()
         // 无边框窗口：标题栏、最小化 / 最大化 / 关闭按钮和拖边改大小都自己画
-        Window(onCloseRequest = close, state = state, visible = visible, title = "NEKOPLAY", icon = appIcon, undecorated = true,
+        // macOS：窗口透明，内容自己裁成圆角（设置里可以关）；Windows / Linux 不透明，避免分层窗口拖慢绘制
+        Window(onCloseRequest = close, state = state, visible = visible, title = "NEKOPLAY", icon = appIcon, undecorated = true, transparent = UiPref.isMac,
             onPreviewKeyEvent = { e ->
                 if (e.type != KeyEventType.KeyDown) false
                 else if (e.key == Key.Escape) DesktopPlat.back()   // Esc = 返回
@@ -92,6 +94,8 @@ fun main() {
             onKeyEvent = { e -> e.type == KeyEventType.KeyDown && !e.isCtrlPressed && !e.isAltPressed && Keys.handlePlain(e.key) }) {
             window.minimumSize = java.awt.Dimension(360, 560)
             winRef[0] = window
+            // 透明窗口在 macOS 上默认没有阴影：按内容的形状（圆角）补上系统阴影
+            if (UiPref.isMac) androidx.compose.runtime.LaunchedEffect(Unit) { window.rootPane.putClientProperty("Window.shadow", true) }
             // 最小化时释放图片内存缓存并回收一次，把内存还给系统
             androidx.compose.runtime.LaunchedEffect(state.isMinimized) {
                 if (state.isMinimized && UiPref.lowMem) { SingletonImageLoader.get(coil3.PlatformContext.INSTANCE).memoryCache?.clear(); System.gc() }
@@ -99,7 +103,9 @@ fun main() {
                 if (state.isMinimized) { kotlinx.coroutines.delay(1500); WinMem.trim() }
             }
             NekoTheme {
-                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+                val rounded = UiPref.isMac && UiPref.round && state.placement == androidx.compose.ui.window.WindowPlacement.Floating && SidePref.active == 0
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()
+                    .then(if (rounded) androidx.compose.ui.Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) else androidx.compose.ui.Modifier)) {
                     Root(chrome = { TitleBar(state, close) })
                     ResizeEdges(state)
                     SideTracker()
