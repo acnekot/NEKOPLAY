@@ -12,3 +12,6 @@ local.properties
 desktop/resources/windows/
 desktop/resources/macos/
 desktop/resources/linux/
+ios/iosApp/build/
+xcuserdata/
+*.xcuserstate

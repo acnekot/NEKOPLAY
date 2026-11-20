@@ -14,6 +14,12 @@ kotlin {
             baseName = "NEKOPLAY"
             freeCompilerArgs += listOf("-Xbinary=bundleId=cc.catsuki.nekoplay", "-Xoverride-konan-properties=minVersion.ios=14.0")
         }
+        // Xcode 工程（iosApp/）用的静态框架：Swift 入口调用 MainViewController()
+        binaries.framework {
+            baseName = "NekoApp"
+            isStatic = true
+            freeCompilerArgs += listOf("-Xbinary=bundleId=cc.catsuki.nekoplay.kit", "-Xoverride-konan-properties=minVersion.ios=14.0")
+        }
     }
     sourceSets {
         val iosArm64Main by getting {
