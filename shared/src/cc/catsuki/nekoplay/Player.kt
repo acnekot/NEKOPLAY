@@ -83,6 +83,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
         val st by Engine.state.collectAsState()
         val t = st.current
         val lt by animateFloatAsState(if (nav.lyrics) 1f else 0f, spF, label = "ly")
+        LaunchedEffect(t?.id) { t?.let { runCatching { LyricCache.get(it.id) } } }
         var showTr by remember { mutableStateOf(true) }
         val p = c
         BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer { translationY = drag.value }.background(p.page)) {
@@ -209,14 +210,24 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
 }
 
 // ======================= 歌词 =======================
-@Composable fun Lyrics(t: Track, showTr: Boolean) {
-    val lines by produceState<List<LyricLine>?>(null, t.id) {
-        value = try {
-            val d = Ncm.lyricFull(t.id)
-            // 有逐字歌词就用逐字的，没有退回普通 LRC
-            d.yrc?.let { Lrc.parseYrc(it, d.tr) }?.takeIf { it.isNotEmpty() } ?: Lrc.parse(d.lrc, d.tr)
-        } catch (e: Exception) { emptyList() }
+/** 解析好的歌词放内存里：切到歌词页、开关评论 / 队列时不用重新拉，也就不会闪 LOADING */
+object LyricCache {
+    private val map = object : LinkedHashMap<String, List<LyricLine>>(16, .75f, true) {
+        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, List<LyricLine>>?) = size > 30
     }
+    @Synchronized fun peek(id: String): List<LyricLine>? = map[id]
+    suspend fun get(id: String): List<LyricLine> = peek(id) ?: run {
+        val d = Ncm.lyricFull(id)
+        // 有逐字歌词就用逐字的，没有退回普通 LRC
+        val l = d.yrc?.let { Lrc.parseYrc(it, d.tr) }?.takeIf { it.isNotEmpty() } ?: Lrc.parse(d.lrc, d.tr)
+        synchronized(this) { map[id] = l }; l
+    }
+}
+
+@Composable fun Lyrics(t: Track, showTr: Boolean) {
+    // 按歌重建状态：缓存里有就直接显示，没有才去拉
+    var lines by remember(t.id) { mutableStateOf(LyricCache.peek(t.id)) }
+    LaunchedEffect(t.id) { if (lines == null) lines = try { LyricCache.get(t.id) } catch (e: Exception) { emptyList() } }
     DisposableEffect(Unit) { Engine.fastPos++; onDispose { Engine.fastPos-- } }
     val pos by Engine.position.collectAsState()
     val l = lines
