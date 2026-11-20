@@ -117,3 +117,13 @@ fun offsetSheet(nav: Nav, t: Track) {
     nav.sheet = SheetSpec("歌词偏移 · ${label(cur)}", "歌词比歌慢就提前，比歌快就推后；每首歌单独记住", listOf(step(500), step(100), step(-100), step(-500)) +
         (if (cur != 0L) listOf(SheetItem("重置", danger = true) { LyricOffset.set(t.id, 0); nav.toast = "已重置歌词偏移" }) else emptyList()))
 }
+
+/** Discord 状态（电脑版）：在 Discord 上显示正在听什么 */
+object DiscordPref {
+    var on by mutableStateOf(false)
+    var clientId by mutableStateOf("")
+    var status by mutableStateOf("")   // 连接状态，给设置页看
+    private val k get() = Plat.prefs("ui")
+    fun load() { on = k.getBoolean("dc_on", false); clientId = k.getString("dc_id", "") ?: "" }
+    fun save() { k.edit().putBoolean("dc_on", on).putString("dc_id", clientId).apply() }
+}

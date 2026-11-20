@@ -561,6 +561,16 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
             item { SwitchRow("后台留存", "关闭窗口时缩到系统托盘继续播放；托盘图标可以播放 / 暂停、切歌、退出", UiPref.tray) { UiPref.tray = it; UiPref.save() } }
             item { SwitchRow("桌面歌词", "置顶的悬浮歌词窗：鼠标移上去可以切歌、调字号、锁定；托盘菜单也能开关", DeskLyric.on) { DeskLyric.on = it; DeskLyric.save() } }
             if (DeskLyric.on) item { SwitchRow("锁定桌面歌词", "锁定后不能拖动，鼠标点击会穿过歌词（Windows）", DeskLyric.locked) { DeskLyric.locked = it; DeskLyric.save() } }
+            item { SwitchRow("Discord 状态", "在 Discord 上显示正在听的歌（需要打开 Discord 客户端）" + if (DiscordPref.status.isNotEmpty()) " · ${DiscordPref.status}" else "", DiscordPref.on) { DiscordPref.on = it; DiscordPref.save() } }
+            if (DiscordPref.on) item {
+                SetLine("Discord Client ID", "在 discord.com/developers 新建一个应用（名字会显示成「正在听 xxx」），把 Application ID 填这里") {
+                    Box(Modifier.fillMaxWidth().height(40.dp).nbf(1.dp, p.k).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
+                        if (DiscordPref.clientId.isEmpty()) T("Application ID", 13, p.s, mono = true)
+                        BasicTextField(DiscordPref.clientId, { DiscordPref.clientId = it.filter { ch -> ch.isDigit() }; DiscordPref.save() }, Modifier.fillMaxWidth(), singleLine = true,
+                            textStyle = TextStyle(color = p.k, fontSize = Fs.SUB.sp, fontFamily = Mono), cursorBrush = SolidColor(p.p))
+                    }
+                }
+            }
             item { NavRow("快捷键", "播放、切歌、音量等键盘操作", "${Keys.HELP.size} 个") { nav.push(Page.KeyMap) } }
         }
         item { Group("PERFORMANCE") }
@@ -583,7 +593,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { Group("DATA") }
         item { NavRow("WebDAV 备份", "设置、喜欢和最近播放备份到网盘，换设备一键恢复", if (Backup.last > 0) java.text.SimpleDateFormat("MM-dd HH:mm").format(java.util.Date(Backup.last)) else "未备份") { nav.push(Page.Backup) } }
         item { Group("ABOUT") }
-        item { NavRow("版本", null, "原生版 0.2.0", clickable = false) {} }
+        item { NavRow("版本", null, "原生版 0.3.0", clickable = false) {} }
     }
 }
 
@@ -591,7 +601,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
 
 @Composable fun SwitchRow(title: String, sub: String?, on: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) =
     Row(Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).bottomLine().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { T(title, 16, if (enabled) c.k else c.s); if (sub != null) T(sub, 13, c.s, lh = 1.4f) }
+        Column(Modifier.weight(1f)) { T(title, 16, if (enabled) c.k else c.s); if (sub != null) T(sub, 13, c.s, lh = 1.4f, lines = 3) }
         Box(Modifier.graphicsAlpha(if (enabled) 1f else .45f)) { NSwitch(on) { if (enabled) onChange(it) } }
     }
 
@@ -599,7 +609,7 @@ private fun Modifier.graphicsAlpha(a: Float) = this.graphicsLayer { alpha = a }
 
 @Composable private fun NavRow(title: String, sub: String?, value: String?, clickable: Boolean = true, onClick: () -> Unit) =
     Row(Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).then(if (clickable) Modifier.press(onClick = onClick) else Modifier).bottomLine().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { T(title, 16); if (sub != null) T(sub, 13, c.s, lh = 1.4f) }
+        Column(Modifier.weight(1f)) { T(title, 16); if (sub != null) T(sub, 13, c.s, lh = 1.4f, lines = 3) }
         if (value != null) T(value, 13, c.s)
         if (clickable) { Spacer(Modifier.width(6.dp)); NIcon(NIcons.chevronRight, 16.dp, c.s) }
     }
