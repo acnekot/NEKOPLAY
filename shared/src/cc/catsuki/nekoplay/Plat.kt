@@ -36,12 +36,13 @@ interface KV {
 /** 播放内核：一次只放一首，队列由 Engine 管 */
 /** 真实音质参数：编码、采样率、位深（0 = 未知）、声道、码率（kbps，0 = 未知） */
 data class AudioInfo(val codec: String, val rate: Int, val bits: Int, val ch: Int, val kbps: Int) {
+    /** 精简显示：FLAC 48k/24bit 1918k（立体声不写） */
     fun line(): String = buildList {
         add(codec.uppercase())
-        if (rate > 0) add((if (rate % 1000 == 0) "${rate / 1000}" else "%.1f".format(rate / 1000f)) + " kHz" + if (bits > 0) " / $bits bit" else "")
-        if (ch > 0) add(if (ch == 1) "单声道" else if (ch == 2) "立体声" else "$ch 声道")
-        if (kbps > 0) add("$kbps kbps")
-    }.joinToString(" · ")
+        if (rate > 0) add((if (rate % 1000 == 0) "${rate / 1000}k" else "%.1fk".format(rate / 1000f)) + if (bits > 0) "/${bits}bit" else "")
+        if (ch == 1) add("单声道") else if (ch > 2) add("${ch}ch")
+        if (kbps > 0) add("${kbps}k")
+    }.joinToString(" ")
 }
 
 interface Audio {
