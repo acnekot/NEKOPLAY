@@ -230,6 +230,14 @@ private interface Mpv : Library {
  */
 private class MpvAudio : Audio {
     override var listener: Audio.Listener? = null
+    private val logFile = File(System.getProperty("user.home"), if (System.getProperty("os.name").lowercase().contains("win")) "AppData/Roaming/NEKOPLAY/mpv.log" else ".nekoplay/mpv.log").apply { parentFile?.mkdirs() }
+    /** 日志里最近一条错误（给提示用） */
+    private fun lastLogError(): String? = runCatching {
+        logFile.readLines().takeLast(200).lastOrNull { l -> Regex("\\]\\[[ef]\\]|error|failed|Failed|Cannot|cannot", RegexOption.IGNORE_CASE).containsMatchIn(l) }
+            ?.substringAfter("] ")?.trim()?.take(160)
+    }.getOrNull()
+    @Volatile private var openedAt = 0L
+    @Volatile private var failed = false
     /** 加载失败的原因（显示在错误提示里，方便排查） */
     private val loadErrors = ArrayList<String>()
     /** 先找安装包自带的 libmpv（程序资源目录），找不到再找系统里装的 */
@@ -253,6 +261,8 @@ private class MpvAudio : Audio {
         lib.mpv_set_option_string(h, "demuxer-max-bytes", "8MiB")
         lib.mpv_set_option_string(h, "demuxer-max-back-bytes", "2MiB")
         lib.mpv_set_option_string(h, "audio-buffer", "0.5")
+        // 播放内核日志：放不出来时看原因（每次启动覆盖）
+        lib.mpv_set_option_string(h, "log-file", logFile.absolutePath)
         lib.mpv_initialize(h)
     }
     @Volatile private var opened = false
@@ -274,6 +284,13 @@ private class MpvAudio : Audio {
                 val pp = str("playlist-pos")?.toIntOrNull() ?: 0
                 if (pp > 0) { cmd("playlist-remove", "0"); java.awt.EventQueue.invokeLater { listener?.onAdvanced() } }
                 val buf = str("paused-for-cache") == "yes"
+                // 打开失败（地址打不开、解码 / 声卡初始化失败）：mpv 会回到空闲状态，以前界面一直停在 00:00 显示「播放中」
+                if (!failed && System.currentTimeMillis() - openedAt > 1500 && str("idle-active") == "yes") {
+                    failed = true; opened = false; playing = false
+                    val why = lastLogError()
+                    java.awt.EventQueue.invokeLater { lastPlaying = false; listener?.onPlaying(false); listener?.onError("播放内核打不开这首歌" + (why?.let { "：$it" } ?: "") + "（日志：${logFile.absolutePath}）") }
+                    continue
+                }
                 pos = (num("time-pos") * 1000).toLong()
                 bufPos = (num("demuxer-cache-time") * 1000).toLong()
                 playing = !paused && !eof
@@ -301,7 +318,7 @@ private class MpvAudio : Audio {
         // 抛异常由 Engine 显示提示，不会自动跳下一首（避免整个队列连环报错）
         if (lib == null || h == null) throw Exception("播放内核 libmpv 加载失败" + if (lib != null) "（mpv_create 失败）" else if (loadErrors.isNotEmpty()) "：" + loadErrors.joinToString("；") else "（程序目录里没有找到 libmpv）")
         if (url == null) throw Exception("桌面版暂无本地缓存")
-        ended = false; opened = true
+        ended = false; opened = true; failed = false; openedAt = System.currentTimeMillis()
         lib.mpv_set_property_string(h, "pause", if (autoplay) "no" else "yes")
         val src = if (url.startsWith("file:")) File(java.net.URI(url)).absolutePath else url
         cmd("loadfile", src, "replace", "-1", "start=${startMs / 1000.0}")
