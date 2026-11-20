@@ -81,7 +81,7 @@ import java.util.Calendar
                             }
                         }
                         Spacer(Modifier.height(16.dp))
-                        ActionRow {
+                        Row(Modifier.fillMaxWidth()) { // 首页这条播放按钮在宽屏也保持整条
                             PrimaryBar(if (st.playing) "暂停" else if (st.current != null) "继续播放" else "播放", if (st.playing) NIcons.pause else NIcons.play, Modifier.weight(1f)) {
                                 if (st.current != null) Engine.toggle() else if (daily.isNotEmpty()) Engine.playList(daily, 0)
                             }
