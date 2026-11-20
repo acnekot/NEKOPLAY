@@ -196,14 +196,19 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     }
 }
 
+@Composable private fun ModeBtn(st: PlayState) {
+    val nav = LocalNav.current
+    Box(Modifier.size(44.dp).press(haptic = true) { Engine.cycleMode(); nav.toast = listOf("列表循环", "单曲循环", "随机播放")[Engine.state.value.mode.ordinal] }, contentAlignment = Alignment.Center) {
+        NIcon(when (st.mode) { Mode.LOOP_ALL -> NIcons.modeSeq; Mode.LOOP_ONE -> NIcons.modeOne; Mode.SHUFFLE -> NIcons.modeShuffle }, 22.dp)
+    }
+}
+
 /** 播放页功能按钮（模式 / 定时 / 下载 / 更多 / 评论 / 队列），手机横排，PC 竖排放在左边 */
-@Composable private fun PlayerBtnItems(t: Track, st: PlayState, fill: @Composable () -> Unit) {
+@Composable private fun PlayerBtnItems(t: Track, st: PlayState, mode: Boolean = true, fill: @Composable () -> Unit) {
     val nav = LocalNav.current
     // 按钮可以在设置里开关：左边放模式 / 定时，右边放下载 / 更多 / 评论 / 队列
     val b = UiPref.btns
-            if ("mode" in b) { Box(Modifier.size(44.dp).press(haptic = true) { Engine.cycleMode(); nav.toast = listOf("列表循环", "单曲循环", "随机播放")[Engine.state.value.mode.ordinal] }, contentAlignment = Alignment.Center) {
-                NIcon(when (st.mode) { Mode.LOOP_ALL -> NIcons.modeSeq; Mode.LOOP_ONE -> NIcons.modeOne; Mode.SHUFFLE -> NIcons.modeShuffle }, 22.dp)
-            }; Spacer(Modifier.size(6.dp)) }
+            if (mode && "mode" in b) { ModeBtn(st); Spacer(Modifier.size(6.dp)) }
             if ("sleep" in b) SleepBtn()
             fill()
             if ("dl" in b) {
@@ -666,6 +671,8 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
                                 T("译", 12, if (showTr) p.tagFg else p.k, 700)
                             }
                         }
+                        // PC：播放模式放在译下面
+                        if ("mode" in UiPref.btns) ModeBtn(st)
                     }
                 }
                 Spacer(Modifier.height(10.dp))
@@ -675,7 +682,7 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
             Box(Modifier.align(Alignment.TopStart).padding(8.dp).size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp, p.s) }
             // 功能按钮竖排在左边，和收起按钮对齐，往下让出一段
             Column(Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                PlayerBtnItems(t, st) { Spacer(Modifier.height(18.dp)) }
+                PlayerBtnItems(t, st, mode = false) { Spacer(Modifier.height(18.dp)) }
             }
         }
         // 右栏：歌词；打开评论时换成评论（从右边滑进来）
