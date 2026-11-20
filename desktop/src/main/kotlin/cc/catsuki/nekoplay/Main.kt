@@ -80,6 +80,8 @@ fun main() {
                 if (e.type != KeyEventType.KeyDown) false
                 else if (e.key == Key.Escape) DesktopPlat.back()   // Esc = 返回
                 // 调试模式下 Ctrl+Shift+T 在鼠标位置打开托盘菜单（测试用，不用去点任务栏）
+                // Ctrl+Q：直接退出（不缩到托盘）
+                else if (e.key == Key.Q && (e.isCtrlPressed || e.isMetaPressed)) { quit(); true }
                 else if (Debug.on && e.key == Key.T && e.isCtrlPressed && e.isShiftPressed) { TrayState.menuAt = java.awt.MouseInfo.getPointerInfo().location; true }
                 else Keys.handleCtrl(e.key, e.isCtrlPressed || e.isMetaPressed)
             },
@@ -165,7 +167,8 @@ private fun NekoTray(playing: Boolean, tip: String, show: () -> Unit, quit: () -
             isImageAutoSize = false
             addMouseListener(object : java.awt.event.MouseAdapter() {
                 override fun mouseReleased(e: java.awt.event.MouseEvent) {
-                    val p = e.locationOnScreen
+                    // 用系统鼠标位置：TrayIcon 事件里的坐标在 Windows 缩放（125%、175%…）下是物理像素，菜单会偏到右边
+                    val p = java.awt.MouseInfo.getPointerInfo()?.location ?: e.locationOnScreen
                     if (e.button == java.awt.event.MouseEvent.BUTTON3 || e.isPopupTrigger) java.awt.EventQueue.invokeLater { TrayState.menuAt = p }
                     else if (e.button == java.awt.event.MouseEvent.BUTTON1) java.awt.EventQueue.invokeLater { showS() }
                 }
