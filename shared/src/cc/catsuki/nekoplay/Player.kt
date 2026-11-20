@@ -126,8 +126,12 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     val ct = lerp(nowTop, 8 * dp, lt)
                     val coverDp = with(d) { coverNow.toDp() }
                     // 歌词列
-                    if (lt > .7f) Box(Modifier.fillMaxWidth().height(with(d) { (free - 68 * dp).coerceAtLeast(0f).toDp() }).offset(y = 68.dp)
-                        .graphicsLayer { alpha = ((lt - .7f) / .3f).coerceIn(0f, 1f).let { it * it } }) { Lyrics(t, showTr) { nav.lyrics = false } }
+                    // 歌词一直挂着（封面页时透明、不接收点击）：切到歌词页时已经排好版、停在当前句，不会先闪一下再跳
+                    Box(Modifier.fillMaxWidth().height(with(d) { (free - 68 * dp).coerceAtLeast(0f).toDp() }).offset(y = 68.dp)
+                        .graphicsLayer { alpha = ((lt - .7f) / .3f).coerceIn(0f, 1f).let { it * it } }
+                        .then(if (nav.lyrics) Modifier else Modifier.pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial).changes.forEach { it.consume() } } })) {
+                        Lyrics(t, showTr, active = nav.lyrics) { nav.lyrics = false }
+                    }
                     // 封面：始终按大尺寸解码，只做位移和缩放
                     Box(Modifier.graphicsLayer {
                         transformOrigin = TransformOrigin(0f, 0f); translationX = cl; translationY = ct; scaleX = cs / coverNow; scaleY = cs / coverNow
@@ -238,11 +242,12 @@ object LyricCache {
     }
 }
 
-@Composable fun Lyrics(t: Track, showTr: Boolean, onBlank: (() -> Unit)? = null) {
+@Composable fun Lyrics(t: Track, showTr: Boolean, active: Boolean = true, onBlank: (() -> Unit)? = null) {
     // 按歌重建状态：缓存里有就直接显示，没有才去拉
     var lines by remember(t.id) { mutableStateOf(LyricCache.peek(t.id)) }
     LaunchedEffect(t.id) { if (lines == null) lines = try { LyricCache.get(t.id) } catch (e: Exception) { emptyList() } }
-    DisposableEffect(Unit) { Engine.fastPos++; onDispose { Engine.fastPos-- } }
+    // 看得见时进度刷新加快（逐字高亮更顺），藏在封面后面时不加快
+    DisposableEffect(active) { if (active) Engine.fastPos++; onDispose { if (active) Engine.fastPos-- } }
     val pos by Engine.position.collectAsState()
     val l = lines
     val p = c
@@ -265,6 +270,7 @@ object LyricCache {
     var measured by remember(l) { mutableStateOf(0) }
     val offs = remember(l) { List(l.size) { Animatable(0f) } }
     var settled by remember(l) { mutableStateOf(false) }
+    var ready by remember(l) { mutableStateOf(false) } // 第一次排好位置之前先不显示，避免从顶部闪一下
     val gap = with(LocalDensity.current) { 26.dp.toPx() }
     var vh by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current.density
@@ -282,8 +288,9 @@ object LyricCache {
         val first = (cur - 2).coerceAtLeast(0)
         val jump = !settled // 刚打开歌词页：直接到位，不从顶部滚下来
         settled = true
+        if (jump) { l.indices.forEach { offs[it].snapTo(target) }; ready = true; return@LaunchedEffect }
         l.indices.forEach { i ->
-            if (jump || i < first || i > cur + 10) launch { offs[i].snapTo(target) }
+            if (i < first || i > cur + 10) launch { offs[i].snapTo(target) }
             else launch {
                 kotlinx.coroutines.delay(((i - first) * 35L / Anim.f).toLong())
                 offs[i].animateTo(target, spring(.86f, Anim.stiff(140f)))
@@ -314,7 +321,7 @@ object LyricCache {
                 val a by animateFloatAsState(if (browsing) (if (dist == 0) 1f else .7f) else when (dist) { 0 -> 1f; 1 -> .5f; 2 -> .36f; else -> .26f }, spring(1f, Anim.stiff(Spring.StiffnessLow)), label = "la")
                 Box(Modifier.fillMaxWidth()
                     .onPlaced { val y = it.positionInParent().y; if (tops[i] != y) { tops[i] = y; measured++ } }
-                    .graphicsLayer { translationY = offs[i].value + manual.value; alpha = a }
+                    .graphicsLayer { translationY = offs[i].value + manual.value; alpha = if (ready) a else 0f }
                     .then(if (UiPref.lyricBlur && !browsing && dist in 2..8 && Plat.impl.liveBlur) Modifier.blur(1.2.dp) else Modifier)
                     .padding(bottom = with(LocalDensity.current) { gap.toDp() })) {
                   // 当前句放大两个字号（用缩放做，换句时有过渡）；点击区域只包住文字，旁边的空白点了回到封面
