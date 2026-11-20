@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 // ---------------- 配色：和 Flutter 版 tokens 完全一致 ----------------
 data class Pal(
@@ -183,6 +184,7 @@ object NIcons {
     const val heart = "f|M12 20l-7.5-7.3A4.8 4.8 0 0 1 12 6.2a4.8 4.8 0 0 1 7.5 6.5z"
     const val heartLine = "s|M12 20l-7.5-7.3A4.8 4.8 0 0 1 12 6.2a4.8 4.8 0 0 1 7.5 6.5z"
     const val folder = "s|M3 6h7l2 2h9v11H3z"
+    const val locate = "s|M12 2v4M12 18v4M2 12h4M18 12h4M7 12a5 5 0 1 0 10 0a5 5 0 1 0 -10 0M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"
     const val moon = "s|M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"
     const val clock = "s|M4 12a8 8 0 1 0 16 0a8 8 0 1 0 -16 0M12 8v4l3 2"
     const val clockSmall = "s|M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0M12 7v5l3 2"
@@ -417,3 +419,22 @@ fun img(url: String?, px: Int): String? {
     return if (base.contains("/obj/")) "$base?imageView=1&thumbnail=${b}x$b&type=webp" else "$base?param=${b}y$b"
 }
 
+
+
+/**
+ * 定位到正在播放：当前歌在列表里、但不在屏幕上时，右下角出现一个方块按钮，点一下滚过去（停在偏上的位置）。
+ * target = 正在播放那一行在 LazyColumn 里的序号（含前面的标题项），-1 = 列表里没有。
+ */
+@Composable fun BoxScope.LocateBtn(ls: androidx.compose.foundation.lazy.LazyListState, target: Int, bottom: Dp = 16.dp) {
+    val scope = rememberCoroutineScope()
+    val show by remember(target) { derivedStateOf {
+        target >= 0 && ls.layoutInfo.visibleItemsInfo.let { v -> v.isEmpty() || v.none { it.index == target } || v.first { it.index == target }.let { it.offset < 0 || it.offset + it.size > ls.layoutInfo.viewportEndOffset } }
+    } }
+    androidx.compose.animation.AnimatedVisibility(show, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = bottom),
+        enter = androidx.compose.animation.fadeIn(tween(150)) + androidx.compose.animation.scaleIn(tween(150), .8f),
+        exit = androidx.compose.animation.fadeOut(tween(150)) + androidx.compose.animation.scaleOut(tween(150), .8f)) {
+        Box(Modifier.size(44.dp).press(.92f, true) {
+            scope.launch { ls.animateScrollToItem(target, -(ls.layoutInfo.viewportEndOffset / 3)) }
+        }.background(c.sheet).border(if (Look.flat) 0.dp else 1.dp, c.k), contentAlignment = Alignment.Center) { NIcon(NIcons.locate, 20.dp, c.p) }
+    }
+}

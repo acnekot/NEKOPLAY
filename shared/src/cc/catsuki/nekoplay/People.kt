@@ -45,7 +45,7 @@ fun trackActions(nav: Nav, t: Track, fromPl: String? = null) {
             Store.run { try { Ncm.playlistTracks(fromPl, "del", listOf(t.id)); nav.toast = "已从歌单删除"; Store.refreshPlaylists(fromPl) } catch (e: Exception) { nav.toast = "删除失败：${e.message}" } }
         })
         if (Downloads.has(t.id)) add(SheetItem("删除下载", danger = true) { Downloads.delete(t.id); nav.toast = "已删除下载" })
-        else add(SheetItem("下载") { Downloads.download(t); nav.toast = "已加入下载" })
+        else add(SheetItem("下载…") { downloadSheet(nav, listOf(t)) })
         add(SheetItem("查看评论") { nav.comments = t })
         add(SheetItem("效果器 / 均衡器") { nav.player = false; nav.push(Page.Effects) })
         add(SheetItem("相似歌曲") { nav.player = false; nav.push(Page.Detail("simi", t.id, "相似：${t.title}", t.cover)) })
@@ -155,14 +155,17 @@ fun openArtists(nav: Nav, t: Track) {
     }
     else AnimatedVisibility(nav.sheet != null, Modifier.fillMaxSize(), enter = slideInVertically(sp) { it }, exit = slideOutVertically(sp) { it }) {
         val s = last ?: return@AnimatedVisibility
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-            Column(Modifier.fillMaxWidth().background(p.sheet).topLine().pointerInput(Unit) { detectTapGestures { } }.navigationBarsPadding().padding(bottom = 8.dp)) {
+        BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            // 最多占半屏：标题和「取消」固定，中间的选项可以滚动
+            Column(Modifier.fillMaxWidth().heightIn(max = maxHeight * .5f).background(p.sheet).topLine().pointerInput(Unit) { detectTapGestures { } }.navigationBarsPadding().padding(bottom = 8.dp)) {
                 Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 10.dp)) {
                     T(s.title, 17, w = 800); if (s.sub != null) T(s.sub, 13, p.s)
                 }
-                s.items.forEach { it ->
-                    Box(Modifier.fillMaxWidth().height(52.dp).press { nav.sheet = null; it.run() }.padding(horizontal = 18.dp).topLine(p.l1, 1.dp), contentAlignment = Alignment.CenterStart) {
-                        T(it.label, 16, if (it.danger) p.bad else p.k)
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                    s.items.forEach { it ->
+                        Box(Modifier.fillMaxWidth().height(52.dp).press { nav.sheet = null; it.run() }.padding(horizontal = 18.dp).topLine(p.l1, 1.dp), contentAlignment = Alignment.CenterStart) {
+                            T(it.label, 16, if (it.danger) p.bad else p.k)
+                        }
                     }
                 }
                 Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)) { OutlineBtn("取消", 46.dp) { nav.sheet = null } }

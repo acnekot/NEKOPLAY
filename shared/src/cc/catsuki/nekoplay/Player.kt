@@ -338,6 +338,7 @@ object LyricCache {
                     Box(Modifier.size(44.dp).press { nav.queue = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 14.dp) }
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(if (Look.flat) Color.Transparent else p.l2))
+                Box(Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(Modifier.fillMaxSize(), ls, contentPadding = PaddingValues(start = 18.dp, end = 6.dp, bottom = 12.dp)) {
                     itemsIndexed(st.queue, key = { i, t -> "$i${t.id}" }) { i, t ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -345,6 +346,8 @@ object LyricCache {
                             Box(Modifier.size(44.dp).press { Engine.removeAt(i) }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp, p.s) }
                         }
                     }
+                }
+                LocateBtn(ls, st.index)
                 }
                 Spacer(Modifier.navigationBarsPadding())
             }

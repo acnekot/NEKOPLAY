@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -311,7 +312,9 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
         }
     }
     val list = tracks ?: emptyList()
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 18.dp)) {
+    val dls = rememberLazyListState()
+    Box(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize(), dls, contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 18.dp)) {
         item {
             Column {
                 Tag(when (p.kind) { "daily" -> "DAILY MIX"; "pl" -> "PLAYLIST"; "simi" -> "SIMILAR"; "newsong" -> "NEW SONGS"; "hist" -> "DAILY MIX"; "cloud" -> "CLOUD"; "radio" -> "PODCAST"; else -> "COLLECTION" })
@@ -338,7 +341,7 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                     if (p.kind != "recent" && list.isNotEmpty()) {
                         Spacer(Modifier.width(10.dp))
                         Box(Modifier.size(48.dp).press(.96f, true) {
-                            val n = Downloads.downloadAll(list); nav.toast = if (n == 0) "都已经下载过了" else "已加入下载：$n 首"
+                            downloadSheet(nav, list)
                         }.nbf(1.dp, c.k), contentAlignment = Alignment.Center) { NIcon(NIcons.download, 20.dp) }
                     }
                     // 别人的歌单：可以收藏
@@ -356,6 +359,8 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
         itemsIndexed(list, key = { i, t -> "$i-${t.id}" }) { i, t ->
             TrackRow(t, st.current?.id == t.id, onLong = { trackActions(nav, t, if (mine) p.id else null) }) { Engine.playList(list, i) }
         }
+    }
+    LocateBtn(dls, list.indexOfFirst { it.id == st.current?.id }.let { if (it < 0) -1 else it + 1 })
     }
 }
 

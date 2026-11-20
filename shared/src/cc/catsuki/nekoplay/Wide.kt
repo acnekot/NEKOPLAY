@@ -178,10 +178,13 @@ import androidx.compose.ui.unit.dp
         Row(Modifier.padding(horizontal = 18.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             T("${st.queue.size} 首", 12, p.s, mono = true, modifier = Modifier.weight(1f)); LinkBtn("清空待播") { Engine.clearUpcoming() }
         }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), ls, contentPadding = PaddingValues(start = 18.dp, end = 10.dp, bottom = 12.dp)) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+        LazyColumn(Modifier.fillMaxSize(), ls, contentPadding = PaddingValues(start = 18.dp, end = 10.dp, bottom = 12.dp)) {
             itemsIndexed(st.queue, key = { i, x -> "$i${x.id}" }) { i, x ->
                 TrackRow(x, i == st.index, null) { Engine.playAt(i) }
             }
+        }
+        LocateBtn(ls, st.index)
         }
     }
 }
