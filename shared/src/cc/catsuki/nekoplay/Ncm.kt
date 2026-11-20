@@ -24,12 +24,14 @@ data class Track(
     val cover: String?,
     val artists: List<Pair<String, String>> = emptyList(), // (id, 名字)
     val albumId: String = "",
+    val src: String? = null, // 本地音乐：文件地址（file:// 或 content://），网易云的歌为 null
 ) {
+    val local get() = src != null
     fun toJson() = JSONObject().put("id", id).put("t", title).put("a", artist).put("al", album).put("d", durationMs).put("c", cover ?: "")
-        .put("ar", JSONArray(artists.map { JSONArray().put(it.first).put(it.second) })).put("alid", albumId)
+        .put("ar", JSONArray(artists.map { JSONArray().put(it.first).put(it.second) })).put("alid", albumId).apply { if (src != null) put("src", src) }
     companion object {
         fun fromJson(o: JSONObject) = Track(o.getString("id"), o.optString("t"), o.optString("a"), o.optString("al"), o.optLong("d"), o.optString("c").ifEmpty { null },
-            o.optJSONArray("ar")?.let { a -> (0 until a.length()).map { a.getJSONArray(it).let { x -> x.getString(0) to x.getString(1) } } } ?: emptyList(), o.optString("alid"))
+            o.optJSONArray("ar")?.let { a -> (0 until a.length()).map { a.getJSONArray(it).let { x -> x.getString(0) to x.getString(1) } } } ?: emptyList(), o.optString("alid"), o.optString("src").ifEmpty { null })
     }
 }
 

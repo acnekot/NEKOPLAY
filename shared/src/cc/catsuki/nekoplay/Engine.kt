@@ -76,6 +76,7 @@ object Engine {
                 val dl = Downloads.file(nt.id)
                 val hit = cachedLevel(nt.id)
                 when {
+                    nt.src != null -> { audio.queueNext(nt.src, "loc_${nt.id}", nt); queuedFmt = nt.src.substringAfterLast('.', "").lowercase() }
                     dl != null -> { audio.queueNext(dl.toURI().toString(), "dl_${nt.id}", nt); queuedFmt = dl.extension.lowercase() }
                     hit != null && !Plat.isDesktop -> { audio.queueNext(null, cacheKey(nt.id, hit.first), nt); queuedFmt = hit.second }
                     else -> { val st = Ncm.stream(nt.id, q); audio.queueNext(st.url, cacheKey(nt.id, st.level), nt); queuedFmt = st.format; prefs?.edit()?.putString("fmt_${cacheKey(nt.id, st.level)}", st.format)?.apply() }
@@ -154,14 +155,14 @@ object Engine {
         val id = reportId ?: return
         reportId = null
         val sec = audio.position / 1000
-        if (sec >= 30 && Ncm.loggedIn) scope.launch { Ncm.scrobble(id, sec) }
+        if (sec >= 30 && Ncm.loggedIn && !id.startsWith("local:")) scope.launch { Ncm.scrobble(id, sec) }
     }
 
     private fun load(i: Int, autoplay: Boolean, startMs: Long = 0) {
         val t = state.value.queue.getOrNull(i) ?: return
         reportPrev()
         reportId = t.id
-        if (autoplay && Ncm.loggedIn) scope.launch { Ncm.scrobbleStart(t.id) }
+        if (autoplay && Ncm.loggedIn && !t.local) scope.launch { Ncm.scrobbleStart(t.id) }
         dropNext()
         state.value = state.value.copy(index = i, loading = true, format = "", kbps = 0)
         info.value = null; localKbps = 0
@@ -175,7 +176,10 @@ object Engine {
                 // 已经完整缓存过（同档位或更高档位）：直接读本地，不联网
                 val hit = cachedLevel(t.id)
                 val dl = Downloads.file(t.id)
-                if (dl != null) {
+                if (t.src != null) {
+                    audio.open(t.src, "loc_${t.id}", startMs, autoplay, t)
+                    state.value = state.value.copy(format = t.src.substringAfterLast('.', "").takeIf { it.length in 2..4 }?.lowercase() ?: "", kbps = 0, cached = true)
+                } else if (dl != null) {
                     if (t.durationMs > 0) localKbps = (dl.length() * 8 / t.durationMs).toInt()
                     audio.open(dl.toURI().toString(), "dl_${t.id}", startMs, autoplay, t)
                     state.value = state.value.copy(format = dl.extension.lowercase(), kbps = 0, cached = true)

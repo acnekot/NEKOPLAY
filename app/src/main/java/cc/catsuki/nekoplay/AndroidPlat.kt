@@ -67,6 +67,24 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
         return File(ctx.getExternalFilesDir(android.os.Environment.DIRECTORY_MUSIC) ?: ctx.filesDir, "NEKOPLAY")
     }
     override fun metered(): Boolean = runCatching { ctx.getSystemService(android.net.ConnectivityManager::class.java).isActiveNetworkMetered }.getOrDefault(false)
+    override fun scanLocal(): List<LocalSong> {
+        val out = ArrayList<LocalSong>()
+        @Suppress("DEPRECATION") val proj = arrayOf(android.provider.MediaStore.Audio.Media.DATA, android.provider.MediaStore.Audio.Media.TITLE, android.provider.MediaStore.Audio.Media.ARTIST, android.provider.MediaStore.Audio.Media.ALBUM, android.provider.MediaStore.Audio.Media.DURATION)
+        ctx.contentResolver.query(android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, proj, "${android.provider.MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${android.provider.MediaStore.Audio.Media.DURATION} >= 30000", null, null)?.use { c ->
+            while (c.moveToNext()) {
+                val path = c.getString(0) ?: continue
+                out += LocalSong(path, c.getString(1) ?: File(path).nameWithoutExtension, c.getString(2)?.takeIf { it != "<unknown>" } ?: "未知歌手", c.getString(3) ?: "", c.getLong(4))
+            }
+        }
+        return out
+    }
+    @Composable override fun audioPermission(): Pair<Boolean, () -> Unit> {
+        val perm = if (Build.VERSION.SDK_INT >= 33) android.Manifest.permission.READ_MEDIA_AUDIO else android.Manifest.permission.READ_EXTERNAL_STORAGE
+        val c = LocalContext.current
+        var ok by remember { mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(c, perm) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
+        val l = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok = it }
+        return ok to { l.launch(perm) }
+    }
     override fun systemSeed(): Int? = if (android.os.Build.VERSION.SDK_INT >= 31) ctx.getColor(android.R.color.system_accent1_500) else null
     override fun mediaScan(f: File) { android.media.MediaScannerConnection.scanFile(ctx, arrayOf(f.absolutePath), null, null) }
     private val kvs = HashMap<String, KV>()
@@ -241,7 +259,7 @@ class ExoAudio(private val c: Context) : Audio {
             .setArtworkUri(meta.cover?.let { android.net.Uri.parse("$it?param=512y512") }).build()
         val item = MediaItem.Builder().setUri(url ?: "cache://${meta.id}").setCustomCacheKey(cacheKey).setMediaId(meta.id).setMediaMetadata(m).build()
         // 下载好的本地文件：直接读文件，不再往播放缓存里写一份
-        if (url?.startsWith("file:") == true) exo.setMediaSource(androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(c)).createMediaSource(item), startMs)
+        if (url?.startsWith("file:") == true || url?.startsWith("content:") == true) exo.setMediaSource(androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(c)).createMediaSource(item), startMs)
         else exo.setMediaItem(item, startMs)
         exo.prepare(); exo.playWhenReady = autoplay
     }
@@ -253,7 +271,7 @@ class ExoAudio(private val c: Context) : Audio {
     override fun queueNext(url: String?, cacheKey: String, meta: Track) {
         clearNext()
         val it = item(url, cacheKey, meta)
-        if (url?.startsWith("file:") == true) exo.addMediaSource(androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(c)).createMediaSource(it))
+        if (url?.startsWith("file:") == true || url?.startsWith("content:") == true) exo.addMediaSource(androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(c)).createMediaSource(it))
         else exo.addMediaItem(it)
     }
     override fun clearNext() { val n = exo.mediaItemCount; val cur = exo.currentMediaItemIndex; if (n > cur + 1) exo.removeMediaItems(cur + 1, n) }

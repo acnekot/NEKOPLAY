@@ -59,6 +59,17 @@ class DesktopPlat : PlatImpl {
         surf.canvas.drawImageRect(src, org.jetbrains.skia.Rect.makeWH(src.width.toFloat(), src.height.toFloat()), org.jetbrains.skia.Rect.makeWH(w.toFloat(), h.toFloat()), org.jetbrains.skia.SamplingMode.LINEAR, null, true)
         return surf.makeImageSnapshot().toComposeImageBitmap()
     }
+    /** 扫「音乐」文件夹（最多 6 层）；文件名是「歌手 - 歌名」时拆开 */
+    override fun scanLocal(): List<LocalSong> {
+        val exts = setOf("mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "ape", "wma", "alac")
+        val root = File(System.getProperty("user.home"), "Music")
+        if (!root.isDirectory) return emptyList()
+        return root.walkTopDown().maxDepth(6).filter { it.isFile && it.extension.lowercase() in exts && it.length() > 300_000 }.map { f ->
+            val n = f.nameWithoutExtension
+            val (ar, ti) = if (" - " in n) n.substringBefore(" - ").trim() to n.substringAfter(" - ").trim() else "未知歌手" to n
+            LocalSong(f.absolutePath, ti, ar, f.parentFile?.name ?: "", 0)
+        }.toList()
+    }
     override fun savePicture(img: ImageBitmap, name: String): String {
         val dir = File(System.getProperty("user.home"), "Pictures/NEKOPLAY").apply { mkdirs() }
         val f = File(dir, name.replace(Regex("[\\\\/:*?\"<>|]"), "_") + ".png")

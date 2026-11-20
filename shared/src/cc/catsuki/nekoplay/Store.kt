@@ -102,7 +102,7 @@ object Store {
         val like = t.id !in likedIds.value
         likedIds.value = if (like) likedIds.value + t.id else likedIds.value - t.id
         prefs.edit().putStringSet("liked", likedIds.value).apply()
-        io.launch { runCatching { Ncm.like(t.id, like) }.onFailure { onError("云端同步失败：${it.message}") } }
+        if (!t.local) io.launch { runCatching { Ncm.like(t.id, like) }.onFailure { onError("云端同步失败：${it.message}") } }
     }
 
     fun addRecent(t: Track) {

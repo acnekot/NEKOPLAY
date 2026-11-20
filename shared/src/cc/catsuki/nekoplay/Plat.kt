@@ -108,6 +108,10 @@ interface PlatImpl {
     fun systemSeed(): Int? = null
     /** 当前网络是否按流量计费（手机流量 / 热点） */
     fun metered(): Boolean = false
+    /** 扫描本地音乐 */
+    fun scanLocal(): List<LocalSong>
+    /** 读取音乐的权限：(已允许, 去申请) */
+    @Composable fun audioPermission(): Pair<Boolean, () -> Unit> = true to {}
     /** 选图片：返回一个「打开选择器」的函数，选好后回调图片的字节 */
     @Composable fun imagePicker(onPick: (ByteArray) -> Unit): () -> Unit
     @Composable fun BackHandler(enabled: Boolean, onBack: () -> Unit)

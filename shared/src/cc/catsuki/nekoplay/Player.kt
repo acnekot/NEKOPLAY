@@ -235,6 +235,13 @@ object LyricCache {
     }
     @Synchronized fun peek(id: String): List<LyricLine>? = map[id]
     suspend fun get(id: String): List<LyricLine> = peek(id) ?: run {
+        // 本地音乐：读同名 .lrc
+        if (id.startsWith("local:")) {
+            val src = LocalMusic.byId(id)?.src
+            val l = runCatching { val f = java.io.File(java.net.URI(src)); java.io.File(f.parentFile, f.nameWithoutExtension + ".lrc").takeIf { it.exists() }?.readText() }.getOrNull()
+                ?.let { Lrc.parse(it, null) } ?: emptyList()
+            synchronized(this) { map[id] = l }; return@run l
+        }
         val d = Ncm.lyricFull(id)
         // 有逐字歌词就用逐字的，没有退回普通 LRC
         val l = d.yrc?.let { Lrc.parseYrc(it, d.tr) }?.takeIf { it.isNotEmpty() } ?: Lrc.parse(d.lrc, d.tr)

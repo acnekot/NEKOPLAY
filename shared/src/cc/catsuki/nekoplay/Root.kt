@@ -53,6 +53,7 @@ sealed interface Page {
     data object Tuning : Page
     data object KeyMap : Page
     data object DlList : Page
+    data object Local : Page
     data class LyricCard(val t: Track) : Page
 }
 
@@ -88,7 +89,7 @@ val LocalNav = staticCompositionLocalOf { Nav() }
 /** 两端共用的启动初始化（在 Plat.impl 赋值之后调用） */
 object Boot {
     fun init() {
-        Ncm.init(); Store.init(); Engine.init(); Bg.init(); HomeLayout.init(); FxStore.init(); Downloads.init()
+        Ncm.init(); Store.init(); Engine.init(); Bg.init(); HomeLayout.init(); FxStore.init(); Downloads.init(); LocalMusic.load()
         val ui = Plat.prefs("ui")
         Anim.level = ui.getInt("anim", 1)
         ThemePref.load(); Typo.load(); Look.load(); LyricPref.load(); AnimStyle.load(); UiPref.load(); Vol.load(); Monet.load(); Sleep.load(); DeskLyric.load()
@@ -288,7 +289,7 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     if (page !is Page.Search) Row(Modifier.fillMaxWidth().height(48.dp).drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx())) }.padding(start = 6.dp, end = 18.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(44.dp).press { nav.back() }, contentAlignment = Alignment.Center) { NIcon(NIcons.back, 20.dp) }
-        T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; is Page.LyricCard -> "CARD"; else -> "" }, 12, p.s, mono = true, ls = .1f)
+        T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; Page.Local -> "LOCAL"; is Page.LyricCard -> "CARD"; else -> "" }, 12, p.s, mono = true, ls = .1f)
     }
     Box(Modifier.weight(1f)) {
         when (page) {
@@ -315,6 +316,7 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     Page.Tuning -> TuningPage()
     Page.KeyMap -> KeysPage()
     Page.DlList -> DownloadsPage()
+    Page.Local -> LocalMusicPage()
     is Page.LyricCard -> LyricCardPage(page.t)
         }
     }

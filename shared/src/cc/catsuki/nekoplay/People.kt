@@ -34,6 +34,17 @@ data class SheetSpec(val title: String, val sub: String?, val items: List<SheetI
 /** 曲目长按：下一首播放 / 加入队列 / 喜欢 / 歌手 / 专辑 */
 fun trackActions(nav: Nav, t: Track, fromPl: String? = null) {
     val liked = t.id in Store.likedIds.value
+    // 本地歌：只有和网易云无关的几项
+    if (t.local) {
+        nav.sheet = SheetSpec(t.title, t.artist, buildList {
+            add(SheetItem("下一首播放") { Engine.enqueueNext(t); nav.toast = "已加入「下一首播放」" })
+            add(SheetItem("加入播放队列") { Engine.enqueue(t); nav.toast = "已加入播放队列" })
+            add(SheetItem("歌词卡片") { nav.player = false; nav.push(Page.LyricCard(t)) })
+            if (Engine.state.value.current?.id == t.id) add(SheetItem("歌词偏移") { offsetSheet(nav, t) })
+            add(SheetItem("效果器 / 均衡器") { nav.player = false; nav.push(Page.Effects) })
+        })
+        return
+    }
     nav.sheet = SheetSpec(t.title, t.artist, buildList {
         add(SheetItem("下一首播放") { Engine.enqueueNext(t); nav.toast = "已加入「下一首播放」" })
         add(SheetItem("加入播放队列") { Engine.enqueue(t); nav.toast = "已加入播放队列" })
