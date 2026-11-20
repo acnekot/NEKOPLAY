@@ -627,24 +627,24 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
     // 队列栏展开 / 收起是动画：左栏宽度按「动画结束后」的目标来算，再平滑过渡。
     // 之前按每一帧的实际宽度算，加上左栏比例瞬间切换，封面会先变大再变小（抽一下）
     val queueOpen = nav.side == 2
-    // 正在播放占 1/4，歌词占 3/4；左栏至少要放得下最小封面（200）+ 进度条边距 + 收起按钮 + 按钮竖栏
-    val leftMin = 200.dp + 44.dp + 56.dp + (if (PlayerLayout.keys(true, "side").isEmpty()) 0.dp else 52.dp) + 16.dp
-    val leftTarget = maxOf((maxWidth - if (queueOpen) 363.dp else 0.dp) * .25f, leftMin)
+    // 左栏按内容宽度：刚好包住「收起按钮 + 封面 + 按钮竖栏」，再留一段间距，剩下的全给歌词。
+    // 封面大小由高度和设置里的百分比决定；宽度最多用到一半，保证歌词至少占一半
+    val sideW0 = if (PlayerLayout.keys(true, "side").isEmpty()) 0.dp else 52.dp
+    val chrome = 44.dp + 56.dp + sideW0 + 16.dp
+    val avail = maxWidth - if (queueOpen) 363.dp else 0.dp
+    val coverT = minOf(minOf(maxHeight - 290.dp, 560.dp) * (UiPref.coverPct / 100f), avail * .5f - chrome).coerceAtLeast(200.dp)
+    val leftTarget = coverT + chrome + 56.dp
     val rightTarget = maxWidth - (if (queueOpen) 363.dp else 0.dp) - leftTarget
     val leftW by animateDpAsState(leftTarget, spring(1f, Anim.stiff(Spring.StiffnessMediumLow)), label = "leftW")
     val totalH = maxHeight
     Row(Modifier.fillMaxSize()) {
-        // 开着队列时第三栏占走 360，左栏多分一点，封面不至于太小
         Box(Modifier.width(leftW).fillMaxHeight().clipToBounds(), contentAlignment = Alignment.CenterStart) {
-            val maxWidth = leftTarget; val maxHeight = totalH
             // 封面宽度 = 进度条宽度（控制区左右各留 22 的内边距，所以外框比封面宽 44）
             // 左边留 48 给收起按钮，右边是按钮竖栏（类似 Hydrogen）；封面大小在设置里按百分比调
             val sideKeys = PlayerLayout.keys(true, "side")
             val sideW = if (sideKeys.isEmpty()) 0.dp else 52.dp
             // 百分比只按高度缩：开了队列 / 评论、左栏变窄时，封面先用满宽度，不会再被缩一遍变得很小
-            val byW = maxWidth - 44.dp - 56.dp - sideW - 16.dp
-            val byH = minOf(maxHeight - 290.dp, 560.dp) * (UiPref.coverPct / 100f)
-            val cover by animateDpAsState(minOf(byW, byH).coerceAtLeast(200.dp), spring(1f, Anim.stiff(Spring.StiffnessMediumLow)), label = "cover")
+            val cover by animateDpAsState(coverT, spring(1f, Anim.stiff(Spring.StiffnessMediumLow)), label = "cover")
             Row(Modifier.padding(start = 56.dp), verticalAlignment = Alignment.Bottom) {
             Column(Modifier.width(cover + 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 // 解码尺寸固定：封面大小在动画时每帧都变，按实际尺寸解码会每帧重新加载图片、闪一下
