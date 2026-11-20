@@ -34,6 +34,16 @@ interface KV {
 }
 
 /** 播放内核：一次只放一首，队列由 Engine 管 */
+/** 真实音质参数：编码、采样率、位深（0 = 未知）、声道、码率（kbps，0 = 未知） */
+data class AudioInfo(val codec: String, val rate: Int, val bits: Int, val ch: Int, val kbps: Int) {
+    fun line(): String = buildList {
+        add(codec.uppercase())
+        if (rate > 0) add((if (rate % 1000 == 0) "${rate / 1000}" else "%.1f".format(rate / 1000f)) + " kHz" + if (bits > 0) " / $bits bit" else "")
+        if (ch > 0) add(if (ch == 1) "单声道" else if (ch == 2) "立体声" else "$ch 声道")
+        if (kbps > 0) add("$kbps kbps")
+    }.joinToString(" · ")
+}
+
 interface Audio {
     interface Listener {
         fun onPlaying(p: Boolean)
@@ -59,6 +69,8 @@ interface Audio {
     /** 音量 0..1（桌面用） */
     var volume: Float
     /** 效果器 / 均衡器 */
+    /** 正在播放的真实音频参数（解码器读到的），拿不到时 null */
+    fun info(): AudioInfo? = null
     fun applyFx(fx: Fx)
 }
 

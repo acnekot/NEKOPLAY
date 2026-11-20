@@ -24,6 +24,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -87,7 +89,8 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
         LaunchedEffect(t?.id) { t?.let { runCatching { LyricCache.get(it.id) } } }
         var showTr by remember { mutableStateOf(true) }
         val p = c
-        BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer { translationY = drag.value }.background(p.page)) {
+        // 播放页整块吃掉点击：空白处（比如没有歌词时）不会点穿到后面的歌单
+        BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer { translationY = drag.value }.background(p.page).pointerInput(Unit) { detectTapGestures { } }) {
             BgLayer()
             val h = constraints.maxHeight.toFloat()
             val wideP = maxWidth >= 900.dp
@@ -151,8 +154,9 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                         }
                         T(t.artist, 15, p.s, lh = 1.3f, lines = 2, modifier = Modifier.press(onLong = { copy(t.artist, "歌手") }) { openArtists(nav, t) })
                         // 点音质这一行可以换音质
+                        val ainfo by Engine.info.collectAsState()
                         T(if (st.format.isEmpty()) Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)] + " ▾"
-                          else "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}${if (st.cached) " · 已缓存" else ""} ▾",
+                          else (ainfo?.let { if (it.kbps == 0 && st.kbps > 0) it.copy(kbps = st.kbps) else it }?.line() ?: "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}") + "${if (st.cached) " · 已缓存" else ""} ▾",
                             11, p.s, mono = true, ls = .06f, modifier = Modifier.padding(top = 6.dp).press { qualitySheet(nav) })
                     }
                     if (lt > .75f) Column(Modifier.width(with(d) { (w - cl - cs - 30 * dp).coerceAtLeast(40 * dp).toDp() }).graphicsLayer {
@@ -185,18 +189,25 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             SquareBtn(NIcons.next) { Engine.next() }
         }
         Spacer(Modifier.height(10.dp))
+        // 按钮可以在设置里开关：左边放模式 / 定时，右边放下载 / 更多 / 评论 / 队列
+        val b = UiPref.btns
         Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(44.dp).press(haptic = true) { Engine.cycleMode(); nav.toast = listOf("列表循环", "单曲循环", "随机播放")[Engine.state.value.mode.ordinal] }, contentAlignment = Alignment.Center) {
+            if ("mode" in b) { Box(Modifier.size(44.dp).press(haptic = true) { Engine.cycleMode(); nav.toast = listOf("列表循环", "单曲循环", "随机播放")[Engine.state.value.mode.ordinal] }, contentAlignment = Alignment.Center) {
                 NIcon(when (st.mode) { Mode.LOOP_ALL -> NIcons.modeSeq; Mode.LOOP_ONE -> NIcons.modeOne; Mode.SHUFFLE -> NIcons.modeShuffle }, 22.dp)
-            }
-            Spacer(Modifier.width(6.dp))
-            SleepBtn()
+            }; Spacer(Modifier.width(6.dp)) }
+            if ("sleep" in b) SleepBtn()
             Spacer(Modifier.weight(1f))
-            Box(Modifier.size(44.dp).press(haptic = true) { trackActions(nav, t) }, contentAlignment = Alignment.Center) { NIcon(NIcons.more, 22.dp) }
-            Spacer(Modifier.width(6.dp))
-            Box(Modifier.size(44.dp).press(haptic = true) { nav.comments = t }, contentAlignment = Alignment.Center) { NIcon(NIcons.comment, 22.dp) }
-            Spacer(Modifier.width(6.dp))
-            Box(Modifier.size(44.dp).press(haptic = true) { nav.queue = true }, contentAlignment = Alignment.Center) { NIcon(NIcons.queue, 22.dp) }
+            if ("dl" in b) {
+                val dls by Downloads.items.collectAsState(); val act by Downloads.active.collectAsState()
+                val has = dls.any { it.track.id == t.id }; val ing = t.id in act
+                Box(Modifier.size(44.dp).press(haptic = true) { if (has) nav.toast = "已经下载过了" else if (!ing) downloadSheet(nav, listOf(t)) }, contentAlignment = Alignment.Center) {
+                    if (ing) T(act[t.id]!!.let { if (it < 0) "…" else "%.0f".format(it * 100) }, 12, c.p, 700, mono = true) else NIcon(NIcons.download, 22.dp, if (has) c.p else c.k)
+                }
+                Spacer(Modifier.width(6.dp))
+            }
+            if ("more" in b) { Box(Modifier.size(44.dp).press(haptic = true) { trackActions(nav, t) }, contentAlignment = Alignment.Center) { NIcon(NIcons.more, 22.dp) }; Spacer(Modifier.width(6.dp)) }
+            if ("comment" in b) { Box(Modifier.size(44.dp).press(haptic = true) { nav.comments = t }, contentAlignment = Alignment.Center) { NIcon(NIcons.comment, 22.dp) }; Spacer(Modifier.width(6.dp)) }
+            if ("queue" in b) Box(Modifier.size(44.dp).press(haptic = true) { nav.queue = true }, contentAlignment = Alignment.Center) { NIcon(NIcons.queue, 22.dp) }
         }
     }
 }
@@ -236,7 +247,7 @@ object LyricCache {
     val l = lines
     val p = c
     if (l == null || l.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { T(if (l == null) "LOADING" else "NO LYRICS", 12, p.s, mono = true, ls = .08f) }
+        Box(Modifier.fillMaxSize().then(if (onBlank == null) Modifier else Modifier.pointerInput(onBlank) { detectTapGestures { onBlank() } }), contentAlignment = Alignment.Center) { T(if (l == null) "LOADING" else "NO LYRICS", 12, p.s, mono = true, ls = .08f) }
         return
     }
     val cur = Lrc.indexAt(l, pos)
@@ -255,10 +266,19 @@ object LyricCache {
     val offs = remember(l) { List(l.size) { Animatable(0f) } }
     var settled by remember(l) { mutableStateOf(false) }
     val gap = with(LocalDensity.current) { 26.dp.toPx() }
-    // 当前句停在第 2 行的位置：整体上移到「上一句」的顶部
-    LaunchedEffect(cur, measured) {
+    var vh by remember { mutableFloatStateOf(0f) }
+    val density = LocalDensity.current.density
+    // 当前句的停靠位置按设置来：顶部 / 第二行（保留上一句）/ 偏上 / 居中
+    LaunchedEffect(cur, measured, vh, LyricPref.anchor) {
         if (measured < l.size) return@LaunchedEffect
-        val target = -(if (cur > 0) tops[cur - 1] else 0f)
+        val top = tops.getOrElse(cur) { 0f }
+        val lineH = (tops.getOrNull(cur + 1)?.let { it - top - gap } ?: (LyricPref.size * 1.6f * density)).coerceAtLeast(10f)
+        val target = when (LyricPref.anchor) {
+            0 -> -top
+            2 -> vh * .28f - top
+            3 -> vh * .5f - lineH / 2 - top
+            else -> -(if (cur > 0) tops[cur - 1] else 0f)
+        }
         val first = (cur - 2).coerceAtLeast(0)
         val jump = !settled // 刚打开歌词页：直接到位，不从顶部滚下来
         settled = true
@@ -285,7 +305,7 @@ object LyricCache {
         backJob = scope.launch { kotlinx.coroutines.delay(3000); browsing = false; manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessLow))) }
     }
     val drag = androidx.compose.foundation.gestures.rememberDraggableState { dy -> scope.launch { manual.snapTo(manual.value + dy) } }
-    Box(Modifier.fillMaxSize().clipToBounds().then(if (onBlank == null) Modifier else Modifier.pointerInput(onBlank) { detectTapGestures { onBlank() } }).draggable(drag, androidx.compose.foundation.gestures.Orientation.Vertical,
+    Box(Modifier.fillMaxSize().clipToBounds().onSizeChanged { vh = it.height.toFloat() }.then(if (onBlank == null) Modifier else Modifier.pointerInput(onBlank) { detectTapGestures { onBlank() } }).draggable(drag, androidx.compose.foundation.gestures.Orientation.Vertical,
         onDragStarted = { backJob?.cancel(); browsing = true; bounds(); manual.stop() },
         onDragStopped = { v -> scope.launch { manual.animateDecay(v, androidx.compose.animation.core.exponentialDecay(.6f)) }; scheduleBack() })) {
         Column(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).padding(start = 22.dp, end = 30.dp, top = 8.dp)) {
@@ -299,7 +319,10 @@ object LyricCache {
                     .padding(bottom = with(LocalDensity.current) { gap.toDp() })) {
                   // 当前句放大两个字号（用缩放做，换句时有过渡）；点击区域只包住文字，旁边的空白点了回到封面
                   val big by animateFloatAsState(if (i == cur && !browsing) (LyricPref.size + 2f) / LyricPref.size else 1f, spring(.8f, Anim.stiff(Spring.StiffnessLow)), label = "lz")
-                  Box(Modifier.graphicsLayer { scaleX = big; scaleY = big; transformOrigin = TransformOrigin(0f, .5f) }
+                  // 所有行都按「放大后刚好不超宽」的宽度排版：当前句放大后不会被右边裁掉，换句时也不会重新折行
+                  val sMax = (LyricPref.size + 2f) / LyricPref.size
+                  Box(Modifier.layout { m, cs -> val pl = m.measure(cs.copy(minWidth = 0, maxWidth = (cs.maxWidth / sMax).toInt())); layout(pl.width, pl.height) { pl.place(0, 0) } }
+                    .graphicsLayer { scaleX = big; scaleY = big; transformOrigin = TransformOrigin(0f, .5f) }
                     .press(onLong = { if (line.text.isNotEmpty()) copy(if (showTr && line.tr != null) line.text + "\n" + line.tr else line.text, "歌词") }) { Engine.seek(line.t); backJob?.cancel(); browsing = false; scope.launch { manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessMediumLow))) } }) {
                     if (line.text.isEmpty()) {
                         val next = l.getOrNull(i + 1)?.t ?: (line.t + 5000)
@@ -501,7 +524,7 @@ object LyricCache {
     }
 }
 
-@Composable private fun CommentRow(x: Comment, songId: String, nested: Boolean = false, onReply: () -> Unit, onUserOf: (Comment) -> Unit = {}, onReplyOf: (Comment) -> Unit = {}, onUser: () -> Unit) {
+@Composable private fun CommentRow(x: Comment, songId: String, nested: Boolean = false, parentUser: String? = null, onReply: () -> Unit, onUserOf: (Comment) -> Unit = {}, onReplyOf: (Comment) -> Unit = {}, onUser: () -> Unit) {
     val p = c
     val nav = LocalNav.current
     var liked by remember(x.id) { mutableStateOf(x.likedByMe) }
@@ -526,7 +549,11 @@ object LyricCache {
             }
             Spacer(Modifier.height(4.dp))
             T(x.content, 15, p.k, lines = 40, lh = 1.5f, modifier = Modifier.press(onClick = onReply))
-            if (x.reply != null) T(x.reply, 13, p.s, lines = 4, lh = 1.5f, modifier = Modifier.padding(top = 6.dp).fillMaxWidth().background(p.hl).padding(8.dp))
+            // 楼里的回复不再引用原文：回楼主的什么都不加，回楼里别人的只标一行「回复 @某人」
+            if (x.reply != null) {
+                if (!nested) T(x.reply, 13, p.s, lines = 4, lh = 1.5f, modifier = Modifier.padding(top = 6.dp).fillMaxWidth().background(p.hl).padding(8.dp))
+                else { val who = x.reply.removePrefix("@").substringBefore("："); if (who != parentUser) T("回复 @$who", 12, p.s, modifier = Modifier.padding(top = 4.dp)) }
+            }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 T(timeAgo(x.time), 11, p.s, mono = true, modifier = Modifier.weight(1f))
@@ -559,7 +586,7 @@ val LikeRed = Color(0xFFE5484D)
     }
     Column(Modifier.padding(top = 6.dp)) {
         if (open) Column(Modifier.fillMaxWidth().drawBehind { drawRect(p.l2, size = Size(2.dp.toPx(), size.height)) }.padding(start = 10.dp)) {
-            list.forEach { r -> CommentRow(r, songId, nested = true, onReply = { onReplyOf(r) }, onUser = { onUserOf(r) }, onUserOf = onUserOf) }
+            list.forEach { r -> CommentRow(r, songId, nested = true, parentUser = x.user, onReply = { onReplyOf(r) }, onUser = { onUserOf(r) }, onUserOf = onUserOf) }
             if (busy) T("LOADING", 11, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 8.dp))
             else if (cursor != -1L) T("加载更多回复", 12, p.s, 600, modifier = Modifier.press { more() }.padding(vertical = 8.dp))
         }
@@ -605,8 +632,9 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
                     Column(Modifier.weight(1f)) {
                         T(t.title, Fs.PAGE, w = 800, lh = 1.25f, lines = 2, modifier = Modifier.press(onLong = { copy(t.title, "歌名") }) {})
                         T(t.artist, 15, p.s, lh = 1.3f, lines = 2, modifier = Modifier.press(onLong = { copy(t.artist, "歌手") }) { openArtists(nav, t) })
+                        val ainfo by Engine.info.collectAsState()
                         T(if (st.format.isEmpty()) Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)] + " ▾"
-                          else "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}${if (st.cached) " · 已缓存" else ""} ▾",
+                          else (ainfo?.let { if (it.kbps == 0 && st.kbps > 0) it.copy(kbps = st.kbps) else it }?.line() ?: "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}") + "${if (st.cached) " · 已缓存" else ""} ▾",
                             11, p.s, mono = true, ls = .06f, modifier = Modifier.padding(top = 6.dp).press { qualitySheet(nav) })
                     }
                     // 右侧一列：喜欢，下面是歌词翻译开关（和封面右边缘对齐）

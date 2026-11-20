@@ -232,6 +232,13 @@ private class MpvAudio : Audio {
         }.apply { isDaemon = true; name = "mpv-poll" }.start()
     }
 
+    override fun info(): AudioInfo? = runCatching {
+        if (lib == null || h == null) return null
+        val codec = str("audio-codec-name") ?: return null
+        val fmt = str("audio-params/format") ?: ""
+        val bits = when { fmt.startsWith("s16") -> 16; fmt.startsWith("s32") -> if (codec == "flac") 24 else 32; fmt.startsWith("u8") -> 8; else -> 0 }
+        AudioInfo(codec, str("audio-params/samplerate")?.toIntOrNull() ?: 0, bits, str("audio-params/channel-count")?.toIntOrNull() ?: 0, (str("audio-bitrate")?.toDoubleOrNull() ?: 0.0).toInt() / 1000)
+    }.getOrNull()
     private fun str(n: String): String? { val p = lib!!.mpv_get_property_string(h!!, n) ?: return null; val s = p.getString(0, "UTF-8"); lib.mpv_free(p); return s }
     private fun num(n: String): Double { val r = DoubleByReference(); return if (lib!!.mpv_get_property(h!!, n, 5, r) >= 0) r.value else 0.0 }
     private fun cmd(vararg a: String) { lib?.mpv_command(h!!, arrayOf(*a, null)) }

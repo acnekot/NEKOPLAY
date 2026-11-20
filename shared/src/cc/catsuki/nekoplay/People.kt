@@ -282,7 +282,7 @@ fun openArtists(nav: Nav, t: Track) {
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(list, 0, shuffle = true) }
                     if (Ncm.loggedIn) {
                         val subbed by produceState<Boolean?>(null, pg.id) { value = runCatching { Ncm.subAlbums().any { it.id == pg.id } }.getOrDefault(false) }
-                        if (subbed != null) { Spacer(Modifier.width(10.dp)); FollowBtn(subbed!!, "收藏", "已收藏") { on -> Ncm.subAlbum(pg.id, on); Store.refreshPlaylists() } }
+                        Spacer(Modifier.width(10.dp)); FollowBtn(subbed ?: false, "收藏", "已收藏", ready = subbed != null) { on -> Ncm.subAlbum(pg.id, on); Store.refreshPlaylists() }
                     }
                 }
                 Spacer(Modifier.height(12.dp)); Rule()
@@ -402,6 +402,17 @@ fun qualitySheet(nav: Nav) {
 }
 
 /** 一排可选的分类小方块 */
+/** 多选的标签行：点一下开 / 关 */
+@Composable fun MultiChipRow(items: List<String>, on: (Int) -> Boolean, onToggle: (Int) -> Unit) {
+    val p = c
+    LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        itemsIndexed(items) { i, l ->
+            val o = on(i)
+            Box(Modifier.press { onToggle(i) }.background(if (o) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(l, 13, if (o) p.tagFg else p.k, 700) }
+        }
+    }
+}
+
 @Composable fun ChipRow(items: List<String>, sel: Int, onSel: (Int) -> Unit) {
     val p = c
     LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -520,15 +531,21 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
 
 
 /** 关注 / 收藏 按钮：先改界面，失败再改回来 */
-@Composable fun FollowBtn(initial: Boolean, off: String, on: String, act: suspend (Boolean) -> Unit) {
+/** 收藏 / 关注按钮：状态还没查到时先显示「+ 收藏」（不能点），查到是已收藏再渐变过去，不会突然冒出来 */
+@Composable fun FollowBtn(initial: Boolean, off: String, on: String, ready: Boolean = true, act: suspend (Boolean) -> Unit) {
     val nav = LocalNav.current
     var v by remember(initial) { mutableStateOf(initial) }
     val p = c
+    val bg by androidx.compose.animation.animateColorAsState(if (v) Color.Transparent else p.k, tween(220), label = "fb")
+    val fg by androidx.compose.animation.animateColorAsState(if (v) p.k else p.tagFg, tween(220), label = "ff")
     Box(Modifier.press(.96f, true) {
+        if (!ready) return@press
         val n = !v; v = n
         Store.run { try { act(n); nav.toast = if (n) "已$off" else "已取消$off" } catch (e: Exception) { v = !n; nav.toast = "操作失败：${e.message}" } }
-    }.height(48.dp).background(if (v) Color.Transparent else p.k).nbf(1.dp, p.k).padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
-        T(if (v) on else "+ $off", 15, if (v) p.k else p.tagFg, 700)
+    }.height(48.dp).background(bg).nbf(1.dp, p.k).padding(horizontal = 14.dp).animateContentSize(tween(220)), contentAlignment = Alignment.Center) {
+        androidx.compose.animation.AnimatedContent(v, transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) }, label = "ft") { x ->
+            T(if (x) on else "+ $off", 15, fg, 700)
+        }
     }
 }
 

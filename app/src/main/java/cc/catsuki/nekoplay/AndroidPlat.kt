@@ -239,6 +239,20 @@ class ExoAudio(private val c: Context) : Audio {
     override fun clearCache() { cache.keys.toList().forEach { cache.removeResource(it) } }
     override var volume: Float get() = exo.volume; set(v) { exo.volume = v }
 
+    override fun info(): AudioInfo? {
+        val f = exo.audioFormat ?: return null
+        val codec = when (f.sampleMimeType) { "audio/flac" -> "flac"; "audio/mpeg" -> "mp3"; "audio/mp4a-latm" -> "aac"; "audio/opus" -> "opus"; "audio/vorbis" -> "ogg"; "audio/raw" -> "pcm"; else -> f.sampleMimeType?.substringAfter('/') ?: "?" }
+        var bits = when (f.pcmEncoding) { C.ENCODING_PCM_16BIT -> 16; C.ENCODING_PCM_24BIT -> 24; C.ENCODING_PCM_32BIT, C.ENCODING_PCM_FLOAT -> 32; C.ENCODING_PCM_8BIT -> 8; else -> 0 }
+        // FLAC：位深写在 STREAMINFO 里（初始化数据：fLaC + 块头 4 字节 + STREAMINFO）
+        if (bits == 0 && codec == "flac") runCatching {
+            val b = f.initializationData.firstOrNull() ?: return@runCatching
+            val o = if (b.size >= 4 && b[0] == 'f'.code.toByte() && b[1] == 'L'.code.toByte()) 8 else 0
+            bits = (((b[o + 12].toInt() and 1) shl 4) or ((b[o + 13].toInt() and 0xF0) ushr 4)) + 1
+        }
+        val kbps = listOf(f.bitrate, f.averageBitrate, f.peakBitrate).firstOrNull { it > 0 }?.div(1000) ?: 0
+        return AudioInfo(codec, f.sampleRate.coerceAtLeast(0), bits, f.channelCount.coerceAtLeast(0), kbps)
+    }
+
     /**
      * 效果器：Android 9+ 用 DynamicsProcessing 做 10 段均衡（频段可以任意定）；更老的系统退回 Equalizer（按最接近的频段）。
      * 每个效果单独 try，设备不支持就跳过。

@@ -347,7 +347,7 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                     // 别人的歌单：可以收藏
                     if (p.kind == "pl" && Ncm.loggedIn && !mine) {
                         val subbed by produceState<Boolean?>(null, p.id) { value = runCatching { Ncm.playlistSubscribed(p.id) }.getOrNull() }
-                        if (subbed != null) { Spacer(Modifier.width(10.dp)); FollowBtn(subbed!!, "收藏", "已收藏") { on -> Ncm.subscribePlaylist(p.id, on); Store.refreshPlaylists() } }
+                        Spacer(Modifier.width(10.dp)); FollowBtn(subbed ?: false, "收藏", "已收藏", ready = subbed != null) { on -> Ncm.subscribePlaylist(p.id, on); Store.refreshPlaylists() }
                     }
                 }
                 Spacer(Modifier.height(12.dp)); Rule()
@@ -534,12 +534,14 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                 }
             }
         }
+        item { SetLine("当前句位置", "正在唱的那一句停在哪：顶部、第二行（上面保留上一句）、偏上或居中") { ChipRow(LyricPref.ANCHORS, LyricPref.anchor) { LyricPref.changeAnchor(it) } } }
         item { SwitchRow("逐字高亮", "有逐字歌词的歌，当前句一个字一个字亮起来", UiPref.karaoke) { UiPref.karaoke = it; UiPref.save() } }
         item { SwitchRow("远处歌词模糊", "离当前句较远的行轻微模糊（更有层次，略耗性能）", UiPref.lyricBlur) { UiPref.lyricBlur = it; UiPref.save() } }
         item { Group("PLAYBACK") }
         item { NavRow("音质", "在线播放的档位，拿不到时自动降一档", Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav) } }
         item { NavRow("效果器", "10 段均衡器、低音增强、环绕、响度", if (FxStore.fx.on) FxStore.fx.preset else "关") { nav.push(Page.Effects) } }
         item { val dls by Downloads.items.collectAsState(); NavRow("本地下载", "按当前音质下载，附带歌词 · ${Downloads.dir.absolutePath}", "${dls.size} 首") { nav.push(Page.DlList) } }
+        item { SetLine("播放页按钮", "选择播放页底部那排要显示的按钮") { MultiChipRow(UiPref.BTN_NAMES, { UiPref.BTN_KEYS[it] in UiPref.btns }) { UiPref.toggleBtn(UiPref.BTN_KEYS[it]) } } }
         item { SwitchRow("进度条显示缓存", "进度条上用深一点的颜色标出已经下载好的部分", UiPref.showBuffer) { UiPref.showBuffer = it; UiPref.save() } }
         item {
             NavRow("播放缓存", "听过的歌存在本地，再听不用重新下载（上限 1GB）", "%.0f MB".format(cacheSize / 1048576.0)) {

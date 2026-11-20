@@ -381,15 +381,24 @@ object UiPref {
     var barAlpha by mutableFloatStateOf(.5f)    // 有背景时栏位的不透明度
     var lowMem by mutableStateOf(false)         // 省内存模式
     var tray by mutableStateOf(true)            // 桌面：关闭窗口时留在托盘继续播放
+    /** 播放页底下那排按钮显示哪些 */
+    val BTN_KEYS = listOf("mode", "sleep", "dl", "more", "comment", "queue")
+    val BTN_NAMES = listOf("播放模式", "定时关闭", "下载", "更多", "评论", "播放列表")
+    var btns by mutableStateOf(setOf("mode", "sleep", "more", "comment", "queue"))
+    fun toggleBtn(key: String) { btns = if (key in btns) btns - key else btns + key; k.edit().putStringSet("btns", btns).apply() }
     private val k get() = Plat.prefs("ui")
-    fun load() { showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true) }
+    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true) }
     fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).apply() }
 }
 
 /** 歌词字号（设置里可调，歌词页 / 右栏 / 播放页都用它） */
 object LyricPref {
     var size by mutableIntStateOf(24)
-    fun load() { size = Plat.prefs("ui").getInt("lyricSize", 24) }
+    /** 当前句停在哪：0 顶部 / 1 第二行（上面保留上一句）/ 2 偏上三分之一 / 3 居中 */
+    val ANCHORS = listOf("顶部", "保留上一句", "偏上", "居中")
+    var anchor by mutableIntStateOf(1)
+    fun changeAnchor(v: Int) { anchor = v; Plat.prefs("ui").edit().putInt("lyricAnchor", v).apply() }
+    fun load() { size = Plat.prefs("ui").getInt("lyricSize", 24); anchor = Plat.prefs("ui").getInt("lyricAnchor", 1) }
     fun set(v: Int) { size = v.coerceIn(16, 40); Plat.prefs("ui").edit().putInt("lyricSize", size).apply() }
 }
 

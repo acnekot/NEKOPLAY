@@ -33,6 +33,9 @@ object Engine {
     val position = MutableStateFlow(0L)
     val buffered = MutableStateFlow(0L)
     val error = MutableStateFlow<String?>(null)
+    /** 真实音质参数（开始出声后从解码器读） */
+    val info = MutableStateFlow<AudioInfo?>(null)
+    private var localKbps = 0
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var loadJob: Job? = null
     var quality by androidx.compose.runtime.mutableIntStateOf(3) // 默认无损，见 Ncm.LEVELS（界面会跟着刷新）
@@ -76,6 +79,8 @@ object Engine {
             override fun onError(msg: String) { error.value = "播放失败：$msg"; next() }
         }
         // 进度：播放时定时更新
+        // 音质参数：开始播放后读一次（读不到就过一会再试）
+        scope.launch { while (isActive) { if (info.value == null && audio.isPlaying) info.value = audio.info()?.let { if (it.kbps == 0 && localKbps > 0) it.copy(kbps = localKbps) else it }; delay(700) } }
         scope.launch { while (isActive) { val p = audio.position; if (audio.isPlaying || position.value != p) position.value = p; runCatching { buffered.value = if (state.value.cached) Long.MAX_VALUE else audio.buffered }; delay(if (fastPos > 0) 50 else 250) } }
         Store.restoreQueue()?.let { (q, i, pos) -> state.value = state.value.copy(queue = q, index = i); load(i, false, pos) }
     }
@@ -104,6 +109,7 @@ object Engine {
         reportId = t.id
         if (autoplay && Ncm.loggedIn) scope.launch { Ncm.scrobbleStart(t.id) }
         state.value = state.value.copy(index = i, loading = true, format = "", kbps = 0)
+        info.value = null; localKbps = 0
         position.value = startMs
         Store.addRecent(t)
         loadJob?.cancel()
@@ -115,6 +121,7 @@ object Engine {
                 val hit = cachedLevel(t.id)
                 val dl = Downloads.file(t.id)
                 if (dl != null) {
+                    if (t.durationMs > 0) localKbps = (dl.length() * 8 / t.durationMs).toInt()
                     audio.open(dl.toURI().toString(), "dl_${t.id}", startMs, autoplay, t)
                     state.value = state.value.copy(format = dl.extension.lowercase(), kbps = 0, cached = true)
                 } else if (hit != null) {
