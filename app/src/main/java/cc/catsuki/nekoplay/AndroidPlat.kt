@@ -55,7 +55,7 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
         }
     }
 
-    init { exoAudio = ExoAudio(ctx); LyricNotify.start(ctx, exoAudio) }
+    init { exoAudio = ExoAudio(ctx); LyricNotify.start(ctx, exoAudio); WidgetSync.start(ctx) }
 
     override val name = "android"
     override val filesDir: File = ctx.filesDir
