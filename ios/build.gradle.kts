@@ -4,6 +4,17 @@ plugins {
     id("org.jetbrains.compose") version "1.12.2"
 }
 
+// 构建信息（提交号、Actions 运行号）：检查更新时和 Actions 上最新的构建比较
+fun genBuildMeta(dir: File, repoRoot: File): File {
+    val sha = System.getenv("GITHUB_SHA") ?: runCatching { providers.exec { commandLine("git", "-C", repoRoot.path, "rev-parse", "HEAD") }.standardOutput.asText.get().trim() }.getOrDefault("")
+    val time = runCatching { providers.exec { commandLine("git", "-C", repoRoot.path, "log", "-1", "--format=%ct", sha.ifEmpty { "HEAD" }) }.standardOutput.asText.get().trim().toLong() }.getOrDefault(0L)
+    val f = File(dir, "cc/catsuki/nekoplay/BuildMeta.kt"); f.parentFile.mkdirs()
+    val text = "package cc.catsuki.nekoplay\n\n/** 打包时生成，不要手改 */\nobject BuildMeta {\n    const val COMMIT = \"$sha\"\n    /** 提交时间（秒） */\n    const val COMMIT_TIME = ${time}L\n    const val RUN = \"${System.getenv("GITHUB_RUN_ID") ?: ""}\"\n}\n"
+    if (!f.exists() || f.readText() != text) f.writeText(text)
+    return dir
+}
+val buildMetaDir = genBuildMeta(layout.buildDirectory.dir("generated/buildmeta").get().asFile, rootDir.parentFile)
+
 kotlin {
     // 只出真机（arm64），最低 iOS 14；直接链接成可执行文件，不需要 Xcode 工程 / Swift
     iosArm64 {
@@ -25,6 +36,7 @@ kotlin {
         val iosArm64Main by getting {
             // 和安卓 / 桌面共用同一份界面与逻辑代码
             kotlin.srcDir("../shared/src")
+            kotlin.srcDir(buildMetaDir)
             dependencies {
                 implementation("org.jetbrains.compose.runtime:runtime:1.12.2")
                 implementation("org.jetbrains.compose.foundation:foundation:1.12.2")

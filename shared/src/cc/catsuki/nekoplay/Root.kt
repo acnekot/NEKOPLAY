@@ -101,7 +101,7 @@ val LocalNav = staticCompositionLocalOf { Nav() }
 /** 两端共用的启动初始化（在 Plat.impl 赋值之后调用） */
 object Boot {
     fun init() {
-        Ncm.init(); LegacyLogin.migrate(); Plugins.load(); LocalLib.load(); DavMusic.load(); Store.init(); Store.reloadLiked(); Engine.init(); Bg.init(); HomeLayout.init(); FxStore.init(); Downloads.init(); LocalMusic.load(); Stats.load()
+        Ncm.init(); LegacyLogin.migrate(); Plugins.load(); LocalLib.load(); DavMusic.load(); Updater.load(); Store.init(); Store.reloadLiked(); Engine.init(); Bg.init(); HomeLayout.init(); FxStore.init(); Downloads.init(); LocalMusic.load(); Stats.load()
         reloadPrefs(); Backup.load()
     }
     /** 重新读一遍设置（启动时、从备份恢复后） */
@@ -143,6 +143,8 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
 @Composable fun Root(chrome: (@Composable () -> Unit)? = null) {
     val nav = remember { Nav() }
     LaunchedEffect(Unit) { Downloads.onMessage = { nav.toast = it } }
+    // 启动时检查更新（一天一次），有新版本提示一下
+    LaunchedEffect(Unit) { delay(4000); Updater.autoCheck()?.let { nav.toast = "有新版本 ${it.title}：设置 → 关于 → 检查更新" } }
     SideEffect { Keys.nav = nav }
     val st by Engine.state.collectAsState()
     val err by Engine.error.collectAsState()

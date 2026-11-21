@@ -795,7 +795,41 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         if (Debug.on) item { NavRow("请求记录", "最近的接口请求和返回内容", "${Debug.reqs.collectAsState().value.size} 条") { nav.push(Page.DebugLog) } }
        }
        "about" -> {
-        item { NavRow("版本", null, APP_VERSION, clickable = false) {} }
+        item { NavRow("版本", null, Updater.current, clickable = false) {} }
+        item {
+            Column(Modifier.fillMaxWidth().padding(vertical = 10.dp).bottomLine().padding(bottom = 12.dp)) {
+                T("更新通道", 16); T("正式版：GitHub Release；测试版：main 分支最新一次 Actions 打包", 13, p.s, lines = 2, lh = 1.4f)
+                Spacer(Modifier.height(10.dp))
+                ChipRow(listOf("正式版", "测试版 nightly"), if (Updater.nightly) 1 else 0) { Updater.useNightly(it == 1) }
+            }
+        }
+        item {
+            val uri = androidx.compose.ui.platform.LocalUriHandler.current
+            val info = Updater.latest
+            Column(Modifier.fillMaxWidth().padding(vertical = 10.dp).bottomLine().padding(bottom = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        T("检查更新", 16)
+                        T(when {
+                            Updater.checking -> "正在检查…"
+                            Updater.error != null -> "检查失败：${Updater.error}"
+                            info == null -> "还没检查"
+                            info.found -> "有新版本：${info.title}"
+                            else -> "已经是最新（${info.title}）"
+                        }, 13, if (info?.found == true) p.p else p.s, lines = 2, lh = 1.4f)
+                    }
+                    LinkBtn("检查", 14) { if (!Updater.checking) scope.launch { runCatching { Updater.check() } } }
+                }
+                if (info != null && info.found) {
+                    if (info.notes.isNotBlank()) T(info.notes, 12, p.s, lines = 8, lh = 1.4f, modifier = Modifier.padding(top = 8.dp))
+                    Row(Modifier.padding(top = 10.dp)) {
+                        info.url?.let { u -> PrimaryBar("下载", NIcons.download, Modifier.weight(1f)) { runCatching { uri.openUri(u) }.onFailure { nav.toast = "打不开浏览器" } }; Spacer(Modifier.width(8.dp)) }
+                        OutlineBtn("查看页面", pad = 14.dp) { runCatching { uri.openUri(info.page) } }
+                    }
+                    if (Updater.nightly) T("测试版下载的是 zip，解压后安装里面的文件", 11, p.s, modifier = Modifier.padding(top = 6.dp))
+                }
+            }
+        }
         item { NavRow("源代码", "github.com/acnekot/NEKOPLAY", null, clickable = false) {} }
        }
       }
