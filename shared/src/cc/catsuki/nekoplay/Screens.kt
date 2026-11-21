@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -59,10 +60,21 @@ import java.util.Calendar
     val now = remember { Calendar.getInstance() }
     val mix = daily.take(10)
     val liked = pls.firstOrNull { it.liked }
-    val recPl by produceState<List<Playlist>>(emptyList()) { runCatching { value = Ncm.recPlaylists() } }
+    // 首页内容来源：网易云 / QQ 音乐 / 酷狗 / 混合；没开启的音源当作没有
+    val src = HomeSrc.current
+    val showNet = src == 0 || src == 3
+    val showQq = Features.on("qq") && (src == 1 || src == 3)
+    val showKg = Features.on("kugou") && (src == 2 || src == 3)
+    LaunchedEffect(Unit) { if (src == 1 || src == 2) SearchSource.src = src }
+    val qqPls by QqStore.playlists.collectAsState()
+    val kgPls by KgStore.playlists.collectAsState()
+    val recPl by produceState<List<Playlist>>(emptyList(), showNet) { if (showNet) runCatching { value = Ncm.recPlaylists() } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 24.dp)) {
-        // 首页模块：按「首页布局」里的顺序和开关排列
-        HomeLayout.visible.forEachIndexed { mi, m ->
+        var srcDone = false
+        // 首页模块：按「首页布局」里的顺序和开关排列；只有网易云有的模块在别的来源下不显示
+        HomeLayout.visible.forEachIndexed { mi, m0 ->
+            val m = if (!showNet && m0 == "combo") "continue" else m0
+            if (!showNet && m in setOf("daily", "fm", "foryou", "stats")) return@forEachIndexed
             when (m) {
                 "combo" -> item { HomeCombo(mi > 0) }
                 "continue" -> {
@@ -141,8 +153,11 @@ import java.util.Calendar
                 }
                 }
                 "discover" -> {
+                srcDone = true
+                if (showQq) srcSections(1, first = !showNet && mi == 0)
+                if (showKg) srcSections(2, first = !showNet && !showQq && mi == 0)
                 // ---- DISCOVER
-                item {
+                if (showNet) item {
                     Column(Modifier.padding(top = 32.dp)) {
                         TagRow("DISCOVER"); Spacer(Modifier.height(2.dp))
                         T("发现", 24, w = 800, lh = 1.4f); Spacer(Modifier.height(10.dp))
@@ -191,9 +206,10 @@ import java.util.Calendar
                 }
                 item {
                     LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        if (liked != null) item { CardItem({ LikedCover(liked.cover, 132.dp) }, "我喜欢", "${two(liked.count)} 首") { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
+                        if (showNet && liked != null) item { CardItem({ LikedCover(liked.cover, 132.dp) }, "我喜欢", "${two(liked.count)} 首") { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
                         item { CardItem({ RecentCover(rec.firstOrNull()?.cover, 132.dp) }, "最近播放", listMeta(rec)) { nav.push(Page.Detail("recent", "recent", "最近播放")) } }
-                        items(pls.filter { !it.liked }.take(12), key = { it.id }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, "${two(p.count)} 首") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+                        val others = (if (showNet) pls.filter { !it.liked }.take(12) else emptyList()) + (if (showQq) qqPls.take(12) else emptyList()) + (if (showKg) kgPls.take(12) else emptyList())
+                        items(others, key = { it.id }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, "${two(p.count)} 首") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
                     }
                 }
                 }
@@ -207,6 +223,65 @@ import java.util.Calendar
                 }
                 }
             }
+        }
+        // 「发现」模块被关掉时，QQ / 酷狗的区块放到最后
+        if (!srcDone) { if (showQq) srcSections(1, false); if (showKg) srcSections(2, false) }
+    }
+}
+
+/** 首页内容来源 */
+object HomeSrc {
+    /** 选了但功能没开的来源退回网易云 */
+    val current: Int get() = UiPref.homeSrc.let { if ((it == 1 && !Features.on("qq")) || (it == 2 && !Features.on("kugou"))) 0 else it }
+    /** 设置里的选项：(名字, 来源编号) */
+    val options: List<Pair<String, Int>> get() = listOf("网易云" to 0) + (if (Features.on("qq")) listOf("QQ 音乐" to 1) else emptyList()) +
+        (if (Features.on("kugou")) listOf("酷狗" to 2) else emptyList()) + (if (Features.on("qq") || Features.on("kugou")) listOf("混合" to 3) else emptyList())
+    fun set(v: Int) {
+        UiPref.homeSrc = v; UiPref.save()
+        // 搜索默认也用同一个来源（混合时用网易云）
+        SearchSource.src = if (v == 1 || v == 2) v else 0
+    }
+    /** 排行榜 / 新碟缓存：首页来回滚动不重复请求 */
+    val charts = HashMap<Int, List<Playlist>>()
+    var qqAlbums: List<Album>? = null
+}
+
+/** QQ 音乐 / 酷狗在首页的区块：排行榜（QQ 还有新碟） */
+fun LazyListScope.srcSections(src: Int, first: Boolean) {
+    item(key = "charts$src") { SrcCharts(src, first) }
+    if (src == 1) item(key = "newal$src") { QqNewAlbums() }
+}
+
+@Composable private fun SrcCharts(src: Int, first: Boolean) {
+    val nav = LocalNav.current
+    var err by remember { mutableStateOf<String?>(null) }
+    val lists by produceState(HomeSrc.charts[src], src) {
+        if (value == null) try { value = (if (src == 1) Qqm.toplists() else Kgm.toplists()).also { HomeSrc.charts[src] = it } } catch (e: Exception) { err = e.message; value = emptyList() }
+    }
+    Column(Modifier.padding(top = if (first) 0.dp else 32.dp)) {
+        TagRow("CHARTS · " + if (src == 1) "QQ MUSIC" else "KUGOU"); Spacer(Modifier.height(2.dp))
+        T((if (src == 1) "QQ 音乐" else "酷狗") + "排行榜", 24, w = 800, lh = 1.4f); Spacer(Modifier.height(10.dp))
+        val l = lists
+        when {
+            l == null -> T("LOADING", 12, c.s, mono = true, ls = .06f)
+            l.isEmpty() -> T("加载失败" + (err?.let { "：$it" } ?: ""), 13, c.s, lines = 3)
+            else -> LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                items(l, key = { it.id }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, if (p.count > 0) "${two(p.count)} 首" else "榜单") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+            }
+        }
+    }
+}
+
+@Composable private fun QqNewAlbums() {
+    val nav = LocalNav.current
+    val albums by produceState(HomeSrc.qqAlbums) { if (value == null) value = runCatching { Qqm.newAlbums(1, num = 20) }.getOrDefault(emptyList()).also { HomeSrc.qqAlbums = it } }
+    val l = albums ?: return
+    if (l.isEmpty()) return
+    Column(Modifier.padding(top = 28.dp)) {
+        TagRow("NEW ALBUMS · QQ MUSIC"); Spacer(Modifier.height(2.dp))
+        T("QQ 音乐新碟", 24, w = 800, lh = 1.4f); Spacer(Modifier.height(10.dp))
+        LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            items(l, key = { it.id }) { a -> CardItem({ Cover(a.pic, 132.dp, a.name) }, a.name, a.artist) { nav.push(Page.Album(a.id, a.name, a.pic)) } }
         }
     }
 }
@@ -587,6 +662,12 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
        }
        "layout" -> {
         item { NavRow("首页布局", "调整首页模块的顺序，或关掉不需要的", "${HomeLayout.visible.size}/${HomeLayout.ALL.size}") { nav.push(Page.HomeLayout) } }
+        if (HomeSrc.options.size > 1) item {
+            val opts = HomeSrc.options
+            SetLine("首页内容来源", "首页显示哪个音源的内容，搜索也默认用它；混合 = 网易云的日推 / 推荐，加上 QQ 音乐、酷狗的排行榜") {
+                ChipRow(opts.map { it.first }, opts.indexOfFirst { it.second == HomeSrc.current }.coerceAtLeast(0)) { HomeSrc.set(opts[it].second) }
+            }
+        }
         item { NavRow("播放页布局", "每个按钮放在哪、什么顺序；手机和 PC 各一套", null) { nav.push(Page.BtnLayout) } }
         item {
             SwitchRow("PC 按钮竖栏自动隐藏", "歌词旁的按钮平时隐藏，鼠标靠近才显示", UiPref.autoHideSide) { UiPref.autoHideSide = it; UiPref.save() }

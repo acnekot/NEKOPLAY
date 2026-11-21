@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 酷狗排行榜的老接口只有 http；其它站点仍然只走 https -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">mobilecdnbj.kugou.com</domain>
+    </domain-config>
+</network-security-config>

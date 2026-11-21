@@ -202,8 +202,42 @@ object Kgm {
     /** 只有 id 时（歌词缓存按 id 取）：时长不知道也能搜 */
     suspend fun lyric(id: String): LyricData = lyric(Track(id, "", "", "", 0, null))
 
+    // ---------- 排行榜（老的 mobilecdn 接口，不用签名） ----------
+    private const val RANK = "http://mobilecdnbj.kugou.com/api/v3/rank"
+    private suspend fun getJson(url: String): JSONObject = withContext(Dispatchers.IO) {
+        val t = try { Ncm.http.newCall(Request.Builder().url(url).header("User-Agent", "Android15-AndroidPhone-11239-18-0-NetMusic-wifi").build()).execute().use { it.body?.string() ?: "" } }
+            catch (e: java.io.IOException) { throw NcmError("网络错误：${e.message}") }
+        try { JSONObject(t) } catch (e: Exception) { throw NcmError("酷狗返回的不是 JSON") }
+    }
+    suspend fun toplists(): List<Playlist> {
+        val j = getJson("$RANK/list?version=9108&plat=0&showtype=2&parentid=0&apiver=6&area_code=1&withsong=0")
+        return arr(j.optJSONObject("data")?.optJSONArray("info")).map { r ->
+            Playlist(P + "rank" + r.opt("rankid"), r.optString("rankname"), 0, pic(r.optString("img_9").ifEmpty { r.optString("imgurl") }.ifEmpty { r.optString("banner_9") }, 240), mine = false)
+        }
+    }
+    private fun rankSong(x: JSONObject): Track {
+        val au = arr(x.optJSONArray("authors"))
+        val full = x.optString("filename")
+        val alb = x.opt("album_id")?.toString() ?: ""
+        return Track(songId(x.optString("hash"), x.opt("album_audio_id"), alb), x.optString("songname").ifEmpty { full.substringAfter(" - ") },
+            au.joinToString(" / ") { it.optString("author_name") }.ifEmpty { full.substringBefore(" - ", "未知艺人") }, x.optString("album_name"),
+            x.optLong("duration") * 1000, pic(x.optString("album_sizable_cover").ifEmpty { x.optJSONObject("trans_param")?.optString("union_cover") ?: "" }),
+            au.map { "${P}ar${it.opt("author_id")}" to it.optString("author_name") }, if (alb.isEmpty() || alb == "0") "" else "${P}al$alb", vip = x.optInt("privilege") == 10)
+    }
+    private suspend fun rankTracks(rankId: String): List<Track> {
+        val out = ArrayList<Track>()
+        for (page in 1..3) {
+            val d = getJson("$RANK/song?rankid=$rankId&page=$page&pagesize=100&area_code=1&version=9108&plat=0").optJSONObject("data") ?: break
+            val l = arr(d.optJSONArray("info")).map { rankSong(it) }
+            out += l
+            if (l.isEmpty() || out.size >= d.optInt("total", out.size)) break
+        }
+        return out
+    }
+
     // ---------- 歌单 / 专辑 / 歌手 ----------
     suspend fun playlistTracks(id: String): List<Track> {
+        if (raw(id).startsWith("rank")) return rankTracks(raw(id).removePrefix("rank"))
         val gid = raw(id)
         val out = ArrayList<Track>()
         var page = 1
