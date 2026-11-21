@@ -37,6 +37,14 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     implementation("net.java.dev.jna:jna:5.17.0")
     implementation("io.github.dokar3:quickjs-kt:1.0.18")
+    // 内嵌网页：Windows 用系统 WebView2；macOS / Linux 用 JavaFX WebView（只打进这两个系统的安装包）
+    val os = System.getProperty("os.name").lowercase()
+    val arm = System.getProperty("os.arch") in listOf("aarch64", "arm64")
+    val fx = when { "mac" in os -> if (arm) "mac-aarch64" else "mac"; "linux" in os -> if (arm) "linux-aarch64" else "linux"; else -> null }
+    for (m in listOf("base", "graphics", "controls", "media", "web", "swing")) {
+        if (fx != null) implementation("org.openjfx:javafx-$m:21.0.6:$fx")
+        else compileOnly("org.openjfx:javafx-$m:21.0.6:win")   // Windows 只用来编译，运行时不会碰到
+    }
 }
 
 // 版本号统一写在 shared/…/Version.kt
@@ -56,7 +64,7 @@ compose.desktop {
             packageVersion = appVersion
             description = "NEKOPLAY music player" // 安装包元数据用英文：WiX 默认代码页处理不了中文
             vendor = "acnekot"
-            modules("java.sql", "jdk.unsupported", "jdk.management") // jdk.management：性能浮窗读 CPU
+            modules("java.sql", "jdk.unsupported", "jdk.management", "jdk.jsobject", "jdk.xml.dom") // jdk.management：性能浮窗读 CPU
             // 播放内核 libmpv：打包时放进 resources/<系统>/（由 GitHub Actions 下载），装好就能直接播放
             appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
             windows { packageVersion = installerVersion; menuGroup = "NEKOPLAY"; shortcut = true; upgradeUuid = "8f2a6c3e-5b1d-4e7a-9c40-3d2f1a6b7e91"; iconFile.set(project.file("icons/icon.ico")) }
