@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 允许 http：局域网 NAS / OpenList 的 WebDAV、自建音源插件大多是 http://192.168.x.x；酷狗排行榜的老接口也只有 http -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors><certificates src="system"/></trust-anchors>
+    </base-config>
+</network-security-config>

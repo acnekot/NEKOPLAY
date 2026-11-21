@@ -46,7 +46,7 @@ object Store {
         if (!f.exists()) null else JSONArray(f.readText()).let { a -> (0 until a.length()).map { Track.fromJson(a.getJSONObject(it)) } }
     } catch (_: Exception) { null }
 
-    fun reloadLiked() { likedIds.value = prefs.getStringSet("liked", emptySet())!! }
+    fun reloadLiked() { likedIds.value = prefs.getStringSet("liked", emptySet())!! + LocalLib.liked.value.map { it.id } }
     /** 备份恢复用：直接换掉最近播放 */
     fun restoreRecents(l: List<Track>) { recents.value = l; writeTracks("recents", l) }
     private fun writeTracks(name: String, l: List<Track>) = io.launch {
@@ -62,6 +62,8 @@ object Store {
                 playlists.value = (0 until a.length()).map { val o = a.getJSONObject(it); Playlist(o.getString("id"), o.getString("n"), o.getInt("c"), o.optString("cv").ifEmpty { null }, o.optBoolean("l"), o.optBoolean("m", true)) }
             }
         }
+        if (Plugins.main() == null) { profile.value = null; return@launch }
+        PluginStore.refresh().join()      // 先拿到各插件的登录状态
         loading.value = true
         runCatching { Ncm.profile() }.onSuccess { p ->
             profile.value = p
@@ -83,7 +85,7 @@ object Store {
         val l = Ncm.playlistTracks(id)
         writeTracks("pl_$id", l)
         if (playlists.value.firstOrNull { it.liked }?.id == id) {
-            likedIds.value = l.map { it.id }.toSet()
+            likedIds.value = l.map { it.id }.toSet() + LocalLib.liked.value.map { it.id }
             prefs.edit().putStringSet("liked", likedIds.value).apply()
         }
         l
@@ -101,11 +103,19 @@ object Store {
 
     fun cachedTracks(id: String) = readTracks("pl_$id")
 
+    /** 能同步到账号的歌：来源插件开着、实现了收藏、并且登录了；其它的记在本机「我喜欢」 */
+    fun cloudLike(t: Track): Boolean {
+        if (t.local || !Plugins.isPlugin(t.id)) return false
+        val s = Plugins.ofOrNull(t.id) ?: return false
+        return s.has("like") && PluginStore.accounts.value.containsKey(s.id)
+    }
     fun toggleLike(t: Track, onError: (String) -> Unit) {
         val like = t.id !in likedIds.value
         likedIds.value = if (like) likedIds.value + t.id else likedIds.value - t.id
         prefs.edit().putStringSet("liked", likedIds.value).apply()
-        if (!t.local) io.launch { runCatching { Ncm.like(t.id, like) }.onFailure { onError("云端同步失败：${it.message}") } }
+        // 本机喜欢里有它（或者同步不了）就改本机的
+        if (LocalLib.isLiked(t.id) != like && (LocalLib.isLiked(t.id) || !cloudLike(t))) { LocalLib.toggleLike(t); return }
+        io.launch { runCatching { Ncm.like(t.id, like) }.onFailure { onError("云端同步失败：${it.message}") } }
     }
 
     fun addRecent(t: Track) {
@@ -124,7 +134,7 @@ object Store {
         return Triple(q, prefs.getInt("qi", 0).coerceIn(0, q.lastIndex), prefs.getLong("qp", 0))
     }
 
-    fun logout() {
+    fun logout() = io.launch {
         Ncm.logout(); profile.value = null; playlists.value = emptyList(); likedIds.value = emptySet()
         prefs.edit().remove("profile").remove("liked").apply()
         dir.listFiles()?.filter { it.name.startsWith("pl_") || it.name == "playlists.json" }?.forEach { it.delete() }

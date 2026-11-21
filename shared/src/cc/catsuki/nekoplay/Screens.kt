@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -59,12 +60,23 @@ import java.util.Calendar
     val now = remember { Calendar.getInstance() }
     val mix = daily.take(10)
     val liked = pls.firstOrNull { it.liked }
-    val recPl by produceState<List<Playlist>>(emptyList()) { runCatching { value = Ncm.recPlaylists() } }
+    // 首页内容来源：一个插件或混合；歌单来自这些插件的账号
+    val homePl = HomeSrc.plugins
+    val allPls by PluginStore.playlists.collectAsState()
+    val homePls = homePl.flatMap { allPls[it.id].orEmpty() }
+    val mainId = Plugins.main()?.id
+    val likedLists = homePl.mapNotNull { s -> allPls[s.id]?.firstOrNull { it.liked }?.let { s to it } }
+    val showRec = HomeSrc.has("recPlaylists")
+    val recPl by produceState<List<Playlist>>(emptyList(), showRec) { if (showRec) runCatching { value = Ncm.recPlaylists() } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 24.dp)) {
-        // 首页模块：按「首页布局」里的顺序和开关排列
+        // 首页模块：按「首页布局」里的顺序和开关排列；只有网易云有的模块在别的来源下不显示
         HomeLayout.visible.forEachIndexed { mi, m ->
+            // 并排组合：两块各占一半
+            HomeLayout.pairOf(m)?.let { (a, b) -> item(key = m) { HomePair(a, b, mi > 0) }; return@forEachIndexed }
+            if (!HomeLayout.available(m)) return@forEachIndexed
             when (m) {
-                "combo" -> item { HomeCombo(mi > 0) }
+                "charts" -> homePl.filter { it.has("toplists") }.forEachIndexed { i, pl -> item(key = m + pl.id) { PluginCharts(pl.id, pl.name, mi == 0 && i == 0) } }
+                "newalbums" -> homePl.filter { it.has("newAlbums") }.forEach { pl -> item(key = m + pl.id) { PluginNewAlbums(pl.id, pl.name) } }
                 "continue" -> {
                 // ---- CONTINUE LISTENING
                 item {
@@ -142,18 +154,18 @@ import java.util.Calendar
                 }
                 "discover" -> {
                 // ---- DISCOVER
-                item {
+                if (HomeSrc.has("square") || HomeSrc.has("toplists")) item {
                     Column(Modifier.padding(top = 32.dp)) {
                         TagRow("DISCOVER"); Spacer(Modifier.height(2.dp))
                         T("发现", 24, w = 800, lh = 1.4f); Spacer(Modifier.height(10.dp))
                         val tiles = buildList {
-                            add(Triple("排行榜", "TOP CHARTS") { nav.push(Page.Playlists("top", "", "排行榜")) })
-                            add(Triple("歌单广场", "PLAYLISTS") { nav.push(Page.Square) })
-                            add(Triple("新碟上架", "NEW ALBUMS") { nav.push(Page.NewAlbums) })
-                            add(Triple("新歌速递", "NEW SONGS") { nav.push(Page.Detail("newsong", "0", "新歌速递")) })
-                            add(Triple("MV 精选", "MUSIC VIDEO") { nav.push(Page.Mvs) })
-                            add(Triple("播客电台", "PODCAST") { nav.push(Page.Radios) })
-                            if (Ncm.loggedIn) add(Triple("历史日推", "HISTORY") { nav.push(Page.History) })
+                            if (HomeSrc.has("toplists")) add(Triple("排行榜", "TOP CHARTS") { nav.push(Page.Playlists("top", "", "排行榜")) })
+                            if (HomeSrc.has("square")) add(Triple("歌单广场", "PLAYLISTS") { nav.push(Page.Square) })
+                            if (HomeSrc.has("newAlbums")) add(Triple("新碟上架", "NEW ALBUMS") { nav.push(Page.NewAlbums) })
+                            if (HomeSrc.has("newSongs")) add(Triple("新歌速递", "NEW SONGS") { nav.push(Page.Detail("newsong", "0", "新歌速递")) })
+                            if (HomeSrc.has("recMvs")) add(Triple("MV 精选", "MUSIC VIDEO") { nav.push(Page.Mvs) })
+                            if (HomeSrc.has("hotRadios")) add(Triple("播客电台", "PODCAST") { nav.push(Page.Radios) })
+                            if (Ncm.loggedIn && HomeSrc.has("historyDates")) add(Triple("历史日推", "HISTORY") { nav.push(Page.History) })
                         }
                         tiles.chunked(2).forEach { row ->
                             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -191,9 +203,13 @@ import java.util.Calendar
                 }
                 item {
                     LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        if (liked != null) item { CardItem({ LikedCover(liked.cover, 132.dp) }, "我喜欢", "${two(liked.count)} 首") { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
+                        likedLists.forEach { (src, lk) ->
+                            val name = if (likedLists.size > 1) "${src.name} 我喜欢" else "我喜欢"
+                            item(key = "lk" + lk.id) { CardItem({ LikedCover(lk.cover, 132.dp) }, name, "${two(lk.count)} 首") { nav.push(if (src.id == mainId) Page.Detail("liked", lk.id, name, lk.cover) else Page.Detail("pl", lk.id, name, lk.cover)) } }
+                        }
                         item { CardItem({ RecentCover(rec.firstOrNull()?.cover, 132.dp) }, "最近播放", listMeta(rec)) { nav.push(Page.Detail("recent", "recent", "最近播放")) } }
-                        items(pls.filter { !it.liked }.take(12), key = { it.id }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, "${two(p.count)} 首") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+                        val others = homePls.filter { !it.liked }.take(24)
+                        items(others, key = { it.id }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, "${two(p.count)} 首") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
                     }
                 }
                 }
@@ -207,6 +223,64 @@ import java.util.Calendar
                 }
                 }
             }
+        }
+    }
+}
+
+@Composable fun PluginCharts(pid: String, name: String, first: Boolean = false) {
+    val nav = LocalNav.current
+    var err by remember { mutableStateOf<String?>(null) }
+    val lists by produceState(HomeSrc.pluginCharts[pid], pid) {
+        if (value == null) try { value = Plugins.toplists(pid).also { HomeSrc.pluginCharts[pid] = it } } catch (e: Exception) { err = e.message; value = emptyList() }
+    }
+    Column(Modifier.padding(top = if (first) 0.dp else 32.dp)) {
+        TagRow("CHARTS · " + name.uppercase()); Spacer(Modifier.height(2.dp))
+        T(name + "排行榜", 24, w = 800, lh = 1.4f); Spacer(Modifier.height(10.dp))
+        val l = lists
+        when {
+            l == null -> T("LOADING", 12, c.s, mono = true, ls = .06f)
+            l.isEmpty() -> T("加载失败" + (err?.let { "：$it" } ?: ""), 13, c.s, lines = 3)
+            else -> LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                items(l, key = { it.id }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, if (p.count > 0) "${two(p.count)} 首" else "榜单") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+            }
+        }
+    }
+}
+
+/** 首页内容来源：一个插件，或者全部开着的插件混在一起 */
+object HomeSrc {
+    const val MIX = "mix"
+    private val sources get() = Plugins.enabled
+    /** 选了但没开的插件退回第一个开着的 */
+    val current: String get() = UiPref.homePlugin.let { v -> val s = sources.map { it.id }; if (v == MIX && s.size > 1) MIX else if (v in s) v else s.firstOrNull { it == "netease" } ?: s.firstOrNull() ?: "" }
+    /** 首页要展示的插件 */
+    val plugins: List<JsSource> get() = current.let { cur -> if (cur == MIX) sources else sources.filter { it.id == cur } }
+    /** 首页来源里有没有插件实现了这个功能 */
+    fun has(cap: String) = plugins.any { it.has(cap) }
+    /** 设置里的选项：(名字, 插件 id) */
+    val options: List<Pair<String, String>> get() = sources.map { it.name to it.id } + (if (sources.size > 1) listOf("混合" to MIX) else emptyList())
+    fun set(v: String) {
+        UiPref.homePlugin = v; UiPref.save()
+        // 搜索默认也用同一个来源
+        if (v != MIX) SearchSource.key = v
+        SearchSource.fix()
+        Store.refreshAll()     // 主账号跟着首页来源换
+    }
+    /** 排行榜 / 新碟缓存：首页来回滚动不重复请求 */
+    val pluginCharts = HashMap<String, List<Playlist>>()
+    val albums = HashMap<String, List<Album>>()
+}
+
+@Composable fun PluginNewAlbums(pid: String, name: String) {
+    val nav = LocalNav.current
+    val albums by produceState(HomeSrc.albums[pid], pid) { if (value == null) value = runCatching { Plugins.newAlbums(pid) }.getOrDefault(emptyList()).also { HomeSrc.albums[pid] = it } }
+    val l = albums ?: return
+    if (l.isEmpty()) return
+    Column(Modifier.padding(top = 28.dp)) {
+        TagRow("NEW ALBUMS · " + name.uppercase()); Spacer(Modifier.height(2.dp))
+        T(name + "新碟", 24, w = 800, lh = 1.4f); Spacer(Modifier.height(10.dp))
+        LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            items(l, key = { it.id }) { a -> CardItem({ Cover(a.pic, 132.dp, a.name) }, a.name, a.artist) { nav.push(Page.Album(a.id, a.name, a.pic)) } }
         }
     }
 }
@@ -245,40 +319,57 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
     val liked = pls.firstOrNull { it.liked }
     val others = pls.filter { !it.liked }
     val ver by Store.plVersion.collectAsState()
-    val subAlbums by produceState<List<Album>?>(null, prof, ver) { if (prof != null) runCatching { value = Ncm.subAlbums() } }
+    // 主插件（首页来源）的账号；其它插件的歌单在最下面
+    val main = Plugins.main()
+    val subAlbums by produceState<List<Album>?>(null, prof, ver, main?.id) { if (prof != null && main?.has("subAlbums") == true) runCatching { value = Ncm.subAlbums() } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp)) {
         item {
             Column {
                 Tag("LIBRARY"); Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
                     T("曲库", Fs.HERO, w = 800, lh = 1.3f, modifier = Modifier.weight(1f))
-                    if (prof != null) {
+                    if (prof != null && main != null) {
                         val signed by Store.signedToday.collectAsState()
-                        if (signed) Box(Modifier.defaultMinSize(44.dp, 44.dp), contentAlignment = Alignment.Center) { Box(Modifier.height(28.dp).background(c.l3).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) { T("已签到", 12, c.s, 700) } }
+                        if (!main.has("signin")) Unit
+                        else if (signed) Box(Modifier.defaultMinSize(44.dp, 44.dp), contentAlignment = Alignment.Center) { Box(Modifier.height(28.dp).background(c.l3).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) { T("已签到", 12, c.s, 700) } }
                         else LinkBtn("签到", 14) { Store.run { nav.toast = runCatching { Ncm.signin().also { (ok, _) -> if (ok) Store.markSigned() }.second }.getOrElse { "签到失败：${it.message}" } } }
-                        Spacer(Modifier.width(6.dp)); LinkBtn("新建歌单", 14) { newPlaylist(nav) }
+                        if (main.has("createPlaylist")) { Spacer(Modifier.width(6.dp)); LinkBtn("新建歌单", 14) { newPlaylist(nav) } }
                     }
                     else T("${two(others.size)} 个歌单", 13, c.s, mono = true, ls = .06f, modifier = Modifier.padding(bottom = 6.dp))
                 }
                 Spacer(Modifier.height(10.dp)); Rule()
             }
         }
-        if (liked != null) item { ListRow({ LikedCover(liked.cover, 56.dp) }, "我喜欢", "${two(liked.count)} 首") { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
+        val net = main != null
+        if (net && liked != null) item { ListRow({ LikedCover(liked.cover, 56.dp) }, "我喜欢", "${two(liked.count)} 首") { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
         item { ListRow({ RecentCover(rec.firstOrNull()?.cover, 56.dp) }, "最近播放", listMeta(rec)) { nav.push(Page.Detail("recent", "recent", "最近播放")) } }
         if (Features.on("dl")) item { val dls by Downloads.items.collectAsState(); ListRow({ IconCover(NIcons.download, 56.dp) }, "本地下载", "${two(dls.size)} 首") { nav.push(Page.DlList) } }
         if (Features.on("stats")) item { ListRow({ IconCover(NIcons.chart, 56.dp) }, "听歌统计", "本机的播放次数和时长") { nav.push(Page.Stats) } }
         if (Features.on("local")) item { val loc by LocalMusic.list.collectAsState(); ListRow({ IconCover(NIcons.disc, 56.dp) }, "本地音乐", if (loc.isEmpty()) "扫描手机 / 电脑里的歌" else "${two(loc.size)} 首") { nav.push(Page.Local) } }
-        if (prof == null) item {
-            Column(Modifier.padding(vertical = 24.dp)) {
-                T("NOT LOGGED IN", 12, c.s, mono = true, lines = 2, ls = .06f, lh = 1.7f)
-                Spacer(Modifier.height(12.dp)); ActionRow { PrimaryBar("登录网易云音乐", NIcons.chevronRight, Modifier.weight(1f)) { nav.push(Page.Login) } }
+        if (Features.on("davmusic")) item { ListRow({ IconCover(NIcons.cloud, 56.dp) }, "WebDAV 音乐", if (DavMusic.ready) "浏览网盘里的歌" else "填好地址后直接播放网盘里的歌") { nav.push(Page.Dav) } }
+        // 本机的喜欢和歌单：不需要账号
+        item {
+            val ll by LocalLib.liked.collectAsState()
+            val lls by LocalLib.lists.collectAsState()
+            Column {
+                Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("ON THIS DEVICE", 12.dp) { LinkBtn("新建本地歌单", 13) { newLocalPlaylist(nav) } } }
+                ListRow({ LikedCover(ll.firstOrNull { it.cover != null }?.cover, 56.dp) }, "本机喜欢", if (ll.isEmpty()) "本地歌和没登录的来源点喜欢会记在这里" else "${two(ll.size)} 首") { nav.push(Page.Detail("llike", "llike", "本机喜欢")) }
+                lls.forEach { l ->
+                    ListRow({ Cover(l.tracks.firstOrNull { it.cover != null }?.cover, 56.dp, l.name) }, l.name, "本地歌单 · ${two(l.tracks.size)} 首", onLong = { localPlaylistActions(nav, l.id, l.name) }) { nav.push(Page.Detail("lpl", l.id, l.name)) }
+                }
             }
         }
-        if (prof != null) {
+        if (net && prof == null && main!!.has("loginQr")) item {
+            Column(Modifier.padding(vertical = 24.dp)) {
+                T("NOT LOGGED IN", 12, c.s, mono = true, lines = 2, ls = .06f, lh = 1.7f)
+                Spacer(Modifier.height(12.dp)); ActionRow { PrimaryBar("登录" + main!!.name, NIcons.chevronRight, Modifier.weight(1f)) { nav.push(Page.PluginLogin(main.id)) } }
+            }
+        }
+        if (net && prof != null && main!!.has("cloud")) {
             item { ListRow({ IconCover(NIcons.cloud, 56.dp) }, "云盘", "自己上传的歌") { nav.push(Page.Detail("cloud", "cloud", "云盘")) } }
         }
-        val made = others.filter { it.mine }; val faved = others.filter { !it.mine }
-        val albums = subAlbums ?: emptyList()
+        val made = if (net) others.filter { it.mine } else emptyList(); val faved = if (net) others.filter { !it.mine } else emptyList()
+        val albums = if (net) subAlbums ?: emptyList() else emptyList()
         if (made.isNotEmpty()) item { Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("CREATED", 12.dp) { T("${two(made.size)} 个", 13, c.s, mono = true) } } }
         items(made, key = { it.id }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name) }, p.name, "${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
         // 收藏：歌单和专辑放在一起
@@ -286,8 +377,15 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
         items(albums, key = { "al" + it.id }) { al -> ListRow({ Cover(al.pic, 56.dp, al.name) }, al.name, "专辑 · " + listOf(al.artist, if (al.size > 0) "${al.size} 首" else "").filter { it.isNotEmpty() }.joinToString(" · "),
             onLong = { nav.sheet = SheetSpec(al.name, al.artist, listOf(SheetItem("取消收藏", danger = true) { Store.run { try { Ncm.subAlbum(al.id, false); nav.toast = "已取消收藏"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "操作失败：${e.message}" } } })) }) { nav.push(Page.Album(al.id, al.name, al.pic)) } }
         items(faved, key = { it.id }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name) }, p.name, "歌单 · ${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
-        if (Features.on("qq")) qqLibrary(nav)
-        if (Features.on("kugou")) kgLibrary(nav)
+        // 没有任何插件：本体只剩本地功能
+        if (main == null) item {
+            Column(Modifier.padding(vertical = 24.dp)) {
+                T("NO SOURCE", 12, c.s, mono = true, ls = .06f); Spacer(Modifier.height(6.dp))
+                T("还没有在线音源插件：到 设置 → 插件 导入脚本后，这里会出现它的歌单", 13, c.s, lines = 3, lh = 1.4f)
+                Spacer(Modifier.height(12.dp)); ActionRow { PrimaryBar("管理插件", NIcons.chevronRight, Modifier.weight(1f)) { nav.push(Page.PluginMgr) } }
+            }
+        }
+        pluginLibrary(nav, except = main?.id)
     }
 }
 
@@ -299,11 +397,13 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
     var err by remember { mutableStateOf<String?>(null) }
     val ver by Store.plVersion.collectAsState()
     val pls by Store.playlists.collectAsState()
-    val mine = pls.firstOrNull { it.id == p.id }?.mine == true && (p.kind == "pl" || p.kind == "liked")
+    val mine = (pls.firstOrNull { it.id == p.id }?.mine == true && (p.kind == "pl" || p.kind == "liked")) || p.kind == "lpl"
     val tracks by produceState<List<Track>?>(null, p, ver) {
         when (p.kind) {
             "daily" -> Store.daily.collect { value = it }
             "recent" -> Store.recents.collect { value = it }
+            "llike" -> LocalLib.liked.collect { value = it }
+            "lpl" -> LocalLib.lists.collect { l -> value = l.firstOrNull { it.id == p.id }?.tracks ?: emptyList() }
             "simi" -> try { value = Ncm.simiSongs(p.id) } catch (e: Exception) { err = e.message }
             "newsong" -> try { value = Ncm.newSongs(p.id.toIntOrNull() ?: 0) } catch (e: Exception) { err = e.message }
             "hist" -> try { value = Ncm.historySongs(p.id) } catch (e: Exception) { err = e.message }
@@ -335,12 +435,12 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                         Spacer(Modifier.height(4.dp))
                         T(if (tracks == null) "LOADING" else listMeta(list), 12, c.s, mono = true, ls = .04f)
                         Spacer(Modifier.weight(1f))
-                        T(when (p.kind) { "daily" -> "每日更新"; "recent" -> "本机记录"; "simi" -> "相似推荐"; "newsong" -> "新歌速递"; "hist" -> "历史日推"; "cloud" -> "网易云云盘"; "radio" -> "播客电台"; else -> "网易云音乐" }, 13, c.s)
+                        T(when (p.kind) { "daily" -> "每日更新"; "recent" -> "本机记录"; "simi" -> "相似推荐"; "newsong" -> "新歌速递"; "hist" -> "历史日推"; "cloud" -> "网易云云盘"; "radio" -> "播客电台"; "llike", "lpl" -> "本机"; else -> Plugins.sourceName(p.id) ?: "网易云音乐" }, 13, c.s)
                     }
                 }
                 Spacer(Modifier.height(16.dp))
                 ActionRow {
-                    PrimaryBar("播放全部", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
+                    PrimaryBar("播放", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(list, 0, shuffle = true) }
                     if (p.kind != "recent" && list.isNotEmpty() && Features.on("dl")) {
                         Spacer(Modifier.width(10.dp))
@@ -349,7 +449,8 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                         }.nbf(1.dp, c.k), contentAlignment = Alignment.Center) { NIcon(NIcons.download, 20.dp) }
                     }
                     // 别人的歌单：可以收藏
-                    if (p.kind == "pl" && Ncm.loggedIn && !mine) {
+                    // QQ / 酷狗的歌单只会是自己建的或已收藏的（曲库里列出来的就是），不显示收藏按钮
+                    if (p.kind == "pl" && Ncm.loggedIn && !mine && Plugins.sourceName(p.id) == null) {
                         val subbed by produceState<Boolean?>(null, p.id) { value = runCatching { Ncm.playlistSubscribed(p.id) }.getOrNull() }
                         Spacer(Modifier.width(10.dp)); FollowBtn(subbed ?: false, "收藏", "已收藏", ready = subbed != null) { on -> Ncm.subscribePlaylist(p.id, on); Store.refreshPlaylists() }
                     }
@@ -370,6 +471,7 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
 
 // ======================= 搜索 =======================
 private val SEARCH_TYPES = listOf("单曲", "专辑", "歌手", "歌单", "用户", "歌词")
+private val SEARCH_KINDS = listOf("track", "album", "artist", "playlist", "user", "lyric")
 
 /** 一次搜索的结果：按类型放在不同的列表里 */
 private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), val albums: List<Album> = emptyList(), val artists: List<Artist> = emptyList(),
@@ -400,19 +502,21 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
     }
     fun saveHistory(l: List<String>) { history = l; prefs.edit().putString("history", l.joinToString("\n")).apply() }
     fun run(k: String, t: Int) {
+        SearchSource.fix()
+        if (SearchSource.options.isEmpty()) { nav.toast = "没有可用的音源：到 设置 → 插件 导入"; return }
         busy = true; res = null; type = t
         job?.cancel()
         job = scope.launch {
             try {
-                res = if (SearchSource.qq) when (t) {
-                    0 -> SearchRes(t, tracks = Qqm.search(k)); 1 -> SearchRes(t, albums = Qqm.searchAlbums(k)); 3 -> SearchRes(t, playlists = Qqm.searchPlaylists(k))
-                    else -> { nav.toast = "QQ 音乐暂时只能搜单曲、专辑和歌单"; SearchRes(t) }
-                } else if (SearchSource.kg) when (t) {
-                    0 -> SearchRes(t, tracks = Kgm.search(k)); 1 -> SearchRes(t, albums = Kgm.searchAlbums(k)); 3 -> SearchRes(t, playlists = Kgm.searchPlaylists(k))
-                    else -> { nav.toast = "酷狗暂时只能搜单曲、专辑和歌单"; SearchRes(t) }
-                } else when (t) {
-                    0 -> SearchRes(t, tracks = Ncm.search(k)); 1 -> SearchRes(t, albums = Ncm.searchAlbums(k)); 2 -> SearchRes(t, artists = Ncm.searchArtists(k))
-                    3 -> SearchRes(t, playlists = Ncm.searchPlaylists(k)); 4 -> SearchRes(t, users = Ncm.searchUsers(k)); else -> SearchRes(t, tracks = Ncm.searchLyric(k))
+                val pid = SearchSource.plugin ?: throw NcmError("没有可用的音源")
+                val kind = SEARCH_KINDS[t]
+                if (kind !in (Plugins.get(pid)?.searchTypes ?: emptySet())) { nav.toast = "${Plugins.nameOf(pid)}不支持搜${SEARCH_TYPES[t]}"; res = SearchRes(t); busy = false; return@launch }
+                val v = Plugins.search(pid, k, kind)
+                @Suppress("UNCHECKED_CAST")
+                res = when (kind) {
+                    "album" -> SearchRes(t, albums = v as List<Album>); "artist" -> SearchRes(t, artists = v as List<Artist>)
+                    "playlist" -> SearchRes(t, playlists = v as List<Playlist>); "user" -> SearchRes(t, users = v as List<UserBrief>)
+                    else -> SearchRes(t, tracks = v as List<Track>)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { nav.toast = "搜索失败：${e.message}"; res = SearchRes(t) }
             busy = false
@@ -444,14 +548,17 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         // 结果类型切换
         // 搜索来源：网易云 / QQ 音乐
         if (SearchSource.labels.size > 1) LazyRow(Modifier.fillMaxWidth().padding(top = 10.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            itemsIndexed(SearchSource.labels) { _, l ->
-                val on = SearchSource.idOf(l) == SearchSource.src
-                Box(Modifier.press { if (!on) { SearchSource.src = SearchSource.idOf(l); if (q.isNotBlank() && (res != null || busy)) run(q.trim(), if (SearchSource.src != 0 && type !in listOf(0, 1, 3)) 0 else type) } }
+            itemsIndexed(SearchSource.options) { _, (l, key) ->
+                val on = key == SearchSource.key
+                Box(Modifier.press { if (!on) { SearchSource.key = key; if (q.isNotBlank() && (res != null || busy)) run(q.trim(), if (SEARCH_KINDS[type] !in (Plugins.get(key)?.searchTypes ?: emptySet())) 0 else type) } }
                     .then(if (on) Modifier.background(p.p) else Modifier).nbf(1.dp, if (on) p.p else p.l2).padding(horizontal = 12.dp, vertical = 5.dp)) { T(l, 12, if (on) Color.White else p.s, 700) }
             }
         }
         if (searching) LazyRow(Modifier.fillMaxWidth().padding(top = 10.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            itemsIndexed(SEARCH_TYPES) { i, l ->
+            // 只列出当前来源能搜的类型
+            val kinds = SearchSource.plugin?.let { Plugins.get(it)?.searchTypes } ?: emptySet()
+            items(SEARCH_TYPES.indices.filter { SEARCH_KINDS[it] in kinds }) { i ->
+                val l = SEARCH_TYPES[i]
                 val on = i == type
                 Box(Modifier.press { if (!on) run(q.trim(), i) }.background(if (on) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(l, 13, if (on) p.tagFg else p.k, 700) }
             }
@@ -516,15 +623,22 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item {
             Row(Modifier.fillMaxWidth().bottomLine(p.k, 2.dp).press { prof?.let { nav.push(Page.User(it.uid, it.name)) } }.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(54.dp, 24); Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) { T(prof?.name ?: "好奇猫a", 20, w = 800); T(if (prof == null) "LOCAL ACCOUNT" else "NETEASE CLOUD MUSIC", 11, p.s, mono = true, ls = .08f) }
+                Column(Modifier.weight(1f)) { T(prof?.name ?: "好奇猫a", 20, w = 800); T(if (prof == null) "LOCAL ACCOUNT" else (Plugins.main()?.name ?: "").uppercase(), 11, p.s, mono = true, ls = .08f) }
                 if (prof != null) NIcon(NIcons.chevronRight, 16.dp, p.s)
             }
         }
-        item {
-            Row(Modifier.fillMaxWidth().padding(top = 14.dp).bottomLine().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) { T("网易云音乐", 16, w = 700); T(if (prof == null) "未登录 · 登录后可使用歌单和「我喜欢」" else "已登录 · ${prof!!.name}", 13, p.s, lh = 1.4f) }
-                if (prof == null) LinkBtn("登录", 14) { nav.push(Page.Login) }
-                else LinkBtn("退出登录", 14, p.bad) { Store.logout(); nav.toast = "已退出网易云音乐" }
+        // 每个能登录的插件一行；首页来源（主插件）的账号就是上面这个
+        if (Plugins.enabled.isEmpty()) item { NavRow("还没有音源插件", "本体只带本地播放；到「插件」导入网易云、QQ 音乐等脚本", null) { nav.push(Page.PluginMgr) } }
+        Plugins.enabled.filter { it.has("account") || it.has("loginQr") }.forEach { s ->
+            item(key = "acc" + s.id) {
+                val acc by PluginStore.accounts.collectAsState()
+                val name = acc[s.id]
+                val isMain = s.id == Plugins.main()?.id
+                Row(Modifier.fillMaxWidth().padding(top = 14.dp).bottomLine().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) { T(s.name + if (isMain) " · 主账号" else "", 16, w = 700); T(if (name == null) "未登录 · 登录后可使用它的歌单和「我喜欢」" else "已登录 · $name", 13, p.s, lh = 1.4f) }
+                    if (name == null) { if (s.has("loginQr")) LinkBtn("登录", 14) { nav.push(Page.PluginLogin(s.id)) } }
+                    else LinkBtn("退出登录", 14, p.bad) { confirmLogout(nav, s.name) { if (isMain) Store.logout() else PluginStore.logout(s.id) } }
+                }
             }
         }
         item { Group("SETTINGS") }
@@ -534,8 +648,9 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { SecRow("播放", "音质、效果器、淡入淡出、无缝播放") { nav.push(Page.SetSub("play")) } }
         item { SecRow("存储", "下载、本地音乐、播放缓存") { nav.push(Page.SetSub("storage")) } }
         if (Plat.isDesktop) item { SecRow("桌面", "托盘、侧拉模式、Discord、快捷键") { nav.push(Page.SetSub("desktop")) } }
+        item { val pl by Plugins.list.collectAsState(); SecRow("插件", if (pl.isEmpty()) "导入 JS 插件：在线音源、歌词等服务" else "${pl.count { Plugins.on(it.id) }}/${pl.size} 个已开启") { nav.push(Page.PluginMgr) } }
         item { SecRow("功能管理", "开关内置插件：${Features.list.count { Features.on(it.id) }}/${Features.list.size} 已开启") { nav.push(Page.Feats) } }
-        item { SecRow("数据", "WebDAV 备份、听歌统计") { nav.push(Page.SetSub("data")) } }
+        item { SecRow("数据", "配置备份 / 导入、WebDAV、听歌统计") { nav.push(Page.SetSub("data")) } }
         item { SecRow("高级", "性能、内存、调试") { nav.push(Page.SetSub("adv")) } }
         item { SecRow("关于", "0.3.0") { nav.push(Page.SetSub("about")) } }
        }
@@ -569,6 +684,12 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
        }
        "layout" -> {
         item { NavRow("首页布局", "调整首页模块的顺序，或关掉不需要的", "${HomeLayout.visible.size}/${HomeLayout.ALL.size}") { nav.push(Page.HomeLayout) } }
+        if (HomeSrc.options.size > 1) item {
+            val opts = HomeSrc.options
+            SetLine("首页内容来源", "首页显示哪个音源的内容，搜索也默认用它；混合 = 网易云的日推 / 推荐，加上 QQ 音乐、酷狗的排行榜") {
+                ChipRow(opts.map { it.first }, opts.indexOfFirst { it.second == HomeSrc.current }.coerceAtLeast(0)) { HomeSrc.set(opts[it].second) }
+            }
+        }
         item { NavRow("播放页布局", "每个按钮放在哪、什么顺序；手机和 PC 各一套", null) { nav.push(Page.BtnLayout) } }
         item {
             SwitchRow("PC 按钮竖栏自动隐藏", "歌词旁的按钮平时隐藏，鼠标靠近才显示", UiPref.autoHideSide) { UiPref.autoHideSide = it; UiPref.save() }
@@ -644,7 +765,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { NavRow("快捷键", "播放、切歌、音量等键盘操作", "${Keys.HELP.size} 个") { nav.push(Page.KeyMap) } }
        }
        "data" -> {
-        if (Features.on("webdav")) item { NavRow("WebDAV 备份", "设置、喜欢和最近播放备份到网盘，换设备一键恢复", if (Backup.last > 0) java.text.SimpleDateFormat("MM-dd HH:mm").format(java.util.Date(Backup.last)) else "未备份") { nav.push(Page.Backup) } }
+        item { NavRow("备份 / 导入", "导出配置文件、从文件或剪贴板导入" + if (Features.on("webdav")) "，或备份到 WebDAV 网盘" else "", if (Backup.last > 0) java.text.SimpleDateFormat("MM-dd").format(java.util.Date(Backup.last)) else null) { nav.push(Page.Backup) } }
         if (Features.on("stats")) item { NavRow("听歌统计", "本机的播放次数和时长", null) { nav.push(Page.Stats) } }
        }
        "adv" -> {
@@ -674,7 +795,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         if (Debug.on) item { NavRow("请求记录", "最近的接口请求和返回内容", "${Debug.reqs.collectAsState().value.size} 条") { nav.push(Page.DebugLog) } }
        }
        "about" -> {
-        item { NavRow("版本", null, "0.3.0", clickable = false) {} }
+        item { NavRow("版本", null, APP_VERSION, clickable = false) {} }
         item { NavRow("源代码", "github.com/acnekot/NEKOPLAY", null, clickable = false) {} }
        }
       }
@@ -702,47 +823,6 @@ private fun Modifier.graphicsAlpha(a: Float) = this.graphicsLayer { alpha = a }
     }
 
 
-// ======================= 登录 =======================
-@Composable fun LoginPage() {
-    val nav = LocalNav.current
-    var status by remember { mutableStateOf("正在获取二维码…") }
-    var qr by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
-    var ck by remember { mutableStateOf("") }
-    var round by remember { mutableIntStateOf(0) }
-    LaunchedEffect(round) {
-        try {
-            val k = Ncm.qrKey()
-            qr = withContext(Dispatchers.Default) { qrBitmap(Ncm.qrUrl(k)) }
-            status = "用另一台设备上的网易云音乐 App 扫码，并在手机上点确认"
-            while (isActive) {
-                delay(2000)
-                when (Ncm.qrCheck(k)) {
-                    800 -> { status = "二维码已过期，点二维码刷新"; break }
-                    802 -> status = "已扫码，请在手机上点「确认登录」"
-                    803 -> { status = "登录成功"; Store.refreshAll(); nav.toast = "登录成功"; nav.back(); break }
-                }
-            }
-        } catch (e: Exception) { status = "出错了：${e.message}（点二维码重试）" }
-    }
-    val p = c
-    Column(Modifier.fillMaxSize().padding(18.dp)) {
-        TagRow("SCAN"); Spacer(Modifier.height(16.dp))
-        Box(Modifier.size(240.dp).align(Alignment.CenterHorizontally).nb(1.dp, p.k).background(Color.White).press { round++ }, contentAlignment = Alignment.Center) {
-            qr?.let { Image(it, "二维码", Modifier.size(220.dp)) } ?: T("…", 20, Color.Black)
-        }
-        Spacer(Modifier.height(14.dp)); T(status, 13, p.s, lines = 3, lh = 1.5f)
-        Spacer(Modifier.height(28.dp)); TagRow("COOKIE"); Spacer(Modifier.height(12.dp))
-        Box(Modifier.fillMaxWidth().height(44.dp).nbf(1.dp, p.k).padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
-            if (ck.isEmpty()) T("MUSIC_U=…", 13, p.s, mono = true)
-            BasicTextField(ck, { ck = it }, Modifier.fillMaxWidth(), singleLine = true, textStyle = TextStyle(color = p.k, fontSize = Fs.SUB.sp, fontFamily = Mono), cursorBrush = SolidColor(p.p))
-        }
-        Spacer(Modifier.height(10.dp))
-        PrimaryBar("保存 Cookie", NIcons.chevronRight, Modifier.fillMaxWidth()) {
-            try { Ncm.saveCookie(ck); Store.refreshAll(); nav.toast = "已保存"; nav.back() } catch (e: Exception) { nav.toast = e.message }
-        }
-    }
-}
-
 /** 二维码画成 ImageBitmap（两端通用） */
 fun qrBitmap(text: String): androidx.compose.ui.graphics.ImageBitmap {
     val m = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 440, 440)
@@ -757,50 +837,7 @@ fun qrBitmap(text: String): androidx.compose.ui.graphics.ImageBitmap {
 
 
 /** 可选布局：继续收听和每日推荐各占一半（窄屏时上下排） */
-@Composable fun HomeCombo(topPad: Boolean) {
-    val nav = LocalNav.current
-    val st by Engine.state.collectAsState()
-    val daily by Store.daily.collectAsState()
-    val cur = st.current ?: daily.firstOrNull()
-    val now = remember { Calendar.getInstance() }
-    val p = c
-    val left = @Composable { m: Modifier ->
-        Column(m.border(1.dp, Color.Gray.copy(alpha = .5f)).padding(14.dp)) {
-            Tag("CONTINUE LISTENING"); Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.press { if (st.current != null) { nav.lyrics = false; nav.player = true } else if (daily.isNotEmpty()) Engine.playList(daily, 0) }) { Cover(cur?.cover, 88.dp, cur?.title ?: "") }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) { T(cur?.title ?: "还没有曲目", Fs.HEAD, w = 800, lines = 2, lh = 1.2f); T(cur?.artist ?: "", 13, p.s) }
-            }
-            Spacer(Modifier.height(10.dp))
-            if (st.current != null) { ScrubBar(st.current!!.durationMs, 10.dp, interactive = false); TimeRow(st.current!!.durationMs) }
-            Spacer(Modifier.height(8.dp))
-            Row {
-                PrimaryBar(if (st.playing) "暂停" else if (st.current != null) "继续播放" else "播放", if (st.playing) NIcons.pause else NIcons.play, Modifier.weight(1f)) {
-                    if (st.current != null) Engine.toggle() else if (daily.isNotEmpty()) Engine.playList(daily, 0)
-                }
-                Spacer(Modifier.width(8.dp)); OutlineBtn("队列", pad = 12.dp) { nav.queue = true }
-            }
-        }
-    }
-    val right = @Composable { m: Modifier ->
-        Column(m.border(1.dp, Color.Gray.copy(alpha = .5f)).padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).press { nav.push(Page.Detail("daily", "daily", "每日推荐", daily.firstOrNull()?.cover)) }) {
-                    Tag("DAILY MIX"); Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) { T("每日推荐", Fs.HEAD, w = 800); NIcon(NIcons.chevronRight, 18.dp, p.s) }
-                    T("${daily.size} 首", 11, p.s, mono = true)
-                }
-                T("${two(now.get(Calendar.MONTH) + 1)}/${two(now.get(Calendar.DAY_OF_MONTH))}", 28, p.p, 600, mono = true)
-                Spacer(Modifier.width(10.dp))
-                Box(Modifier.border(1.dp, Color.Gray.copy(alpha = .5f))) { SquareBtn(NIcons.play) { if (daily.isNotEmpty()) Engine.playList(daily, 0) } }
-            }
-            Spacer(Modifier.height(6.dp))
-            daily.take(3).forEachIndexed { i, t -> TrackRow(t, st.current?.id == t.id, null, onLong = { trackActions(nav, t) }) { Engine.playList(daily, i) } }
-        }
-    }
-    BoxWithConstraints(Modifier.padding(top = if (topPad) 32.dp else 0.dp)) {
-        if (maxWidth >= 640.dp) Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) { left(Modifier.weight(1f).fillMaxHeight()); Spacer(Modifier.width(14.dp)); right(Modifier.weight(1f).fillMaxHeight()) }
-        else Column { left(Modifier.fillMaxWidth()); Spacer(Modifier.height(14.dp)); right(Modifier.fillMaxWidth()) }
-    }
+/** 退出登录前再确认一次 */
+fun confirmLogout(nav: Nav, name: String, run: () -> Unit) {
+    nav.sheet = SheetSpec("退出$name？", "退出后要重新登录才能看到这个账号的歌单和「我喜欢」", listOf(SheetItem("退出登录", danger = true) { run(); nav.toast = "已退出$name" }))
 }

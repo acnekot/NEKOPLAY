@@ -12,12 +12,18 @@
         android:name=".App"
         android:label="NEKOPLAY"
         android:icon="@mipmap/ic_launcher"
-        android:theme="@style/Launch">
+        android:theme="@style/Launch"
+        android:networkSecurityConfig="@xml/network_security_config">
         <activity android:name=".MainActivity" android:exported="true"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|uiMode|keyboardHidden">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+            <!-- QQ 授权登录完成后跳回 App -->
+            <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="nekoplay"/></intent-filter>
+            <!-- QQ 授权后可能直接把 ptlogin 跳转地址交给本 App（按 pt_package 指定） -->
+            <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"/><data android:host="ssl.ptlogin2.qq.com"/><data android:host="ptlogin2.qq.com"/><data android:pathPrefix="/jump"/></intent-filter>
         </activity>
         <receiver android:name=".NekoWidget" android:exported="false" android:label="NEKOPLAY">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter>

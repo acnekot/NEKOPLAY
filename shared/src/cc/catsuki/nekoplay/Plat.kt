@@ -102,6 +102,8 @@ interface PlatImpl {
     fun saveJpeg(img: ImageBitmap, file: File)
     /** 存一张 PNG 到相册 / 图片文件夹，返回给人看的位置 */
     fun savePicture(img: ImageBitmap, name: String): String
+    /** 识别二维码图片里的文字；不支持的平台返回 null */
+    fun qrText(png: ByteArray): String? = null
     /** 下载歌曲存放的目录 */
     fun downloadDir(): File = File(filesDir, "downloads")
     /** 下载位置的常用选项（名字 to 路径），设置里直接点选 */
@@ -120,11 +122,18 @@ interface PlatImpl {
     @Composable fun audioPermission(): Pair<Boolean, () -> Unit> = true to {}
     /** 选图片：返回一个「打开选择器」的函数，选好后回调图片的字节 */
     @Composable fun imagePicker(onPick: (ByteArray) -> Unit): () -> Unit
+    /** 选一个文件读出来（备份导入、导入音源脚本用）；不支持的平台返回 null */
+    @Composable fun filePicker(onPick: (ByteArray) -> Unit): (() -> Unit)? = null
+    /** 「另存为」：返回启动函数 (默认文件名, 内容)，保存后回调位置（取消为 null）；不支持返回 null */
+    @Composable fun fileSaver(onDone: (String?) -> Unit): ((String, ByteArray) -> Unit)? = null
     @Composable fun BackHandler(enabled: Boolean, onBack: () -> Unit)
     /** MV 播放区域 */
     @Composable fun VideoPlayer(url: String?, modifier: Modifier, onState: (playing: Boolean, pos: Long, dur: Long, err: String?) -> Unit, control: VideoControl)
     /** 能动的图片（动态头像 GIF 等），不支持就按静态图显示 */
     @Composable fun AnimatedImage(url: String, modifier: Modifier)
+    /** 内嵌网页（QQ 网页登录用）。intercept 返回 true 表示拦下这次跳转；url 变了就重新加载。不支持的平台不显示 */
+    @Composable fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean = false, onInfo: (String) -> Unit = {}, intercept: (String) -> Boolean) {}
+    val hasWebView: Boolean get() = false
     /** 桌面版：本进程 CPU（%）和内存（MB）；安卓返回 null（用 /proc） */
     fun cpuMem(): Pair<Float, Long>? = null
     fun memInfo(): String
@@ -136,6 +145,9 @@ class VideoControl {
     var toggle: () -> Unit = {}
     var seek: (Long) -> Unit = {}
 }
+
+/** 别的 App 跳回来的地址（nekoplay://…），QQ 授权后用 */
+object DeepLink { val url = kotlinx.coroutines.flow.MutableStateFlow<String?>(null) }
 
 object Plat {
     lateinit var impl: PlatImpl

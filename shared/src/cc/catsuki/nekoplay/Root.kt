@@ -33,9 +33,8 @@ sealed interface Page {
     data class Detail(val kind: String, val id: String, val title: String, val cover: String? = null) : Page
     data object Search : Page
     data object Settings : Page
+    /** 登录主插件（首页来源）的账号 */
     data object Login : Page
-    data object QqLogin : Page
-    data object KgLogin : Page
     data class Artist(val id: String, val name: String) : Page
     data class Album(val id: String, val name: String, val cover: String? = null) : Page
     data class User(val uid: String, val name: String = "") : Page
@@ -56,6 +55,7 @@ sealed interface Page {
     data object KeyMap : Page
     data object DlList : Page
     data object Local : Page
+    data object Dav : Page
     data object Backup : Page
     data object DebugLog : Page
     data class ArtistAlbums(val id: String, val name: String) : Page
@@ -63,6 +63,8 @@ sealed interface Page {
     /** 设置的二级分类页 */
     data class SetSub(val sec: String) : Page
     data object Feats : Page
+    data object PluginMgr : Page
+    data class PluginLogin(val pid: String) : Page
     data object BtnLayout : Page
     data class LyricCard(val t: Track) : Page
 }
@@ -99,7 +101,7 @@ val LocalNav = staticCompositionLocalOf { Nav() }
 /** 两端共用的启动初始化（在 Plat.impl 赋值之后调用） */
 object Boot {
     fun init() {
-        Ncm.init(); Qqm.init(); QqStore.refresh(); Kgm.init(); KgStore.refresh(); Store.init(); Engine.init(); Bg.init(); HomeLayout.init(); FxStore.init(); Downloads.init(); LocalMusic.load(); Stats.load()
+        Ncm.init(); LegacyLogin.migrate(); Plugins.load(); LocalLib.load(); DavMusic.load(); Store.init(); Store.reloadLiked(); Engine.init(); Bg.init(); HomeLayout.init(); FxStore.init(); Downloads.init(); LocalMusic.load(); Stats.load()
         reloadPrefs(); Backup.load()
     }
     /** 重新读一遍设置（启动时、从备份恢复后） */
@@ -227,7 +229,9 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     val prof by Store.profile.collectAsState()
     Column(modifier.width(190.dp).background(if (c.dark) c.pop else Color(0xFFF1F7F8)).nb(1.dp, c.k)) {
         T(prof?.name ?: "好奇猫a", 15, w = 800, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
-        listOfNotNull(prof?.let { "我的主页" to Page.User(it.uid, it.name) }, "设置" to Page.Settings, if (prof == null) "登录网易云" to Page.Login else null).forEach { (t, pg) ->
+        val acc by PluginStore.accounts.collectAsState()
+        (listOfNotNull(prof?.let { "我的主页" to Page.User(it.uid, it.name) }, "设置" to Page.Settings) +
+            Plugins.enabled.filter { it.has("loginQr") || it.has("loginWeb") }.filter { acc[it.id] == null }.map { "登录${it.name}" to Page.PluginLogin(it.id) }).forEach { (t, pg) ->
             Box(Modifier.fillMaxWidth().height(48.dp).press { nav.menu = false; nav.player = false; nav.push(pg) }.drawBehind { drawRect(Color(0x1F888888), size = androidx.compose.ui.geometry.Size(size.width, 1f)) }.padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart) { T(t, 15) }
         }
@@ -269,7 +273,9 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     val pg = shown ?: return
     if (sub.value <= 0f && nav.stack.isEmpty()) return
     val p = c
-    Box(Modifier.fillMaxSize().graphicsLayer { translationX = w * (1 - sub.value) }) {
+    Box(Modifier.fillMaxSize().graphicsLayer { translationX = w * (1 - sub.value) }
+        // 整页挡住下面的首页 / 曲库：点在空白处的手势不会穿透到下层（子组件照常先收到）
+        .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
         // 子页面底色；有自定义背景时铺同一张背景
         Box(Modifier.fillMaxSize().background(p.page)) { BgLayer() }
         Column(Modifier.fillMaxSize()) {
@@ -306,16 +312,14 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
         .press { nav.back() }.padding(start = 6.dp, end = 18.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { NIcon(NIcons.back, 20.dp) }
-        T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; Page.QqLogin -> "QQ MUSIC"; Page.KgLogin -> "KUGOU"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; Page.Local -> "LOCAL"; Page.Backup -> "BACKUP"; Page.DebugLog -> "DEBUG"; is Page.ArtistAlbums -> "ALBUMS"; Page.Stats -> "STATS"; is Page.SetSub -> "SETTINGS / " + page.sec.uppercase(); Page.Feats -> "FEATURES"; Page.BtnLayout -> "PLAYER LAYOUT"; is Page.LyricCard -> "CARD"; else -> "" }, 12, p.s, mono = true, ls = .1f)
+        T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; Page.Local -> "LOCAL"; Page.Dav -> "WEBDAV"; Page.Backup -> "BACKUP"; Page.DebugLog -> "DEBUG"; is Page.ArtistAlbums -> "ALBUMS"; Page.Stats -> "STATS"; is Page.SetSub -> "SETTINGS / " + page.sec.uppercase(); Page.Feats -> "FEATURES"; Page.PluginMgr -> "PLUGINS"; is Page.PluginLogin -> "LOGIN"; Page.BtnLayout -> "PLAYER LAYOUT"; is Page.LyricCard -> "CARD"; else -> "" }, 12, p.s, mono = true, ls = .1f)
     }
     Box(Modifier.weight(1f)) {
         when (page) {
             is Page.Detail -> DetailPage(page)
             Page.Search -> SearchPage()
             Page.Settings -> SettingsPage()
-            Page.Login -> LoginPage()
-            Page.QqLogin -> QqLoginPage()
-            Page.KgLogin -> KgLoginPage()
+            Page.Login -> Plugins.main()?.let { PluginLoginPage(it.id) } ?: PluginsPage()
             is Page.Artist -> ArtistPage(page)
             is Page.Album -> AlbumPage(page)
             is Page.User -> UserPage(page)
@@ -336,12 +340,15 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     Page.KeyMap -> KeysPage()
     Page.DlList -> DownloadsPage()
     Page.Local -> LocalMusicPage()
+    Page.Dav -> DavMusicPage()
     Page.Backup -> BackupPage()
     Page.DebugLog -> DebugPage()
     is Page.ArtistAlbums -> ArtistAlbumsPage(page)
     Page.Stats -> StatsPage()
     is Page.SetSub -> SettingsPage(page.sec)
     Page.Feats -> FeaturesPage()
+    Page.PluginMgr -> PluginsPage()
+        is Page.PluginLogin -> PluginLoginPage(page.pid)
     Page.BtnLayout -> PlayerLayoutPage()
     is Page.LyricCard -> LyricCardPage(page.t)
         }

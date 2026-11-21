@@ -40,6 +40,8 @@ import kotlinx.coroutines.delay
 import java.io.File
 
 /** 安卓平台实现 */
+private const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
 class AndroidPlat(private val ctx: Context) : PlatImpl {
     companion object {
         lateinit var exoAudio: ExoAudio
@@ -110,6 +112,13 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
     override fun pixels(img: ImageBitmap): IntArray { val b = img.asAndroidBitmap(); val px = IntArray(b.width * b.height); b.getPixels(px, 0, b.width, 0, 0, b.width, b.height); return px }
     override fun fromPixels(px: IntArray, w: Int, h: Int): ImageBitmap = android.graphics.Bitmap.createBitmap(px, w, h, android.graphics.Bitmap.Config.ARGB_8888).asImageBitmap()
     override fun scaled(img: ImageBitmap, w: Int, h: Int): ImageBitmap = android.graphics.Bitmap.createScaledBitmap(img.asAndroidBitmap(), w, h, true).asImageBitmap()
+    override fun qrText(png: ByteArray): String? = runCatching {
+        val b = BitmapFactory.decodeByteArray(png, 0, png.size)
+        val px = IntArray(b.width * b.height); b.getPixels(px, 0, b.width, 0, 0, b.width, b.height)
+        com.google.zxing.qrcode.QRCodeReader().decode(com.google.zxing.BinaryBitmap(com.google.zxing.common.HybridBinarizer(com.google.zxing.RGBLuminanceSource(b.width, b.height, px))),
+            mapOf(com.google.zxing.DecodeHintType.PURE_BARCODE to true)).text
+    }.getOrNull()
+
     override fun savePicture(img: ImageBitmap, name: String): String {
         val v = android.content.ContentValues().apply {
             put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "$name.png"); put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
@@ -134,8 +143,52 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
         return { l.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     }
 
+    @Composable override fun filePicker(onPick: (ByteArray) -> Unit): (() -> Unit)? {
+        val c = LocalContext.current
+        val l = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) c.contentResolver.openInputStream(uri)?.use { onPick(it.readBytes()) } }
+        return { l.launch(arrayOf("*/*")) }
+    }
+    @Composable override fun fileSaver(onDone: (String?) -> Unit): ((String, ByteArray) -> Unit)? {
+        val c = LocalContext.current
+        val data = remember { arrayOfNulls<ByteArray>(1) }
+        val l = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+            if (uri == null) onDone(null) else { c.contentResolver.openOutputStream(uri)?.use { it.write(data[0]) }; onDone(uri.lastPathSegment ?: "已保存") }
+        }
+        return { name, bytes -> data[0] = bytes; l.launch(name) }
+    }
+
     @Composable override fun AnimatedImage(url: String, modifier: Modifier) =
         coil3.compose.AsyncImage(if (UiPref.lowMem) img(url, 256) else url, null, modifier, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+
+    override val hasWebView get() = true
+    @android.annotation.SuppressLint("SetJavaScriptEnabled")
+    @Composable override fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean, onInfo: (String) -> Unit, intercept: (String) -> Boolean) {
+        val cb by rememberUpdatedState(intercept); val info by rememberUpdatedState(onInfo)
+        val loaded = remember { arrayOfNulls<String>(1) }
+        androidx.compose.ui.viewinterop.AndroidView(factory = { ctx ->
+            android.webkit.WebView(ctx).apply {
+                layoutParams = android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+                settings.javaScriptEnabled = true; settings.domStorageEnabled = true; settings.databaseEnabled = true
+                settings.loadWithOverviewMode = true; settings.useWideViewPort = true
+                settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                if (desktopUa) settings.userAgentString = DESKTOP_UA
+                android.webkit.CookieManager.getInstance().setAcceptCookie(true)
+                android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                webChromeClient = object : android.webkit.WebChromeClient() {
+                    override fun onProgressChanged(v: android.webkit.WebView, p: Int) { info(if (p < 100) "加载中 $p% · ${android.net.Uri.parse(v.url ?: "").host ?: ""}" else "") }
+                }
+                webViewClient = object : android.webkit.WebViewClient() {
+                    override fun shouldOverrideUrlLoading(v: android.webkit.WebView, r: android.webkit.WebResourceRequest): Boolean = r.isForMainFrame && cb(r.url.toString())
+                    override fun onReceivedError(v: android.webkit.WebView, r: android.webkit.WebResourceRequest, e: android.webkit.WebResourceError) {
+                        if (r.isForMainFrame) info("加载失败：${e.description}（${e.errorCode}）")
+                    }
+                    override fun onReceivedHttpError(v: android.webkit.WebView, r: android.webkit.WebResourceRequest, e: android.webkit.WebResourceResponse) {
+                        if (r.isForMainFrame) info("加载失败：HTTP ${e.statusCode}")
+                    }
+                }
+            }
+        }, modifier = modifier, update = { w -> if (loaded[0] != url) { loaded[0] = url; w.loadUrl(url) } }, onRelease = { it.destroy() })
+    }
 
     @Composable override fun BackHandler(enabled: Boolean, onBack: () -> Unit) = androidx.activity.compose.BackHandler(enabled, onBack)
 
@@ -229,7 +282,14 @@ class ExoAudio(private val c: Context) : Audio {
     private val cache = SimpleCache(File(c.cacheDir, "audio"), LeastRecentlyUsedCacheEvictor(1024L * 1024 * 1024), StandaloneDatabaseProvider(c))
     init {
         val lc = DefaultLoadControl.Builder().setBufferDurationsMs(15_000, 25_000, 1_500, 4_000).setTargetBufferBytes(4 * 1024 * 1024).build()
-        val upstream = DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0").setConnectTimeoutMs(10_000).setReadTimeoutMs(15_000)
+        val http = DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0").setConnectTimeoutMs(10_000).setReadTimeoutMs(15_000)
+        // 地址里带账号密码（WebDAV 音乐 https://用户:密码@主机/…）：去掉并改成 Basic 认证头，HttpURLConnection 自己不认
+        val upstream = androidx.media3.datasource.ResolvingDataSource.Factory(http) { spec ->
+            val ui = spec.uri.encodedUserInfo
+            if (ui.isNullOrEmpty()) spec
+            else spec.withUri(spec.uri.buildUpon().encodedAuthority(spec.uri.encodedAuthority!!.substringAfter('@')).build())
+                .withAdditionalHeaders(mapOf("Authorization" to "Basic " + android.util.Base64.encodeToString(android.net.Uri.decode(ui).toByteArray(), android.util.Base64.NO_WRAP)))
+        }
         val ds = CacheDataSource.Factory().setCache(cache).setUpstreamDataSourceFactory(upstream).setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         exo = ExoPlayer.Builder(c).setLoadControl(lc).setMediaSourceFactory(DefaultMediaSourceFactory(ds))
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)

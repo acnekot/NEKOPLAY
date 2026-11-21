@@ -85,7 +85,23 @@ class IosAudio(cacheRoot: File) : Audio {
             else -> NSURL.URLWithString(url) ?: return null
         }
         if (f == null && url != null && url.startsWith("http")) fetch(url, key)
+        // 地址里带账号密码（WebDAV）：去掉，改成 Authorization 头，有的服务不会先回 401 让播放器补认证
+        val auth = if (f == null && url != null) basicOf(url) else null
+        if (auth != null) {
+            val clean = NSURL.URLWithString(auth.first) ?: return null
+            val asset = AVURLAsset(uRL = clean, options = mapOf<Any?, Any?>("AVURLAssetHTTPHeaderFieldsKey" to mapOf("Authorization" to auth.second)))
+            return AVPlayerItem(asset = asset)
+        }
         return AVPlayerItem(uRL = u)
+    }
+
+    /** https://用户:密码@主机/… → (不带账号的地址, "Basic …")；没有账号返回 null */
+    private fun basicOf(url: String): Pair<String, String>? {
+        val m = Regex("^(https?://)([^/@]+)@(.*)$").find(url) ?: return null
+        val ui = m.groupValues[2]
+        val plain = NSString.create(string = ui).stringByRemovingPercentEncoding ?: ui
+        val b64 = NSString.create(string = plain).dataUsingEncoding(NSUTF8StringEncoding)?.base64EncodedStringWithOptions(0u) ?: return null
+        return m.groupValues[1] + m.groupValues[3] to "Basic $b64"
     }
 
     /** 整首下载进缓存（和播放并行）；下完以后下次就读本地 */
@@ -93,8 +109,10 @@ class IosAudio(cacheRoot: File) : Audio {
         val ext = extOf(url) ?: return // 认不出格式的不缓存，免得存了也放不了
         if (!downloading.add(key)) return
         val target = File(dir, hash(key) + "." + ext)
-        val req = NSMutableURLRequest.requestWithURL(NSURL.URLWithString(url) ?: return)
+        val auth = basicOf(url)
+        val req = NSMutableURLRequest.requestWithURL(NSURL.URLWithString(auth?.first ?: url) ?: return)
         req.setValue("Mozilla/5.0", forHTTPHeaderField = "User-Agent")
+        auth?.let { req.setValue(it.second, forHTTPHeaderField = "Authorization") }
         NSURLSession.sharedSession.downloadTaskWithRequest(req) { loc, resp, err ->
             val ok = err == null && loc != null && ((resp as? NSHTTPURLResponse)?.statusCode?.toInt() ?: 0) in 200..299
             if (ok) {

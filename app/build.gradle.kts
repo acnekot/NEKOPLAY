@@ -2,22 +2,30 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+// 版本号统一写在 shared/…/Version.kt
+val appVersion = Regex("APP_VERSION = \"([^\"]+)\"").find(rootProject.file("shared/src/cc/catsuki/nekoplay/Version.kt").readText())!!.groupValues[1]
 android {
     namespace = "cc.catsuki.nekoplay"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "cc.catsuki.nekoplay.native"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersion.split('.').map { it.toInt() }.let { (a, b, c) -> a * 10000 + b * 100 + c }   // 0.5.0 → 500
+        versionName = appVersion
+    }
+    // 正式签名：环境变量里有密钥库就用（GitHub Actions 从 Secrets 解出来），没有就退回 debug 签名
+    val ks = System.getenv("NEKOPLAY_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    if (ks != null) signingConfigs.create("release") {
+        storeFile = ks; storePassword = System.getenv("NEKOPLAY_KEYSTORE_PASS")
+        keyAlias = System.getenv("NEKOPLAY_KEY_ALIAS"); keyPassword = System.getenv("NEKOPLAY_KEY_PASS")
     }
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (ks != null) "release" else "debug")
         }
     }
     buildFeatures { compose = true }
@@ -42,5 +50,6 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-gif:3.3.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("io.github.dokar3:quickjs-kt:1.0.18")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }

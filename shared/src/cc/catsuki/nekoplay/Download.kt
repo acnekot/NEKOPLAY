@@ -187,7 +187,7 @@ fun downloadSheet(nav: Nav, list: List<Track>) {
                 T(Downloads.dir.absolutePath + "  ✎", 12, p.s, lines = 2, modifier = Modifier.press { dirSheet(nav) })
                 Spacer(Modifier.height(14.dp))
                 if (list.isNotEmpty()) ActionRow {
-                    PrimaryBar("播放全部", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
+                    PrimaryBar("播放", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(list, 0, shuffle = true) }
                 }
                 Spacer(Modifier.height(12.dp)); Rule()

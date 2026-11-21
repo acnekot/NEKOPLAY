@@ -29,6 +29,8 @@ data class PlayState(
 
 /** 播放引擎：队列自己管，ExoPlayer 一次只放一首（网易云地址会过期，播到哪首才去取地址）。 */
 object Engine {
+    /** 曲目自带的地址：WebDAV 的「dav:/路径」换成带认证的完整地址 */
+    private fun srcUrl(src: String) = if (src.startsWith("dav:")) DavMusic.playUrl(src) else src
     private val audio get() = Plat.impl.audio
     val state = MutableStateFlow(PlayState())
     val position = MutableStateFlow(0L)
@@ -63,6 +65,8 @@ object Engine {
     fun changeGapless(v: Boolean) { gapless = v; prefs?.edit()?.putBoolean("gapless", v)?.apply(); if (!v) dropNext() }
     private var queuedIndex = -1
     private var queuedFmt = ""
+    /** 排好的下一首只能试听时的提示，接上时再显示 */
+    private var queuedTrial: String? = null
     private var queuing = false
     /** 快播完时（剩 12 秒）把下一首排到播放器里 */
     private fun maybeQueueNext() {
@@ -74,15 +78,16 @@ object Engine {
         val ni = if (s.mode == Mode.SHUFFLE && !s.fm) s.queue.indices.filter { it != s.index }.random() else (s.index + 1) % s.queue.size
         val nt = s.queue[ni]
         queuing = true
+        queuedTrial = null
         scope.launch {
             try {
                 val dl = Downloads.file(nt.id)
                 val hit = cachedLevel(nt.id)
                 when {
-                    nt.src != null -> { audio.queueNext(nt.src, "loc_${nt.id}", nt); queuedFmt = nt.src.substringAfterLast('.', "").lowercase() }
+                    nt.src != null -> { audio.queueNext(srcUrl(nt.src), "loc_${nt.id}", nt); queuedFmt = nt.src.substringAfterLast('.', "").lowercase() }
                     dl != null -> { audio.queueNext(dl.toURI().toString(), "dl_${nt.id}", nt); queuedFmt = dl.extension.lowercase() }
                     hit != null && !Plat.isDesktop -> { audio.queueNext(null, cacheKey(nt.id, hit.first), nt); queuedFmt = hit.second }
-                    else -> { val st = Ncm.stream(nt.id, q); audio.queueNext(st.url, cacheKey(nt.id, st.level), nt); queuedFmt = st.format; prefs?.edit()?.putString("fmt_${cacheKey(nt.id, st.level)}", st.format)?.apply() }
+                    else -> { val st = Ncm.stream(nt.id, q); audio.queueNext(st.url, cacheKey(nt.id, st.level), nt); queuedFmt = st.format; queuedTrial = st.trial; prefs?.edit()?.putString("fmt_${cacheKey(nt.id, st.level)}", st.format)?.apply() }
                 }
                 if (state.value.current?.id == cur.id) queuedIndex = ni else audio.clearNext()
             } catch (_: Exception) { } finally { queuing = false }
@@ -101,7 +106,9 @@ object Engine {
         state.value = s.copy(index = ni, loading = false, format = queuedFmt, kbps = 0, cached = false)
         position.value = 0; info.value = null; localKbps = 0
         Store.addRecent(t); Store.saveQueue(s.queue, ni, 0)
+        queuedTrial?.let { error.value = it }; queuedTrial = null
         if (s.fm && ni + 3 >= s.queue.size) fmFill()
+        prefetchNext()   // 预热再下一首的播放地址
     }
     private suspend fun ramp(from: Float, to: Float, ms: Int) {
         val steps = (ms / 16).coerceAtLeast(1)
@@ -133,7 +140,7 @@ object Engine {
             override fun onBuffering(b: Boolean) { state.value = state.value.copy(loading = b) }
             override fun onEnded() = this@Engine.onEnded()
             override fun onAdvanced() = this@Engine.onAdvanced()
-            override fun onError(msg: String) { error.value = "播放失败：$msg"; next() }
+            override fun onError(msg: String) { state.value.current?.let { Plugins.forgetStream(it.id) }; error.value = "播放失败：$msg"; next() }
         }
         // 进度：播放时定时更新
         // 音质参数：开始播放后读一次（读不到就过一会再试）
@@ -186,7 +193,7 @@ object Engine {
                 val hit = cachedLevel(t.id)
                 val dl = Downloads.file(t.id)
                 if (t.src != null) {
-                    audio.open(t.src, "loc_${t.id}", startMs, state.value.want, t); opened = true
+                    audio.open(srcUrl(t.src), "loc_${t.id}", startMs, state.value.want, t); opened = true
                     state.value = state.value.copy(format = t.src.substringAfterLast('.', "").takeIf { it.length in 2..4 }?.lowercase() ?: "", kbps = 0, cached = true)
                 } else if (dl != null) {
                     if (t.durationMs > 0) localKbps = (dl.length() * 8 / t.durationMs).toInt()
@@ -197,6 +204,7 @@ object Engine {
                     state.value = state.value.copy(format = hit.second, kbps = 0, cached = true)
                 } else {
                     val s = Ncm.stream(t.id, q)
+                    s.trial?.let { error.value = it }   // 只能放试听：轮到这首真正播放时才提示
                     audio.open(s.url, cacheKey(t.id, s.level), startMs, state.value.want, t); opened = true
                     prefs?.edit()?.putString("fmt_${cacheKey(t.id, s.level)}", s.format)?.apply()
                     state.value = state.value.copy(format = s.format, kbps = s.kbps, cached = false)

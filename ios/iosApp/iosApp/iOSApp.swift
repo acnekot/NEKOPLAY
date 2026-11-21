@@ -14,6 +14,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
+    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool { MainKt.onOpenUrl(u: url.absoluteString); return true }
     func applicationDidEnterBackground(_ application: UIApplication) { MainKt.onBackground() }
     func applicationWillTerminate(_ application: UIApplication) { MainKt.onBackground() }
 }

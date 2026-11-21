@@ -291,6 +291,16 @@ val LocalCompactAction = compositionLocalOf { false }
     Box(Modifier.size(size).background(if (filled) c.p else Color.Transparent).nbf(1.dp, c.k), contentAlignment = Alignment.Center) { NIcon(icon, iconSize, if (filled) Color.White else c.k) }
 
 /** 曲目行（高 64）：外层列表负责左右 18 的边距 */
+/** 歌名后面的小标：这首歌要会员 / 付费才能放整首 */
+@Composable fun VipTag() = Box(Modifier.border(1.dp, c.p).padding(horizontal = 4.dp, vertical = 1.dp)) { T("VIP", 9, c.p, 800, mono = true, ls = .04f) }
+
+/** 来源小标签：开着不止一个音源时，在歌手前面标出这首歌来自哪里 */
+@Composable fun SourceTag(t: Track) {
+    if (Plugins.enabled.size < 2) return
+    val name = when { t.id.startsWith("dav:") -> "WebDAV"; t.local -> "本地"; else -> Plugins.sourceName(t.id) ?: return }
+    Box(Modifier.padding(end = 6.dp).border(1.dp, c.l2).padding(horizontal = 4.dp)) { T(name, 9, c.s, 700, lh = 1.4f) }
+}
+
 @Composable fun TrackRow(t: Track, current: Boolean, label: String? = null, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
     val p = c
     val fg = if (current) p.p else p.k
@@ -305,8 +315,14 @@ val LocalCompactAction = compositionLocalOf { false }
         Cover(t.cover, 44.dp, t.title)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            T(t.title, 16, fg, if (current) 700 else 600, lh = 1.4f)
-            T(t.artist, 13, p.s, lh = 1.4f)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                T(t.title, 16, fg, if (current) 700 else 600, lh = 1.4f, modifier = Modifier.weight(1f, fill = false))
+                if (t.vip) { Spacer(Modifier.width(6.dp)); VipTag() }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SourceTag(t)
+                T(t.artist, 13, p.s, lh = 1.4f)
+            }
         }
         Spacer(Modifier.width(12.dp))
         Column(horizontalAlignment = Alignment.End) {
@@ -412,14 +428,15 @@ object UiPref {
     var tray by mutableStateOf(true)            // 桌面：关闭窗口时留在托盘继续播放
     var autoHideSide by mutableStateOf(true)    // PC 播放页按钮竖栏：鼠标靠近才显示
     var coverPct by mutableIntStateOf(80)       // PC 播放页封面大小（占可用空间的百分比）
+    var homePlugin by mutableStateOf("netease")   // 首页内容来源：插件 id，或 "mix" 混合
     /** 播放页底下那排按钮显示哪些 */
     val BTN_KEYS = listOf("mode", "sleep", "dl", "more", "comment", "queue")
     val BTN_NAMES = listOf("播放模式", "定时关闭", "下载", "更多", "评论", "播放列表")
     var btns by mutableStateOf(setOf("mode", "sleep", "more", "comment", "queue"))
     fun toggleBtn(key: String) { btns = if (key in btns) btns - key else btns + key; k.edit().putStringSet("btns", btns).apply() }
     private val k get() = Plat.prefs("ui")
-    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true); coverPct = k.getInt("coverPct", 80); autoHideSide = k.getBoolean("sideAuto", true); scale = k.getInt("scale", 100).coerceIn(60, 150); round = k.getBoolean("round", true) }
-    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).putInt("coverPct", coverPct).putBoolean("sideAuto", autoHideSide).putInt("scale", scale).putBoolean("round", round).apply() }
+    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true); coverPct = k.getInt("coverPct", 80); autoHideSide = k.getBoolean("sideAuto", true); scale = k.getInt("scale", 100).coerceIn(60, 150); round = k.getBoolean("round", true); homePlugin = k.getString("homePlugin", null) ?: listOf("netease", "qqmusic", "kugou", "mix").getOrElse(k.getInt("homeSrc", 0)) { "netease" } }
+    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).putInt("coverPct", coverPct).putBoolean("sideAuto", autoHideSide).putInt("scale", scale).putBoolean("round", round).putString("homePlugin", homePlugin).apply() }
 }
 
 /** 歌词字号（设置里可调，歌词页 / 右栏 / 播放页都用它） */
@@ -454,11 +471,13 @@ object LyricPref {
 /** 网易云图片按显示尺寸取小图 */
 fun img(url: String?, px: Int): String? {
     if (url == null) return null
+    if (url.startsWith("http://") && !url.contains("music.126.net")) return img("https://" + url.removePrefix("http://"), px)
     val b = when { px <= 160 -> 160; px <= 256 -> 256; px <= 512 -> 512; else -> 768 }
     val base = url.substringBefore('?')
     // QQ 音乐的图：尺寸写在文件名里（T002R500x500M000…），只有 150 / 300 / 500 / 800 几档
     if (base.contains("kugou.com") && base.contains("/480/")) { val q = when { px <= 160 -> 150; px <= 256 -> 240; else -> 480 }; return base.replace("/480/", "/$q/") }
     if (base.contains("gtimg.cn") && base.contains("R500x500")) { val q = when { px <= 160 -> 150; px <= 300 -> 300; px <= 512 -> 500; else -> 800 }; return base.replace("R500x500", "R${q}x$q") }
+    if (!base.contains("music.126.net")) return url   // QQ（qpic）/ 酷狗等其它站：参数是它们自己的，不能乱加
     return if (base.contains("/obj/")) "$base?imageView=1&thumbnail=${b}x$b&type=webp" else "$base?param=${b}y$b"
 }
 

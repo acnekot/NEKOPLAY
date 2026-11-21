@@ -88,6 +88,15 @@ class DesktopPlat : PlatImpl {
         return { open = true }
     }
 
+    @Composable override fun filePicker(onPick: (ByteArray) -> Unit): (() -> Unit)? = {
+        val d = java.awt.FileDialog(null as java.awt.Frame?, "选择文件", java.awt.FileDialog.LOAD); d.isVisible = true
+        if (d.file != null) onPick(File(d.directory, d.file).readBytes())
+    }
+    @Composable override fun fileSaver(onDone: (String?) -> Unit): ((String, ByteArray) -> Unit)? = { name, bytes ->
+        val d = java.awt.FileDialog(null as java.awt.Frame?, "保存", java.awt.FileDialog.SAVE); d.file = name; d.isVisible = true
+        if (d.file == null) onDone(null) else { val f = File(d.directory, d.file); f.writeBytes(bytes); onDone(f.absolutePath) }
+    }
+
     @Composable override fun BackHandler(enabled: Boolean, onBack: () -> Unit) {
         val en by rememberUpdatedState(enabled); val cb by rememberUpdatedState(onBack)
         DisposableEffect(Unit) {
@@ -118,7 +127,10 @@ class DesktopPlat : PlatImpl {
         if (f.size > 1) LaunchedEffect(f) { while (true) { delay(f[i].second.coerceAtLeast(20).toLong()); i = (i + 1) % f.size } }
         androidx.compose.foundation.Image(f[i % f.size].first, null, modifier, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
     }
-    private val animCache = HashMap<String, List<Pair<ImageBitmap, Int>>>()
+    /** 动图头像解码后的帧：只留最近 8 个，免得翻评论区时内存一直涨 */
+    private val animCache = java.util.Collections.synchronizedMap(object : LinkedHashMap<String, List<Pair<ImageBitmap, Int>>>(16, .75f, true) {
+        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, List<Pair<ImageBitmap, Int>>>?) = size > 8
+    })
     private fun decodeFrames(url: String): List<Pair<ImageBitmap, Int>> {
         val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0").header("Referer", "https://music.163.com/").build()
         val bytes = Ncm.http.newCall(req).execute().use { it.body!!.bytes() }
