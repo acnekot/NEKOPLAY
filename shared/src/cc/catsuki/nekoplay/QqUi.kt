@@ -138,6 +138,7 @@ fun LazyListScope.qqLibrary(nav: Nav) {
     var url by remember { mutableStateOf(Qqm.webLoginUrl()) }
     var status by remember { mutableStateOf("在下面登录 QQ；点「一键登录」会跳到手机 QQ，确认后自动回来") }
     var busy by remember { mutableStateOf(false) }
+    var info by remember { mutableStateOf("") }
     val back by DeepLink.url.collectAsState()
     LaunchedEffect(back) {
         val b = back ?: return@LaunchedEffect
@@ -146,9 +147,11 @@ fun LazyListScope.qqLibrary(nav: Nav) {
     }
     val p = c
     Column(modifier) {
-        T(status, 13, p.s, lines = 3, lh = 1.5f); Spacer(Modifier.height(8.dp))
+        T(status, 13, p.s, lines = 3, lh = 1.5f)
+        if (info.isNotEmpty()) T(info, 12, p.s, lines = 2, mono = true)
+        Spacer(Modifier.height(8.dp))
         Box(Modifier.fillMaxWidth().weight(1f).nbf(1.dp, p.k)) {
-            Plat.impl.WebPage(url, Modifier.fillMaxSize()) { u ->
+            Plat.impl.WebPage(url, Modifier.fillMaxSize(), onInfo = { info = it }) { u ->
                 val code = Qqm.codeOf(u)
                 when {
                     code != null -> {

@@ -146,14 +146,28 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
 
     override val hasWebView get() = true
     @android.annotation.SuppressLint("SetJavaScriptEnabled")
-    @Composable override fun WebPage(url: String, modifier: Modifier, intercept: (String) -> Boolean) {
-        val cb by rememberUpdatedState(intercept)
+    @Composable override fun WebPage(url: String, modifier: Modifier, onInfo: (String) -> Unit, intercept: (String) -> Boolean) {
+        val cb by rememberUpdatedState(intercept); val info by rememberUpdatedState(onInfo)
         val loaded = remember { arrayOfNulls<String>(1) }
         androidx.compose.ui.viewinterop.AndroidView(factory = { ctx ->
             android.webkit.WebView(ctx).apply {
-                settings.javaScriptEnabled = true; settings.domStorageEnabled = true
+                layoutParams = android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+                settings.javaScriptEnabled = true; settings.domStorageEnabled = true; settings.databaseEnabled = true
+                settings.loadWithOverviewMode = true; settings.useWideViewPort = true
+                settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                android.webkit.CookieManager.getInstance().setAcceptCookie(true)
+                android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                webChromeClient = object : android.webkit.WebChromeClient() {
+                    override fun onProgressChanged(v: android.webkit.WebView, p: Int) { info(if (p < 100) "加载中 $p% · ${android.net.Uri.parse(v.url ?: "").host ?: ""}" else "") }
+                }
                 webViewClient = object : android.webkit.WebViewClient() {
                     override fun shouldOverrideUrlLoading(v: android.webkit.WebView, r: android.webkit.WebResourceRequest): Boolean = r.isForMainFrame && cb(r.url.toString())
+                    override fun onReceivedError(v: android.webkit.WebView, r: android.webkit.WebResourceRequest, e: android.webkit.WebResourceError) {
+                        if (r.isForMainFrame) info("加载失败：${e.description}（${e.errorCode}）")
+                    }
+                    override fun onReceivedHttpError(v: android.webkit.WebView, r: android.webkit.WebResourceRequest, e: android.webkit.WebResourceResponse) {
+                        if (r.isForMainFrame) info("加载失败：HTTP ${e.statusCode}")
+                    }
                 }
             }
         }, modifier = modifier, update = { w -> if (loaded[0] != url) { loaded[0] = url; w.loadUrl(url) } }, onRelease = { it.destroy() })
