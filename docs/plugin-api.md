@@ -101,3 +101,22 @@ nk.log('调试信息')                 // 显示在 设置 → 高级 → 请求
 ## 例子
 
 完整的例子见 `plugins/qqmusic.js`。
+
+
+## 插件订阅
+
+在 设置 → 插件 → 订阅 里添加一个 `index.json` 地址，就能从列表里一键安装、更新插件。默认带官方订阅（本仓库的 `plugins/index.json`，raw.githubusercontent.com 打不开时自动换 jsDelivr）。
+
+```json
+{
+  "name": "订阅名",
+  "plugins": [
+    { "id": "netease", "name": "网易云音乐", "version": "1.0.1", "author": "…", "desc": "…", "url": "netease.js" }
+  ]
+}
+```
+
+- `url` 可以是完整地址，也可以是相对 `index.json` 的路径
+- `version` 比已装的新就显示「更新」；更新时保留插件原来的开关状态
+- 下载到的脚本开头的 `@id` 必须和这里的 `id` 一样，否则不安装
+- 本仓库改了插件版本号后运行 `python3 plugins/gen-index.py` 重新生成 `index.json`

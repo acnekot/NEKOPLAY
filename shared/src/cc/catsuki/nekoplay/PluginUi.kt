@@ -54,7 +54,13 @@ private val CAP_NAMES = linkedMapOf(
                     }
                 }
                 Spacer(Modifier.height(18.dp)); Rule()
-                if (list.isEmpty()) T("还没有插件。没有插件时只能播放本地音乐和 WebDAV 里的歌", 13, p.s, lines = 3, modifier = Modifier.padding(vertical = 22.dp))
+            }
+        }
+        pluginSubsSection(nav)
+        item {
+            Column {
+                Column(Modifier.padding(top = 26.dp, bottom = 4.dp)) { TagRow("INSTALLED", 12.dp) { T("${two(list.size)} 个", 13, p.s, mono = true) } }
+                if (list.isEmpty()) T("还没有插件。没有插件时只能播放本地音乐和 WebDAV 里的歌", 13, p.s, lines = 3, modifier = Modifier.padding(vertical = 14.dp))
             }
         }
         items(list, key = { it.id }) { s ->
@@ -85,7 +91,7 @@ private val CAP_NAMES = linkedMapOf(
                         else LinkBtn("退出 ${acc[s.id]}", 13) { confirmLogout(nav, s.name) { scope.launch { runCatching { s.call("logout") }; PluginStore.refresh() } } }
                         Spacer(Modifier.width(14.dp))
                     }
-                    LinkBtn("重新加载", 13) { scope.launch { s.close(); if (s.start()) nav.toast = "已重新加载" else nav.toast = "加载失败：${s.error}" } }
+                    LinkBtn("重新加载", 13) { scope.launch { s.close().join(); if (s.start()) nav.toast = "已重新加载" else nav.toast = "加载失败：${s.error}" } }
                     Spacer(Modifier.width(14.dp))
                     LinkBtn("删除", 13, p.bad) {
                         nav.sheet = SheetSpec("删除插件「${s.name}」？", "删除后它提供的搜索、歌单等功能都会消失；以后可以重新导入", listOf(SheetItem("删除", danger = true) { Plugins.delete(s.id); nav.toast = "已删除" }))
@@ -283,6 +289,97 @@ fun androidx.compose.foundation.lazy.LazyListScope.pluginLibrary(nav: Nav, excep
                     ListRow({ if (pl.liked) LikedCover(pl.cover, 56.dp) else Cover(pl.cover, 56.dp, pl.name) }, pl.name, (if (pl.mine) "" else "歌单 · ") + "${two(pl.count)} 首") { nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
                 }
             }
+        }
+    }
+}
+
+
+/** 插件页里的订阅区：订阅地址管理 + 订阅里可以安装 / 更新的插件 */
+private fun androidx.compose.foundation.lazy.LazyListScope.pluginSubsSection(nav: Nav) {
+    item(key = "subs") {
+        val p = c
+        val scope = rememberCoroutineScope()
+        val list by Plugins.list.collectAsState()
+        var adding by remember { mutableStateOf(false) }
+        var subUrl by remember { mutableStateOf("") }
+        var working by remember { mutableStateOf<String?>(null) }   // 正在安装的插件 id
+        LaunchedEffect(Unit) { if (PluginSubs.subs.isEmpty()) runCatching { PluginSubs.refresh() } }
+        fun install(i: PluginSubs.Item) {
+            if (working != null) return
+            working = i.id
+            scope.launch {
+                runCatching { PluginSubs.install(i) }.onSuccess { nav.toast = "已安装「${it.name}」${it.version}"; Store.refreshAll() }.onFailure { nav.toast = "安装失败：${it.message}" }
+                working = null
+            }
+        }
+        Column {
+            Column(Modifier.padding(top = 26.dp, bottom = 4.dp)) {
+                TagRow("SUBSCRIPTIONS", 12.dp) {
+                    LinkBtn(if (PluginSubs.loading) "刷新中…" else "刷新", 13) { if (!PluginSubs.loading) scope.launch { PluginSubs.refresh() } }
+                    Spacer(Modifier.width(12.dp))
+                    LinkBtn(if (adding) "收起" else "添加订阅", 13) { adding = !adding }
+                }
+            }
+            T("从订阅列表一键安装、更新插件", 12, p.s)
+            if (adding) {
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f).height(44.dp).nbf(1.dp, p.k).padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
+                        if (subUrl.isEmpty()) T("订阅地址 https://…/index.json", 13, p.s, mono = true)
+                        BasicTextField(subUrl, { subUrl = it }, Modifier.fillMaxWidth(), singleLine = true, textStyle = TextStyle(color = p.k, fontSize = 13.sp, fontFamily = Mono), cursorBrush = SolidColor(p.p))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    OutlineBtn("添加", pad = 14.dp) {
+                        runCatching { PluginSubs.add(subUrl) }.onSuccess { subUrl = ""; adding = false; scope.launch { PluginSubs.refresh() } }.onFailure { nav.toast = it.message }
+                    }
+                }
+            }
+            // 更新提示
+            val ups = PluginSubs.updates
+            if (ups.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                T("${ups.size} 个插件有新版本", 13, p.p, 700, modifier = Modifier.weight(1f))
+                LinkBtn("全部更新", 13) {
+                    if (working == null) { working = "*"; scope.launch {
+                        val r = ups.map { runCatching { PluginSubs.install(it) } }
+                        nav.toast = "已更新 ${r.count { it.isSuccess }} 个" + r.firstOrNull { it.isFailure }?.exceptionOrNull()?.let { "，失败：${it.message}" }.orEmpty()
+                        Store.refreshAll(); working = null
+                    } }
+                }
+            }
+            PluginSubs.urls.forEach { u ->
+                val sub = PluginSubs.subs[u]
+                Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            T(sub?.name ?: "LOADING", 14, w = 800)
+                            T(u, 11, p.s, mono = true, lines = 1)
+                        }
+                        LinkBtn("移除", 12, p.bad) {
+                            nav.sheet = SheetSpec("移除这个订阅？", u, listOf(SheetItem("移除", danger = true) { PluginSubs.remove(u) }))
+                        }
+                    }
+                    sub?.error?.let { T("拉取失败：$it", 12, p.bad, lines = 2) }
+                    sub?.items?.forEach { i ->
+                        val have = list.firstOrNull { it.id == i.id }
+                        val upd = have != null && PluginSubs.newer(i.version, have.version)
+                        Row(Modifier.fillMaxWidth().bottomLine().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) { T(i.name, 14, w = 700); Spacer(Modifier.width(8.dp)); T("v" + i.version, 11, p.s, mono = true) }
+                                val line = listOfNotNull(i.author.takeIf { it.isNotEmpty() }?.let { "作者 $it" }, i.desc.takeIf { it.isNotEmpty() }).joinToString(" · ")
+                                if (line.isNotEmpty()) T(line, 12, p.s, lines = 2, lh = 1.4f)
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            when {
+                                working == i.id || (working == "*" && upd) -> T("安装中…", 12, p.s)
+                                have == null -> OutlineBtn("安装", pad = 12.dp) { install(i) }
+                                upd -> OutlineBtn("更新到 v${i.version}", pad = 12.dp) { install(i) }
+                                else -> T("已安装", 12, p.s)
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(18.dp)); Rule()
         }
     }
 }

@@ -73,9 +73,9 @@ class JsSource(val file: File) {
      * 关闭：先停掉还在跑的网络请求，再在锁里销毁脚本环境。
      * 后台可能正好在把网络结果交回脚本（evaluate 中途），不拿锁就销毁会让原生层崩溃。
      */
-    fun close() {
+    fun close(): kotlinx.coroutines.Job {
         scope.coroutineContext.cancelChildren()
-        closer.launch {
+        return closer.launch {
             lock.withLock {
                 waiting.values.forEach { it.complete(false to "插件已关闭") }
                 waiting.clear(); results.clear()
