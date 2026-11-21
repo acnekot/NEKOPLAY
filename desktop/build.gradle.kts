@@ -24,6 +24,7 @@ dependencies {
     implementation("org.json:json:20250517")
     implementation("com.google.zxing:core:3.5.3")
     implementation("net.java.dev.jna:jna:5.17.0")
+    implementation("io.github.dokar3:quickjs-kt:1.0.18")
 }
 
 compose.desktop {

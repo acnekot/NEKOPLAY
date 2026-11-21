@@ -42,5 +42,6 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-gif:3.3.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("io.github.dokar3:quickjs-kt:1.0.18")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }
