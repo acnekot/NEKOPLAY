@@ -225,7 +225,14 @@ object Qqm {
                     .put("filename", JSONArray().put("RS02$t.mp3")).put("guid", guid).put("songmid", JSONArray().put(mid)).put("songtype", JSONArray().put(0)).put("ctx", 0))
                 val purl = d.optJSONArray("midurlinfo")?.optJSONObject(0)?.optString("purl").orEmpty()
                 if (purl.isNotEmpty()) {
-                    Engine.error.value = "这首是会员歌曲，当前账号只能放试听片段" + if (err.contains("会员")) "" else "（$err）"
+                    // 这个地址有时其实是整首（账号有权限时）：按文件大小判断，明显比整首小才提示是试听
+                    val total = withContext(Dispatchers.IO) { runCatching {
+                        Ncm.http.newCall(Request.Builder().url(CDN + purl).header("Range", "bytes=0-0").header("User-Agent", UA).build()).execute()
+                            .use { r -> r.header("Content-Range")?.substringAfter('/')?.toLongOrNull() ?: r.header("Content-Length")?.toLongOrNull() }
+                    }.getOrNull() }
+                    val dur = fileDur[mid] ?: 0L
+                    val clip = when { total == null -> true; dur > 0 -> total < dur * 128_000L / 8 * 6 / 10; else -> total < 1_500_000 }   // 试听一般 30~60 秒，128k 不到 1MB
+                    if (clip) Engine.error.value = "这首是会员歌曲，当前账号只能放试听片段" + if (err.contains("会员")) "" else "（$err）"
                     return Stream(CDN + purl, "mp3", 128, "standard")
                 }
             }
