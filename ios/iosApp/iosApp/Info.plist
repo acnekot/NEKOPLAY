@@ -40,6 +40,6 @@
 	<key>CFBundleURLTypes</key>
 	<array><dict><key>CFBundleURLName</key><string>cc.catsuki.nekoplay</string><key>CFBundleURLSchemes</key><array><string>nekoplay</string></array></dict></array>
 	<key>LSApplicationQueriesSchemes</key>
-	<array><string>wtloginmqq</string><string>wtloginmqq3</string><string>mqq</string></array>
+	<array><string>wtloginmqq</string><string>wtloginmqq3</string><string>mqq</string><string>weixin</string></array>
 </dict>
 </plist>

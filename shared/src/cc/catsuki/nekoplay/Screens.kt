@@ -524,7 +524,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
             Row(Modifier.fillMaxWidth().padding(top = 14.dp).bottomLine().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { T("网易云音乐", 16, w = 700); T(if (prof == null) "未登录 · 登录后可使用歌单和「我喜欢」" else "已登录 · ${prof!!.name}", 13, p.s, lh = 1.4f) }
                 if (prof == null) LinkBtn("登录", 14) { nav.push(Page.Login) }
-                else LinkBtn("退出登录", 14, p.bad) { Store.logout(); nav.toast = "已退出网易云音乐" }
+                else LinkBtn("退出登录", 14, p.bad) { confirmLogout(nav, "网易云音乐") { Store.logout() } }
             }
         }
         // 其它音源的账号：和网易云并列
@@ -533,7 +533,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
             Row(Modifier.fillMaxWidth().padding(top = 14.dp).bottomLine().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { T("QQ 音乐", 16, w = 700); T(if (!on) "未登录 · QQ / 微信扫码，登录后可播放账号有权限的歌" else "已登录" + Qqm.nick.let { if (it.isNotEmpty()) " · $it" else "" }, 13, p.s, lh = 1.4f) }
                 if (!on) LinkBtn("登录", 14) { nav.push(Page.QqLogin) }
-                else LinkBtn("退出登录", 14, p.bad) { QqStore.logout(); nav.toast = "已退出 QQ 音乐" }
+                else LinkBtn("退出登录", 14, p.bad) { confirmLogout(nav, "QQ 音乐") { QqStore.logout() } }
             }
         }
         if (Features.on("kugou")) item {
@@ -541,7 +541,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
             Row(Modifier.fillMaxWidth().padding(top = 14.dp).bottomLine().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { T("酷狗音乐", 16, w = 700); T(if (!on) "未登录 · 酷狗 App 扫码，登录后可播放账号有权限的歌" else "已登录" + Kgm.nick.let { if (it.isNotEmpty()) " · $it" else "" }, 13, p.s, lh = 1.4f) }
                 if (!on) LinkBtn("登录", 14) { nav.push(Page.KgLogin) }
-                else LinkBtn("退出登录", 14, p.bad) { KgStore.logout(); nav.toast = "已退出酷狗" }
+                else LinkBtn("退出登录", 14, p.bad) { confirmLogout(nav, "酷狗") { KgStore.logout() } }
             }
         }
         item { Group("SETTINGS") }
@@ -820,4 +820,10 @@ fun qrBitmap(text: String): androidx.compose.ui.graphics.ImageBitmap {
         if (maxWidth >= 640.dp) Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) { left(Modifier.weight(1f).fillMaxHeight()); Spacer(Modifier.width(14.dp)); right(Modifier.weight(1f).fillMaxHeight()) }
         else Column { left(Modifier.fillMaxWidth()); Spacer(Modifier.height(14.dp)); right(Modifier.fillMaxWidth()) }
     }
+}
+
+
+/** 退出登录前再确认一次 */
+fun confirmLogout(nav: Nav, name: String, run: () -> Unit) {
+    nav.sheet = SheetSpec("退出$name？", "退出后要重新登录才能看到这个账号的歌单和「我喜欢」", listOf(SheetItem("退出登录", danger = true) { run(); nav.toast = "已退出$name" }))
 }

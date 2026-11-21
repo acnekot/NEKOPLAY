@@ -225,7 +225,7 @@ object Qqm {
                     .put("filename", JSONArray().put("RS02$t.mp3")).put("guid", guid).put("songmid", JSONArray().put(mid)).put("songtype", JSONArray().put(0)).put("ctx", 0))
                 val purl = d.optJSONArray("midurlinfo")?.optJSONObject(0)?.optString("purl").orEmpty()
                 if (purl.isNotEmpty()) {
-                    Engine.error.value = "$err，先放试听片段"
+                    Engine.error.value = "这首是会员歌曲，当前账号只能放试听片段" + if (err.contains("会员")) "" else "（$err）"
                     return Stream(CDN + purl, "mp3", 128, "standard")
                 }
             }
@@ -322,14 +322,15 @@ object Qqm {
     suspend fun playlists(): List<Playlist> {
         if (!loggedIn) throw NcmError("请先登录 QQ 音乐")
         val d = call("music.musicasset.PlaylistBaseRead", "GetPlaylistByUin", JSONObject().put("uin", musicid.toString()))
+        fun pic(p: JSONObject) = listOf("picUrl", "bigpicUrl", "bigPicUrl", "coverUrl", "logo").map { p.optString(it) }.firstOrNull { it.startsWith("http") }?.replace("http://", "https://")
         val mine = arr(d.optJSONArray("v_playlist")).map { p ->
             val dir = p.optInt("dirId")
-            if (dir == 201) Playlist(P + "liked", "我喜欢", p.optInt("songNum"), p.optString("picUrl").ifEmpty { null }, liked = true)
-            else Playlist(P + p.opt("tid").toString(), p.optString("dirName"), p.optInt("songNum"), p.optString("picUrl").ifEmpty { null })
+            if (dir == 201) Playlist(P + "liked", "我喜欢", p.optInt("songNum"), pic(p), liked = true)
+            else Playlist(P + p.opt("tid").toString(), p.optString("dirName"), p.optInt("songNum"), pic(p))
         }
         val fav = runCatching {
             val f = call("music.musicasset.PlaylistFavRead", "CgiGetPlaylistFavInfo", JSONObject().put("uin", musicid.toString()).put("offset", 0).put("size", 100))
-            arr(f.optJSONArray("v_list")).map { p -> Playlist(P + p.opt("tid").toString(), p.optString("name"), p.optInt("songnum"), p.optString("logo").ifEmpty { null }, mine = false) }
+            arr(f.optJSONArray("v_list")).map { p -> Playlist(P + p.opt("tid").toString(), p.optString("name"), p.optInt("songnum"), pic(p), mine = false) }
         }.getOrDefault(emptyList())
         return mine.sortedByDescending { it.liked } + fav
     }

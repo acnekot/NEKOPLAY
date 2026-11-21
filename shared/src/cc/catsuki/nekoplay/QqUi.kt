@@ -54,11 +54,15 @@ fun LazyListScope.qqLibrary(nav: Nav) {
         val pls by QqStore.playlists.collectAsState()
         Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) {
             TagRow("QQ MUSIC", 12.dp) {
-                if (on) { T("${two(pls.size)} 个", 13, c.s, mono = true); Spacer(Modifier.width(10.dp)); LinkBtn("退出", 13) { QqStore.logout(); nav.toast = "已退出 QQ 音乐" } }
+                if (on) T("${two(pls.size)} 个", 13, c.s, mono = true)
             }
         }
         if (!on) ListRow({ IconCover(NIcons.chevronRight, 56.dp) }, "登录 QQ 音乐", "扫码登录后在这里看到 QQ 音乐的歌单") { nav.push(Page.QqLogin) }
         else QqStore.error.collectAsState().value?.let { T(it, 13, c.s, lines = 3) }
+            ?: run {
+                // 只有一个空的「我喜欢」：多半是登错了账号（QQ 登录和微信登录是两个独立的 QQ 音乐账号）
+                if (pls.isNotEmpty() && pls.all { it.count == 0 }) T("这个账号还没有歌单。QQ 音乐的 QQ 登录和微信登录是两个独立账号，平时用另一种方式登录的话，去 设置 → 账号 退出后换一种登录", 13, c.s, lines = 4, lh = 1.5f)
+            }
     }
     item {
         val pls by QqStore.playlists.collectAsState()
@@ -76,6 +80,7 @@ fun LazyListScope.qqLibrary(nav: Nav) {
     val mobile = Plat.impl.name != "desktop"
     // 手机上默认用网页登录（可以一键拉起手机 QQ），扫码作为备用
     var web by remember { mutableStateOf(Plat.impl.hasWebView) }
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
     var wx by remember { mutableStateOf(false) }
     var round by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf("正在获取二维码…") }
@@ -89,7 +94,7 @@ fun LazyListScope.qqLibrary(nav: Nav) {
                 val f = File(Plat.impl.cacheDir, "qq_qr"); f.writeBytes(q.png)
                 Plat.impl.decodeImage(f.path, 600)
             }
-            status = if (wx) "用微信扫码，并在手机上点确认" else "用手机 QQ 扫码，并在手机上点确认" + if (mobile) "；同一台手机可以点「保存二维码」再在 QQ 扫一扫里选相册" else ""
+            status = if (wx) "用微信扫码，并在手机上点确认" + (if (mobile) "；同一台手机点「存图并打开微信」" else "") else "用手机 QQ 扫码，并在手机上点确认" + if (mobile) "；同一台手机可以点「保存二维码」再在 QQ 扫一扫里选相册" else ""
             var fails = 0
             while (isActive) {
                 delay(if (wx) 300 else 2000)
@@ -122,6 +127,12 @@ fun LazyListScope.qqLibrary(nav: Nav) {
         }
         Spacer(Modifier.height(14.dp)); T(status, 13, p.s, lines = 3, lh = 1.5f)
         if (mobile) Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // 微信网页登录只能扫码：存好二维码后直接打开微信扫一扫，在里面选相册
+            if (wx) img?.let { im -> Box(Modifier.press {
+                runCatching { Plat.impl.savePicture(im, "QQ音乐登录二维码") }.onFailure { nav.toast = "保存失败：${it.message}"; return@press }
+                status = "二维码已存到相册：在微信扫一扫右下角点「相册」选它，确认后回到这里"
+                runCatching { uri.openUri("weixin://dl/scan") }.onFailure { nav.toast = "没能打开微信" }
+            }.background(p.k).padding(horizontal = 14.dp, vertical = 8.dp)) { T("存图并打开微信", 13, p.tagFg, 700) } }
             img?.let { im -> Box(Modifier.press { nav.toast = runCatching { "已保存到" + Plat.impl.savePicture(im, "QQ音乐登录二维码") + "，在 " + (if (wx) "微信" else "QQ") + " 扫一扫里选相册" }.getOrElse { "保存失败：${it.message}" } }
                 .nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 8.dp)) { T("保存二维码", 13, p.k, 700) } }
         }
@@ -199,7 +210,7 @@ fun LazyListScope.kgLibrary(nav: Nav) {
         val pls by KgStore.playlists.collectAsState()
         Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) {
             TagRow("KUGOU", 12.dp) {
-                if (on) { T("${two(pls.size)} 个", 13, c.s, mono = true); Spacer(Modifier.width(10.dp)); LinkBtn("退出", 13) { KgStore.logout(); nav.toast = "已退出酷狗" } }
+                if (on) T("${two(pls.size)} 个", 13, c.s, mono = true)
             }
         }
         if (!on) ListRow({ IconCover(NIcons.chevronRight, 56.dp) }, "登录酷狗音乐", "扫码登录后在这里看到酷狗的歌单") { nav.push(Page.KgLogin) }
