@@ -69,10 +69,19 @@ class JsSource(val file: File) {
         }
     }
 
+    /**
+     * 关闭：先停掉还在跑的网络请求，再在锁里销毁脚本环境。
+     * 后台可能正好在把网络结果交回脚本（evaluate 中途），不拿锁就销毁会让原生层崩溃。
+     */
     fun close() {
         scope.coroutineContext.cancelChildren()
-        waiting.values.toList().forEach { it.complete(false to "插件已关闭") }
-        js?.close(); js = null
+        closer.launch {
+            lock.withLock {
+                waiting.values.forEach { it.complete(false to "插件已关闭") }
+                waiting.clear(); results.clear()
+                js?.close(); js = null
+            }
+        }
     }
 
     /*
@@ -82,6 +91,8 @@ class JsSource(val file: File) {
      * 这样一个插件里慢的调用（微信扫码长轮询、大歌单）不会挡住切歌、歌词这些。
      */
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+    /** 关闭用的协程不能放在 scope 里（会被上面的取消一起取消掉） */
+    private val closer = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Default)
     private var seq = 0L
     /** 等结果的调用 / 等交回脚本的网络结果；只在 lock 里读写 */
     private val waiting = HashMap<Long, kotlinx.coroutines.CompletableDeferred<Pair<Boolean, String?>>>()

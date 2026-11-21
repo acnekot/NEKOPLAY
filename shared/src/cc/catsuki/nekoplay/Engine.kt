@@ -65,6 +65,8 @@ object Engine {
     fun changeGapless(v: Boolean) { gapless = v; prefs?.edit()?.putBoolean("gapless", v)?.apply(); if (!v) dropNext() }
     private var queuedIndex = -1
     private var queuedFmt = ""
+    /** 排好的下一首只能试听时的提示，接上时再显示 */
+    private var queuedTrial: String? = null
     private var queuing = false
     /** 快播完时（剩 12 秒）把下一首排到播放器里 */
     private fun maybeQueueNext() {
@@ -76,6 +78,7 @@ object Engine {
         val ni = if (s.mode == Mode.SHUFFLE && !s.fm) s.queue.indices.filter { it != s.index }.random() else (s.index + 1) % s.queue.size
         val nt = s.queue[ni]
         queuing = true
+        queuedTrial = null
         scope.launch {
             try {
                 val dl = Downloads.file(nt.id)
@@ -84,7 +87,7 @@ object Engine {
                     nt.src != null -> { audio.queueNext(srcUrl(nt.src), "loc_${nt.id}", nt); queuedFmt = nt.src.substringAfterLast('.', "").lowercase() }
                     dl != null -> { audio.queueNext(dl.toURI().toString(), "dl_${nt.id}", nt); queuedFmt = dl.extension.lowercase() }
                     hit != null && !Plat.isDesktop -> { audio.queueNext(null, cacheKey(nt.id, hit.first), nt); queuedFmt = hit.second }
-                    else -> { val st = Ncm.stream(nt.id, q); audio.queueNext(st.url, cacheKey(nt.id, st.level), nt); queuedFmt = st.format; prefs?.edit()?.putString("fmt_${cacheKey(nt.id, st.level)}", st.format)?.apply() }
+                    else -> { val st = Ncm.stream(nt.id, q); audio.queueNext(st.url, cacheKey(nt.id, st.level), nt); queuedFmt = st.format; queuedTrial = st.trial; prefs?.edit()?.putString("fmt_${cacheKey(nt.id, st.level)}", st.format)?.apply() }
                 }
                 if (state.value.current?.id == cur.id) queuedIndex = ni else audio.clearNext()
             } catch (_: Exception) { } finally { queuing = false }
@@ -103,7 +106,9 @@ object Engine {
         state.value = s.copy(index = ni, loading = false, format = queuedFmt, kbps = 0, cached = false)
         position.value = 0; info.value = null; localKbps = 0
         Store.addRecent(t); Store.saveQueue(s.queue, ni, 0)
+        queuedTrial?.let { error.value = it }; queuedTrial = null
         if (s.fm && ni + 3 >= s.queue.size) fmFill()
+        prefetchNext()   // 预热再下一首的播放地址
     }
     private suspend fun ramp(from: Float, to: Float, ms: Int) {
         val steps = (ms / 16).coerceAtLeast(1)
