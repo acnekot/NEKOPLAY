@@ -79,8 +79,10 @@ fun main() {
         val close = { if (UiPref.tray && trayOk) { visible = false; Thread { Thread.sleep(1500); System.gc(); WinMem.trim() }.start() } else quit() }
         if (DeskLyric.on && Features.on("desk")) DeskLyricWindow()
         // 无边框窗口：标题栏、最小化 / 最大化 / 关闭按钮和拖边改大小都自己画
-        // macOS：窗口透明，内容自己裁成圆角（设置里可以关）；Windows / Linux 不透明，避免分层窗口拖慢绘制
-        Window(onCloseRequest = close, state = state, visible = visible, title = "NEKOPLAY", icon = appIcon, undecorated = true, transparent = UiPref.isMac,
+        // macOS：开了圆角时窗口透明，内容自己裁成圆角；透明窗口每帧都要和桌面合成，比不透明的慢，所以关掉圆角就用不透明窗口
+        // 透明只能在建窗口时定，改圆角开关后重启生效。Windows / Linux 一直不透明
+        val macTransparent = androidx.compose.runtime.remember { UiPref.isMac && UiPref.round }
+        Window(onCloseRequest = close, state = state, visible = visible, title = "NEKOPLAY", icon = appIcon, undecorated = true, transparent = macTransparent,
             onPreviewKeyEvent = { e ->
                 if (e.type != KeyEventType.KeyDown) false
                 else if (e.key == Key.Escape) DesktopPlat.back()   // Esc = 返回
@@ -103,7 +105,7 @@ fun main() {
                 if (state.isMinimized) { kotlinx.coroutines.delay(1500); WinMem.trim() }
             }
             NekoTheme {
-                val rounded = UiPref.isMac && UiPref.round && state.placement == androidx.compose.ui.window.WindowPlacement.Floating && SidePref.active == 0
+                val rounded = macTransparent && UiPref.round && state.placement == androidx.compose.ui.window.WindowPlacement.Floating && SidePref.active == 0
                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()
                     .then(if (rounded) androidx.compose.ui.Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) else androidx.compose.ui.Modifier)) {
                     Root(chrome = { TitleBar(state, close) })

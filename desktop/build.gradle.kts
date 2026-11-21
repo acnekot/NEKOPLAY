@@ -54,8 +54,12 @@ val installerVersion = appVersion.split('.').let { (_, b, c) -> "1.$b.$c" }
 compose.desktop {
     application {
         mainClass = "cc.catsuki.nekoplay.MainKt"
-        // 省内存：小堆 + Serial GC + 空闲时把堆还给系统 + 小代码缓存 / 线程栈
-        jvmArgs += listOf("-Xms24m", "-Xmx180m", "-XX:+UseSerialGC", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=25",
+        // Windows / Linux 省内存：小堆 + Serial GC + 空闲时把堆还给系统 + 只用 C1 编译 + 小代码缓存 / 线程栈
+        // macOS 保流畅：Retina 屏 + 120Hz 下每帧要画的像素多，小堆会频繁 GC 掉帧，只用 C1 编译出来的代码也慢；
+        // 所以 macOS 堆给大一些、不频繁缩堆，并打开 C2 优化编译（多占几十 MB 内存）
+        val mac = System.getProperty("os.name").lowercase().contains("mac")
+        jvmArgs += if (mac) listOf("-Xms96m", "-Xmx384m", "-XX:+UseSerialGC", "-XX:ReservedCodeCacheSize=96m", "-XX:MaxMetaspaceSize=128m", "-Dskiko.vsync.enabled=true")
+        else listOf("-Xms24m", "-Xmx180m", "-XX:+UseSerialGC", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=25",
             "-XX:TieredStopAtLevel=1", "-XX:ReservedCodeCacheSize=40m", "-XX:MaxMetaspaceSize=96m", "-Xss512k", "-XX:CICompilerCount=2",
             "-Dskiko.vsync.enabled=true")
         nativeDistributions {
