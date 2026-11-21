@@ -435,8 +435,9 @@ object Qqm {
 
     // ---------- 网页登录（手机上用内嵌网页走 QQ 互联，可以一键拉起手机 QQ） ----------
     const val WEB_REDIRECT = "https://y.qq.com/portal/wx_redirect.html"
-    fun webLoginUrl(): String = "https://graph.qq.com/oauth2.0/authorize?" + query("response_type" to "code", "client_id" to "100497308",
-        "redirect_uri" to "$WEB_REDIRECT?login_type=1&surl=https://y.qq.com/", "state" to "state", "display" to "mobile")
+    /** pc = true：电脑版登录页（显示二维码），false：手机版（一键拉起手机 QQ） */
+    fun webLoginUrl(pc: Boolean = false): String = "https://graph.qq.com/oauth2.0/" + (if (pc) "show?which=Login&" else "authorize?") + query("response_type" to "code", "client_id" to "100497308",
+        "redirect_uri" to "$WEB_REDIRECT?login_type=1&surl=https://y.qq.com/", "state" to "state", "display" to if (pc) "pc" else "mobile")
     /** 网页里「一键登录」拉起 QQ 的地址，加上回跳到本 App */
     fun withCallback(u: String, ios: Boolean): String {
         // 1) p 里带上本 App 的包名，QQ 授权后按它跳回（网页本来是从页面地址的 pt_package / pt_bundleid 读的）

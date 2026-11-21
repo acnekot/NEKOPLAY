@@ -40,6 +40,8 @@ import kotlinx.coroutines.delay
 import java.io.File
 
 /** 安卓平台实现 */
+private const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
 class AndroidPlat(private val ctx: Context) : PlatImpl {
     companion object {
         lateinit var exoAudio: ExoAudio
@@ -160,7 +162,7 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
 
     override val hasWebView get() = true
     @android.annotation.SuppressLint("SetJavaScriptEnabled")
-    @Composable override fun WebPage(url: String, modifier: Modifier, onInfo: (String) -> Unit, intercept: (String) -> Boolean) {
+    @Composable override fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean, onInfo: (String) -> Unit, intercept: (String) -> Boolean) {
         val cb by rememberUpdatedState(intercept); val info by rememberUpdatedState(onInfo)
         val loaded = remember { arrayOfNulls<String>(1) }
         androidx.compose.ui.viewinterop.AndroidView(factory = { ctx ->
@@ -169,6 +171,7 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
                 settings.javaScriptEnabled = true; settings.domStorageEnabled = true; settings.databaseEnabled = true
                 settings.loadWithOverviewMode = true; settings.useWideViewPort = true
                 settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                if (desktopUa) settings.userAgentString = DESKTOP_UA
                 android.webkit.CookieManager.getInstance().setAcceptCookie(true)
                 android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                 webChromeClient = object : android.webkit.WebChromeClient() {
