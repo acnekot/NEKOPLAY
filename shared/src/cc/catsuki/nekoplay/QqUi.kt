@@ -43,7 +43,9 @@ object SearchSource {
     var src by mutableIntStateOf(0)
     val qq get() = src == 1
     val kg get() = src == 2
-    val labels get() = listOf("网易云") + (if (Features.on("qq")) listOf("QQ 音乐") else emptyList()) + (if (Features.on("kugou")) listOf("酷狗") else emptyList())
+    val labels get() = Features.sources.map { listOf("网易云", "QQ 音乐", "酷狗")[it] }
+    /** 当前选的来源被关掉了就换成第一个开着的 */
+    fun fix() { val s = Features.sources; if (src !in s && s.isNotEmpty()) src = s.first() }
     fun idOf(label: String) = when (label) { "QQ 音乐" -> 1; "酷狗" -> 2; else -> 0 }
 }
 

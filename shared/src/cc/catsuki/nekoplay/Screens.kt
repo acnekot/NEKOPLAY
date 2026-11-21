@@ -62,7 +62,7 @@ import java.util.Calendar
     val liked = pls.firstOrNull { it.liked }
     // 首页内容来源：网易云 / QQ 音乐 / 酷狗 / 混合；没开启的音源当作没有
     val src = HomeSrc.current
-    val showNet = src == 0 || src == 3
+    val showNet = Features.on("ncm") && (src == 0 || src == 3)
     val showQq = Features.on("qq") && (src == 1 || src == 3)
     val showKg = Features.on("kugou") && (src == 2 || src == 3)
     LaunchedEffect(Unit) { if (src == 1 || src == 2) SearchSource.src = src }
@@ -232,14 +232,13 @@ import java.util.Calendar
 /** 首页内容来源 */
 object HomeSrc {
     /** 选了但功能没开的来源退回网易云 */
-    val current: Int get() = UiPref.homeSrc.let { if ((it == 1 && !Features.on("qq")) || (it == 2 && !Features.on("kugou"))) 0 else it }
+    val current: Int get() = UiPref.homeSrc.let { v -> val s = Features.sources; if (v == 3 && s.size > 1) 3 else if (v in s) v else s.firstOrNull() ?: 0 }
     /** 设置里的选项：(名字, 来源编号) */
-    val options: List<Pair<String, Int>> get() = listOf("网易云" to 0) + (if (Features.on("qq")) listOf("QQ 音乐" to 1) else emptyList()) +
-        (if (Features.on("kugou")) listOf("酷狗" to 2) else emptyList()) + (if (Features.on("qq") || Features.on("kugou")) listOf("混合" to 3) else emptyList())
+    val options: List<Pair<String, Int>> get() = Features.sources.map { listOf("网易云", "QQ 音乐", "酷狗")[it] to it } + (if (Features.sources.size > 1) listOf("混合" to 3) else emptyList())
     fun set(v: Int) {
         UiPref.homeSrc = v; UiPref.save()
         // 搜索默认也用同一个来源（混合时用网易云）
-        SearchSource.src = if (v == 1 || v == 2) v else 0
+        SearchSource.src = if (v == 1 || v == 2) v else Features.sources.firstOrNull() ?: 0
     }
     /** 排行榜 / 新碟缓存：首页来回滚动不重复请求 */
     val charts = HashMap<Int, List<Playlist>>()
@@ -327,7 +326,7 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                 Tag("LIBRARY"); Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
                     T("曲库", Fs.HERO, w = 800, lh = 1.3f, modifier = Modifier.weight(1f))
-                    if (prof != null) {
+                    if (prof != null && Features.on("ncm")) {
                         val signed by Store.signedToday.collectAsState()
                         if (signed) Box(Modifier.defaultMinSize(44.dp, 44.dp), contentAlignment = Alignment.Center) { Box(Modifier.height(28.dp).background(c.l3).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) { T("已签到", 12, c.s, 700) } }
                         else LinkBtn("签到", 14) { Store.run { nav.toast = runCatching { Ncm.signin().also { (ok, _) -> if (ok) Store.markSigned() }.second }.getOrElse { "签到失败：${it.message}" } } }
@@ -338,22 +337,23 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                 Spacer(Modifier.height(10.dp)); Rule()
             }
         }
-        if (liked != null) item { ListRow({ LikedCover(liked.cover, 56.dp) }, "我喜欢", "${two(liked.count)} 首") { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
+        val net = Features.on("ncm")
+        if (net && liked != null) item { ListRow({ LikedCover(liked.cover, 56.dp) }, "我喜欢", "${two(liked.count)} 首") { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
         item { ListRow({ RecentCover(rec.firstOrNull()?.cover, 56.dp) }, "最近播放", listMeta(rec)) { nav.push(Page.Detail("recent", "recent", "最近播放")) } }
         if (Features.on("dl")) item { val dls by Downloads.items.collectAsState(); ListRow({ IconCover(NIcons.download, 56.dp) }, "本地下载", "${two(dls.size)} 首") { nav.push(Page.DlList) } }
         if (Features.on("stats")) item { ListRow({ IconCover(NIcons.chart, 56.dp) }, "听歌统计", "本机的播放次数和时长") { nav.push(Page.Stats) } }
         if (Features.on("local")) item { val loc by LocalMusic.list.collectAsState(); ListRow({ IconCover(NIcons.disc, 56.dp) }, "本地音乐", if (loc.isEmpty()) "扫描手机 / 电脑里的歌" else "${two(loc.size)} 首") { nav.push(Page.Local) } }
-        if (prof == null) item {
+        if (net && prof == null) item {
             Column(Modifier.padding(vertical = 24.dp)) {
                 T("NOT LOGGED IN", 12, c.s, mono = true, lines = 2, ls = .06f, lh = 1.7f)
                 Spacer(Modifier.height(12.dp)); ActionRow { PrimaryBar("登录网易云音乐", NIcons.chevronRight, Modifier.weight(1f)) { nav.push(Page.Login) } }
             }
         }
-        if (prof != null) {
+        if (net && prof != null) {
             item { ListRow({ IconCover(NIcons.cloud, 56.dp) }, "云盘", "自己上传的歌") { nav.push(Page.Detail("cloud", "cloud", "云盘")) } }
         }
-        val made = others.filter { it.mine }; val faved = others.filter { !it.mine }
-        val albums = subAlbums ?: emptyList()
+        val made = if (net) others.filter { it.mine } else emptyList(); val faved = if (net) others.filter { !it.mine } else emptyList()
+        val albums = if (net) subAlbums ?: emptyList() else emptyList()
         if (made.isNotEmpty()) item { Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("CREATED", 12.dp) { T("${two(made.size)} 个", 13, c.s, mono = true) } } }
         items(made, key = { it.id }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name) }, p.name, "${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
         // 收藏：歌单和专辑放在一起
@@ -472,10 +472,12 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
     // 输入时 250ms 防抖取联想词
     LaunchedEffect(q, res) {
         if (res != null || q.isBlank()) { sugg = emptyList(); return@LaunchedEffect }
-        delay(250); runCatching { sugg = Ncm.suggest(q.trim()).take(10) }
+        delay(250); if (Features.on("ncm")) runCatching { sugg = Ncm.suggest(q.trim()).take(10) }
     }
     fun saveHistory(l: List<String>) { history = l; prefs.edit().putString("history", l.joinToString("\n")).apply() }
     fun run(k: String, t: Int) {
+        SearchSource.fix()
+        if (Features.sources.isEmpty()) { nav.toast = "没有开启的在线音源：到 设置 → 功能管理 打开"; return }
         busy = true; res = null; type = t
         job?.cancel()
         job = scope.launch {
@@ -596,7 +598,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                 if (prof != null) NIcon(NIcons.chevronRight, 16.dp, p.s)
             }
         }
-        item {
+        if (Features.on("ncm")) item {
             Row(Modifier.fillMaxWidth().padding(top = 14.dp).bottomLine().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { T("网易云音乐", 16, w = 700); T(if (prof == null) "未登录 · 登录后可使用歌单和「我喜欢」" else "已登录 · ${prof!!.name}", 13, p.s, lh = 1.4f) }
                 if (prof == null) LinkBtn("登录", 14) { nav.push(Page.Login) }
