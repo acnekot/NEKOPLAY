@@ -271,7 +271,9 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     val pg = shown ?: return
     if (sub.value <= 0f && nav.stack.isEmpty()) return
     val p = c
-    Box(Modifier.fillMaxSize().graphicsLayer { translationX = w * (1 - sub.value) }) {
+    Box(Modifier.fillMaxSize().graphicsLayer { translationX = w * (1 - sub.value) }
+        // 整页挡住下面的首页 / 曲库：点在空白处的手势不会穿透到下层（子组件照常先收到）
+        .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
         // 子页面底色；有自定义背景时铺同一张背景
         Box(Modifier.fillMaxSize().background(p.page)) { BgLayer() }
         Column(Modifier.fillMaxSize()) {

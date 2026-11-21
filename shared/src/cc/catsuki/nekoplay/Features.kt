@@ -17,20 +17,20 @@ import androidx.compose.ui.unit.dp
  * desktop：null 两端都有，true 只有 PC，false 只有手机。
  */
 object Features {
-    class F(val id: String, val name: String, val desc: String, val desktop: Boolean? = null)
+    class F(val id: String, val name: String, val desc: String, val desktop: Boolean? = null, val group: String = "")
     private val ALL = listOf(
-        F("ncm", "网易云音乐", "音源：搜索、播放、歌词，日推、私人 FM、歌单、评论、MV，登录后看网易云的歌单"),
-        F("dl", "下载", "把歌下载到本地，附带歌词；下载管理页"),
-        F("local", "本地音乐", "扫描并播放本机的音乐文件"),
-        F("qq", "QQ 音乐", "音源：搜索、播放、歌词、排行榜、新碟，扫码登录后看 QQ 音乐的歌单"),
-        F("kugou", "酷狗音乐", "音源：搜索、播放、歌词、排行榜，扫码登录后看酷狗的歌单"),
-        F("sleep", "定时关闭", "到点自动停止播放"),
-        F("card", "歌词卡片", "把选中的歌词做成分享图片"),
-        F("offset", "歌词偏移", "单首歌调整歌词提前 / 推后"),
-        F("stats", "听歌统计", "记录本机的播放次数和时长"),
-        F("webdav", "WebDAV 备份", "设置、喜欢和最近播放备份到网盘"),
-        F("desk", "桌面歌词", "置顶的悬浮歌词窗", desktop = true),
-        F("discord", "Discord 状态", "在 Discord 上显示正在听的歌", desktop = true),
+        F("ncm", "网易云音乐", "音源：搜索、播放、歌词，日推、私人 FM、歌单、评论、MV，登录后看网易云的歌单", group = "音源"),
+        F("qq", "QQ 音乐", "音源：搜索、播放、歌词、排行榜、新碟，扫码登录后看 QQ 音乐的歌单", group = "音源"),
+        F("kugou", "酷狗音乐", "音源：搜索、播放、歌词、排行榜，扫码登录后看酷狗的歌单", group = "音源"),
+        F("local", "本地音乐", "扫描并播放本机的音乐文件", group = "本地"),
+        F("dl", "下载", "把歌下载到本地，附带歌词；下载管理页", group = "本地"),
+        F("offset", "歌词偏移", "单首歌调整歌词提前 / 推后", group = "播放与歌词"),
+        F("card", "歌词卡片", "把选中的歌词做成分享图片", group = "播放与歌词"),
+        F("desk", "桌面歌词", "置顶的悬浮歌词窗", desktop = true, group = "播放与歌词"),
+        F("sleep", "定时关闭", "到点自动停止播放", group = "播放与歌词"),
+        F("stats", "听歌统计", "记录本机的播放次数和时长", group = "数据"),
+        F("webdav", "WebDAV 备份", "设置、喜欢和最近播放备份到网盘", group = "数据"),
+        F("discord", "Discord 状态", "在 Discord 上显示正在听的歌", desktop = true, group = "其它"),
     )
     val list get() = ALL.filter { it.desktop == null || it.desktop == Plat.isDesktop }
     var off by mutableStateOf(setOf<String>())
@@ -52,7 +52,10 @@ object Features {
     val p = c
     LazyColumn(Modifier.widthIn(max = 860.dp).fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp)) {
         item { T("关掉的功能会隐藏它的按钮、菜单和设置，也不再在后台运行", 13, p.s, lh = 1.4f, modifier = Modifier.padding(bottom = 10.dp)) }
-        items(Features.list, key = { it.id }) { f -> SwitchRow(f.name, f.desc, Features.on(f.id)) { Features.set(f.id, it) } }
+        Features.list.groupBy { it.group }.forEach { (g, fs) ->
+            if (g.isNotEmpty()) item(key = "g$g") { Box(Modifier.padding(top = 18.dp, bottom = 4.dp)) { Tag(g) } }
+            items(fs, key = { it.id }) { f -> SwitchRow(f.name, f.desc, Features.on(f.id)) { Features.set(f.id, it) } }
+        }
     }
 }
 

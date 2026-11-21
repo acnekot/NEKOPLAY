@@ -72,11 +72,11 @@ import java.util.Calendar
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 24.dp)) {
         var srcDone = false
         // 首页模块：按「首页布局」里的顺序和开关排列；只有网易云有的模块在别的来源下不显示
-        HomeLayout.visible.forEachIndexed { mi, m0 ->
-            val m = if (!showNet && m0 == "combo") "continue" else m0
+        HomeLayout.visible.forEachIndexed { mi, m ->
+            // 并排组合：两块各占一半
+            HomeLayout.pairOf(m)?.let { (a, b) -> item(key = m) { HomePair(a, b, mi > 0, showNet) }; return@forEachIndexed }
             if (!showNet && m in setOf("daily", "fm", "foryou", "stats")) return@forEachIndexed
             when (m) {
-                "combo" -> item { HomeCombo(mi > 0) }
                 "continue" -> {
                 // ---- CONTINUE LISTENING
                 item {
@@ -858,55 +858,6 @@ fun qrBitmap(text: String): androidx.compose.ui.graphics.ImageBitmap {
 
 
 /** 可选布局：继续收听和每日推荐各占一半（窄屏时上下排） */
-@Composable fun HomeCombo(topPad: Boolean) {
-    val nav = LocalNav.current
-    val st by Engine.state.collectAsState()
-    val daily by Store.daily.collectAsState()
-    val cur = st.current ?: daily.firstOrNull()
-    val now = remember { Calendar.getInstance() }
-    val p = c
-    val left = @Composable { m: Modifier ->
-        Column(m.border(1.dp, Color.Gray.copy(alpha = .5f)).padding(14.dp)) {
-            Tag("CONTINUE LISTENING"); Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.press { if (st.current != null) { nav.lyrics = false; nav.player = true } else if (daily.isNotEmpty()) Engine.playList(daily, 0) }) { Cover(cur?.cover, 88.dp, cur?.title ?: "") }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) { T(cur?.title ?: "还没有曲目", Fs.HEAD, w = 800, lines = 2, lh = 1.2f); T(cur?.artist ?: "", 13, p.s) }
-            }
-            Spacer(Modifier.height(10.dp))
-            if (st.current != null) { ScrubBar(st.current!!.durationMs, 10.dp, interactive = false); TimeRow(st.current!!.durationMs) }
-            Spacer(Modifier.height(8.dp))
-            Row {
-                PrimaryBar(if (st.playing) "暂停" else if (st.current != null) "继续播放" else "播放", if (st.playing) NIcons.pause else NIcons.play, Modifier.weight(1f)) {
-                    if (st.current != null) Engine.toggle() else if (daily.isNotEmpty()) Engine.playList(daily, 0)
-                }
-                Spacer(Modifier.width(8.dp)); OutlineBtn("队列", pad = 12.dp) { nav.queue = true }
-            }
-        }
-    }
-    val right = @Composable { m: Modifier ->
-        Column(m.border(1.dp, Color.Gray.copy(alpha = .5f)).padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).press { nav.push(Page.Detail("daily", "daily", "每日推荐", daily.firstOrNull()?.cover)) }) {
-                    Tag("DAILY MIX"); Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) { T("每日推荐", Fs.HEAD, w = 800); NIcon(NIcons.chevronRight, 18.dp, p.s) }
-                    T("${daily.size} 首", 11, p.s, mono = true)
-                }
-                T("${two(now.get(Calendar.MONTH) + 1)}/${two(now.get(Calendar.DAY_OF_MONTH))}", 28, p.p, 600, mono = true)
-                Spacer(Modifier.width(10.dp))
-                Box(Modifier.border(1.dp, Color.Gray.copy(alpha = .5f))) { SquareBtn(NIcons.play) { if (daily.isNotEmpty()) Engine.playList(daily, 0) } }
-            }
-            Spacer(Modifier.height(6.dp))
-            daily.take(3).forEachIndexed { i, t -> TrackRow(t, st.current?.id == t.id, null, onLong = { trackActions(nav, t) }) { Engine.playList(daily, i) } }
-        }
-    }
-    BoxWithConstraints(Modifier.padding(top = if (topPad) 32.dp else 0.dp)) {
-        if (maxWidth >= 640.dp) Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) { left(Modifier.weight(1f).fillMaxHeight()); Spacer(Modifier.width(14.dp)); right(Modifier.weight(1f).fillMaxHeight()) }
-        else Column { left(Modifier.fillMaxWidth()); Spacer(Modifier.height(14.dp)); right(Modifier.fillMaxWidth()) }
-    }
-}
-
-
 /** 退出登录前再确认一次 */
 fun confirmLogout(nav: Nav, name: String, run: () -> Unit) {
     nav.sheet = SheetSpec("退出$name？", "退出后要重新登录才能看到这个账号的歌单和「我喜欢」", listOf(SheetItem("退出登录", danger = true) { run(); nav.toast = "已退出$name" }))

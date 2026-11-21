@@ -115,6 +115,8 @@ object Qqm {
 
     /** 歌曲 mid → 试听片段的 mid（没权限放整首时退而求其次） */
     private val trials = HashMap<String, String>()
+    /** 会员歌曲的 mid（只有这些拿不到整首时才提示「只能放试听」） */
+    private val vipMids = HashSet<String>()
     /** 歌曲 mid → 数字 id（收藏要用） */
     private val songIds = HashMap<String, Long>()
     /** 歌曲 mid → 文件信息（media_mid、各音质大小），拿播放地址时要用 */
@@ -128,6 +130,7 @@ object Qqm {
         s.optJSONObject("file")?.let { files[mid] = it }
         s.optLong("id").takeIf { it > 0 }?.let { songIds[mid] = it }
         s.optJSONArray("vs")?.optString(0)?.takeIf { it.isNotEmpty() }?.let { trials[mid] = it }
+        if (s.optJSONObject("pay")?.optInt("pay_play") == 1) vipMids += mid else vipMids -= mid
         val singers = arr(s.optJSONArray("singer"))
         val al = s.optJSONObject("album") ?: JSONObject()
         val alMid = al.optString("mid").ifEmpty { s.optString("albummid") }
@@ -232,7 +235,7 @@ object Qqm {
                     }.getOrNull() }
                     val dur = fileDur[mid] ?: 0L
                     val clip = when { total == null -> true; dur > 0 -> total < dur * 128_000L / 8 * 6 / 10; else -> total < 1_500_000 }   // 试听一般 30~60 秒，128k 不到 1MB
-                    if (clip) Engine.error.value = "这首是会员歌曲，当前账号只能放试听片段" + if (err.contains("会员")) "" else "（$err）"
+                    if (clip && mid in vipMids) Engine.error.value = "这首是会员歌曲，当前账号只能放试听片段"
                     return Stream(CDN + purl, "mp3", 128, "standard")
                 }
             }
