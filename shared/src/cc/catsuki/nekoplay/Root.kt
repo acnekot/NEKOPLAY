@@ -34,6 +34,8 @@ sealed interface Page {
     data object Search : Page
     data object Settings : Page
     data object Login : Page
+    data object QqLogin : Page
+    data object KgLogin : Page
     data class Artist(val id: String, val name: String) : Page
     data class Album(val id: String, val name: String, val cover: String? = null) : Page
     data class User(val uid: String, val name: String = "") : Page
@@ -97,7 +99,7 @@ val LocalNav = staticCompositionLocalOf { Nav() }
 /** 两端共用的启动初始化（在 Plat.impl 赋值之后调用） */
 object Boot {
     fun init() {
-        Ncm.init(); Store.init(); Engine.init(); Bg.init(); HomeLayout.init(); FxStore.init(); Downloads.init(); LocalMusic.load(); Stats.load()
+        Ncm.init(); Qqm.init(); QqStore.refresh(); Kgm.init(); KgStore.refresh(); Store.init(); Engine.init(); Bg.init(); HomeLayout.init(); FxStore.init(); Downloads.init(); LocalMusic.load(); Stats.load()
         reloadPrefs(); Backup.load()
     }
     /** 重新读一遍设置（启动时、从备份恢复后） */
@@ -304,7 +306,7 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
         .press { nav.back() }.padding(start = 6.dp, end = 18.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { NIcon(NIcons.back, 20.dp) }
-        T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; Page.Local -> "LOCAL"; Page.Backup -> "BACKUP"; Page.DebugLog -> "DEBUG"; is Page.ArtistAlbums -> "ALBUMS"; Page.Stats -> "STATS"; is Page.SetSub -> "SETTINGS / " + page.sec.uppercase(); Page.Feats -> "FEATURES"; Page.BtnLayout -> "PLAYER LAYOUT"; is Page.LyricCard -> "CARD"; else -> "" }, 12, p.s, mono = true, ls = .1f)
+        T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; Page.QqLogin -> "QQ MUSIC"; Page.KgLogin -> "KUGOU"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; Page.Local -> "LOCAL"; Page.Backup -> "BACKUP"; Page.DebugLog -> "DEBUG"; is Page.ArtistAlbums -> "ALBUMS"; Page.Stats -> "STATS"; is Page.SetSub -> "SETTINGS / " + page.sec.uppercase(); Page.Feats -> "FEATURES"; Page.BtnLayout -> "PLAYER LAYOUT"; is Page.LyricCard -> "CARD"; else -> "" }, 12, p.s, mono = true, ls = .1f)
     }
     Box(Modifier.weight(1f)) {
         when (page) {
@@ -312,6 +314,8 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
             Page.Search -> SearchPage()
             Page.Settings -> SettingsPage()
             Page.Login -> LoginPage()
+            Page.QqLogin -> QqLoginPage()
+            Page.KgLogin -> KgLoginPage()
             is Page.Artist -> ArtistPage(page)
             is Page.Album -> AlbumPage(page)
             is Page.User -> UserPage(page)

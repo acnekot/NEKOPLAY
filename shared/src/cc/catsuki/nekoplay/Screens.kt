@@ -286,6 +286,8 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
         items(albums, key = { "al" + it.id }) { al -> ListRow({ Cover(al.pic, 56.dp, al.name) }, al.name, "专辑 · " + listOf(al.artist, if (al.size > 0) "${al.size} 首" else "").filter { it.isNotEmpty() }.joinToString(" · "),
             onLong = { nav.sheet = SheetSpec(al.name, al.artist, listOf(SheetItem("取消收藏", danger = true) { Store.run { try { Ncm.subAlbum(al.id, false); nav.toast = "已取消收藏"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "操作失败：${e.message}" } } })) }) { nav.push(Page.Album(al.id, al.name, al.pic)) } }
         items(faved, key = { it.id }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name) }, p.name, "歌单 · ${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+        if (Features.on("qq")) qqLibrary(nav)
+        if (Features.on("kugou")) kgLibrary(nav)
     }
 }
 
@@ -402,7 +404,13 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         job?.cancel()
         job = scope.launch {
             try {
-                res = when (t) {
+                res = if (SearchSource.qq) when (t) {
+                    0 -> SearchRes(t, tracks = Qqm.search(k)); 1 -> SearchRes(t, albums = Qqm.searchAlbums(k)); 3 -> SearchRes(t, playlists = Qqm.searchPlaylists(k))
+                    else -> { nav.toast = "QQ 音乐暂时只能搜单曲、专辑和歌单"; SearchRes(t) }
+                } else if (SearchSource.kg) when (t) {
+                    0 -> SearchRes(t, tracks = Kgm.search(k)); 1 -> SearchRes(t, albums = Kgm.searchAlbums(k)); 3 -> SearchRes(t, playlists = Kgm.searchPlaylists(k))
+                    else -> { nav.toast = "酷狗暂时只能搜单曲、专辑和歌单"; SearchRes(t) }
+                } else when (t) {
                     0 -> SearchRes(t, tracks = Ncm.search(k)); 1 -> SearchRes(t, albums = Ncm.searchAlbums(k)); 2 -> SearchRes(t, artists = Ncm.searchArtists(k))
                     3 -> SearchRes(t, playlists = Ncm.searchPlaylists(k)); 4 -> SearchRes(t, users = Ncm.searchUsers(k)); else -> SearchRes(t, tracks = Ncm.searchLyric(k))
                 }
@@ -434,6 +442,14 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         val r = res
         val searching = r != null || busy
         // 结果类型切换
+        // 搜索来源：网易云 / QQ 音乐
+        if (SearchSource.labels.size > 1) LazyRow(Modifier.fillMaxWidth().padding(top = 10.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            itemsIndexed(SearchSource.labels) { _, l ->
+                val on = SearchSource.idOf(l) == SearchSource.src
+                Box(Modifier.press { if (!on) { SearchSource.src = SearchSource.idOf(l); if (q.isNotBlank() && (res != null || busy)) run(q.trim(), if (SearchSource.src != 0 && type !in listOf(0, 1, 3)) 0 else type) } }
+                    .then(if (on) Modifier.background(p.p) else Modifier).nbf(1.dp, if (on) p.p else p.l2).padding(horizontal = 12.dp, vertical = 5.dp)) { T(l, 12, if (on) Color.White else p.s, 700) }
+            }
+        }
         if (searching) LazyRow(Modifier.fillMaxWidth().padding(top = 10.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             itemsIndexed(SEARCH_TYPES) { i, l ->
                 val on = i == type
