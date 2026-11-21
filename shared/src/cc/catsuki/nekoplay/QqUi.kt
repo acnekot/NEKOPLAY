@@ -86,7 +86,7 @@ fun LazyListScope.qqLibrary(nav: Nav) {
     var status by remember { mutableStateOf("正在获取二维码…") }
     var img by remember { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(wx, round, web) {
-        if (web || (!wx && Plat.impl.hasWebView)) return@LaunchedEffect
+        if (web) return@LaunchedEffect
         img = null; status = "正在获取二维码…"
         try {
             val q = if (wx) Qqm.qrWx() else Qqm.qrQq()
@@ -120,8 +120,7 @@ fun LazyListScope.qqLibrary(nav: Nav) {
                 Box(Modifier.press { if (!on) { if (v == null) web = true else { web = false; wx = v } } }.background(if (on) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(l, 13, if (on) p.tagFg else p.k, 700) }
             }
         }
-        // 有内嵌网页的平台：QQ 扫码也直接用官方电脑版登录页的二维码，确认后的流程交给网页自己走
-        if (web || (!wx && Plat.impl.hasWebView)) { Spacer(Modifier.height(12.dp)); QqWebLogin(Modifier.weight(1f), pc = !web); return@Column }
+        if (web) { Spacer(Modifier.height(12.dp)); QqWebLogin(Modifier.weight(1f), pc = false); return@Column }
         Spacer(Modifier.height(18.dp))
         Box(Modifier.size(240.dp).align(Alignment.CenterHorizontally).nb(1.dp, p.k).background(Color.White).press { round++ }, contentAlignment = Alignment.Center) {
             img?.let { Image(it, "二维码", Modifier.size(220.dp)) } ?: T("…", 20, Color.Black)
