@@ -1,5 +1,8 @@
 package cc.catsuki.nekoplay
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.dokar.quickjs.QuickJs
 import com.dokar.quickjs.binding.asyncFunction
 import com.dokar.quickjs.binding.define
@@ -39,8 +42,8 @@ class JsSource(val file: File) {
     private var js: QuickJs? = null
     private val lock = Mutex()
     /** 脚本实现了哪些接口（search / stream / lyric …），界面按这个决定显示什么 */
-    var caps: Set<String> = emptySet(); private set
-    var error: String? = null; private set
+    var caps by mutableStateOf<Set<String>>(emptySet()); private set
+    var error by mutableStateOf<String?>(null); private set
 
     fun has(cap: String) = cap in caps
 
@@ -165,5 +168,100 @@ class JsSource(val file: File) {
               return r === undefined ? null : JSON.stringify(r);
             };
         """.trimIndent()
+    }
+}
+
+/**
+ * 已导入的插件：脚本文件放在 filesDir/plugins/<id>.js，开关存在 prefs "plugins"。
+ * 插件给出的歌 / 歌单 / 专辑 / 歌手 id 在本体里统一加前缀「@插件id:」，调回插件时再去掉。
+ */
+object Plugins {
+    private val dir by lazy { File(Plat.impl.filesDir, "plugins").apply { mkdirs() } }
+    private val prefs by lazy { Plat.prefs("plugins") }
+    val list = kotlinx.coroutines.flow.MutableStateFlow<List<JsSource>>(emptyList())
+    var off by mutableStateOf(setOf<String>())
+
+    fun load() {
+        off = prefs.getStringSet("off", null) ?: emptySet()
+        list.value = (dir.listFiles() ?: emptyArray()).filter { it.extension == "js" }.sortedBy { it.name }.map { JsSource(it) }
+    }
+    fun on(id: String) = id !in off && list.value.any { it.id == id }
+    fun get(id: String) = list.value.firstOrNull { it.id == id }
+    val enabled get() = list.value.filter { it.id !in off }
+    fun set(id: String, v: Boolean) { off = if (v) off - id else off + id; prefs.edit().putStringSet("off", off).apply(); if (!v) get(id)?.close() }
+
+    /** 导入脚本：检查开头的 @id，同 id 覆盖旧版本；返回导入的插件 */
+    suspend fun import(text: String): JsSource = withContext(Dispatchers.IO) {
+        val id = Regex("""^\s*//\s*@id\s+([A-Za-z0-9_\-]+)\s*$""", RegexOption.MULTILINE).find(text.take(4000))?.groupValues?.get(1)
+            ?: throw NcmError("不是 NEKOPLAY 插件：脚本开头要有「// @id 名字」")
+        get(id)?.close()
+        val f = File(dir, "$id.js"); f.writeText(text)
+        val s = JsSource(f)
+        if (!s.start()) { f.delete(); throw NcmError("脚本运行出错：${s.error}") }
+        list.value = list.value.filter { it.id != id } + s
+        off = off - id; prefs.edit().putStringSet("off", off).apply()
+        s
+    }
+    suspend fun importUrl(url: String): JsSource {
+        val text = withContext(Dispatchers.IO) { Ncm.http.newCall(Request.Builder().url(url.trim()).build()).execute().use { r -> if (!r.isSuccessful) throw NcmError("下载失败：HTTP ${r.code}"); r.body?.string() ?: "" } }
+        return import(text)
+    }
+    fun delete(id: String) { get(id)?.close(); File(dir, "$id.js").delete(); list.value = list.value.filter { it.id != id } }
+
+    // ---------- 本体调用插件 ----------
+    fun isPlugin(id: String?) = id?.startsWith("@") == true
+    fun pidOf(id: String) = id.removePrefix("@").substringBefore(':')
+    fun raw(id: String) = id.substringAfter(':')
+    private fun wrap(pid: String, raw: Any?): String = raw?.toString()?.takeIf { it.isNotEmpty() && it != "null" }?.let { "@$pid:$it" } ?: ""
+    private fun src(id: String): JsSource = get(pidOf(id))?.takeIf { on(it.id) } ?: throw NcmError("插件「${pidOf(id)}」没有安装或已关闭")
+
+    fun track(pid: String, o: JSONObject) = Track(wrap(pid, o.opt("id")), o.optString("title"), o.optString("artist").ifEmpty { "未知艺人" }, o.optString("album"),
+        o.optLong("duration"), o.optString("cover").ifEmpty { null },
+        o.optJSONArray("artists")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map { wrap(pid, it.opt("id")) to it.optString("name") } } ?: emptyList(),
+        wrap(pid, o.opt("albumId")), vip = o.optBoolean("vip"))
+    fun playlist(pid: String, o: JSONObject) = Playlist(wrap(pid, o.opt("id")), o.optString("name"), o.optInt("count"), o.optString("cover").ifEmpty { null },
+        liked = o.optBoolean("liked"), mine = o.optBoolean("mine", false), desc = o.optString("desc"))
+    fun album(pid: String, o: JSONObject) = Album(wrap(pid, o.opt("id")), o.optString("name"), o.optString("cover").ifEmpty { null }, o.optInt("count"), o.optString("year"), o.optString("artist"))
+    private fun arr(v: Any?): List<JSONObject> = when (v) { is JSONArray -> (0 until v.length()).mapNotNull { v.optJSONObject(it) }; else -> emptyList() }
+    private fun tracksOf(pid: String, v: Any?) = arr(if (v is JSONObject) v.opt("tracks") else v).map { track(pid, it) }
+
+    suspend fun search(pid: String, q: String, type: String, page: Int = 1): Any {
+        val s = get(pid) ?: throw NcmError("插件没有安装")
+        val r = s.call("search", q, type, page)
+        val items = arr(if (r is JSONObject) r.opt("items") ?: r.opt(type + "s") else r)
+        return when (type) { "album" -> items.map { album(pid, it) }; "playlist" -> items.map { playlist(pid, it) }; else -> items.map { track(pid, it) } }
+    }
+    suspend fun stream(id: String, quality: Int): Stream {
+        val o = src(id).call("stream", raw(id), quality) as? JSONObject ?: throw NcmError("插件没有给出播放地址")
+        val url = o.optString("url").ifEmpty { throw NcmError(o.optString("error").ifEmpty { "插件没有给出播放地址" }) }
+        if (o.optBoolean("trial")) Engine.error.value = o.optString("message").ifEmpty { "当前只能放试听片段" }
+        return Stream(url, o.optString("ext", url.substringBefore('?').substringAfterLast('.', "mp3")), o.optInt("kbps"), o.optString("level", "standard"))
+    }
+    suspend fun lyric(id: String): LyricData {
+        val o = src(id).let { if (it.has("lyric")) it.call("lyric", raw(id)) as? JSONObject else null } ?: return LyricData("", null, null)
+        return LyricData(o.optString("lrc"), o.optString("tr").ifEmpty { null }, null)
+    }
+    suspend fun playlistTracks(id: String): List<Track> = tracksOf(pidOf(id), src(id).call("playlist", raw(id)))
+    suspend fun album(id: String): Pair<Album, List<Track>> {
+        val pid = pidOf(id); val r = src(id).call("album", raw(id)) as? JSONObject ?: JSONObject()
+        val tracks = tracksOf(pid, r)
+        val al = r.optJSONObject("album")?.let { album(pid, it.put("id", it.opt("id") ?: raw(id))) } ?: Album(id, tracks.firstOrNull()?.album ?: "", tracks.firstOrNull()?.cover, tracks.size, "", tracks.firstOrNull()?.artist ?: "")
+        return al to tracks
+    }
+    suspend fun artist(id: String): Artist {
+        val pid = pidOf(id); val r = src(id).call("artist", raw(id)) as? JSONObject ?: JSONObject()
+        val tracks = tracksOf(pid, r)
+        return Artist(id, r.optString("name").ifEmpty { tracks.firstOrNull()?.artist ?: "" }, r.optString("cover").ifEmpty { null }, r.optString("desc"), tracks.size, 0, tracks)
+    }
+    suspend fun toplists(pid: String): List<Playlist> = arr(get(pid)?.call("toplists")).map { playlist(pid, it) }
+    suspend fun myPlaylists(pid: String): List<Playlist> = arr(get(pid)?.call("myPlaylists")).map { playlist(pid, it) }
+    suspend fun like(id: String, on: Boolean) { src(id).takeIf { it.has("like") }?.call("like", raw(id), on) }
+
+    /** 来源的显示名：组件上的小标签用 */
+    fun sourceName(id: String): String? = when {
+        isPlugin(id) -> get(pidOf(id))?.name ?: pidOf(id)
+        id.startsWith("qq:") -> "QQ 音乐"
+        id.startsWith("kg:") -> "酷狗"
+        else -> null
     }
 }

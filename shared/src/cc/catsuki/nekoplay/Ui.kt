@@ -294,6 +294,13 @@ val LocalCompactAction = compositionLocalOf { false }
 /** 歌名后面的小标：这首歌要会员 / 付费才能放整首 */
 @Composable fun VipTag() = Box(Modifier.border(1.dp, c.p).padding(horizontal = 4.dp, vertical = 1.dp)) { T("VIP", 9, c.p, 800, mono = true, ls = .04f) }
 
+/** 来源小标签：开着不止一个音源时，在歌手前面标出这首歌来自哪里 */
+@Composable fun SourceTag(t: Track) {
+    if (Features.sources.size + Plugins.enabled.size < 2) return
+    val name = when { t.local -> "本地"; else -> Plugins.sourceName(t.id) ?: "网易云" }
+    Box(Modifier.padding(end = 6.dp).border(1.dp, c.l2).padding(horizontal = 4.dp)) { T(name, 9, c.s, 700, lh = 1.4f) }
+}
+
 @Composable fun TrackRow(t: Track, current: Boolean, label: String? = null, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
     val p = c
     val fg = if (current) p.p else p.k
@@ -312,7 +319,10 @@ val LocalCompactAction = compositionLocalOf { false }
                 T(t.title, 16, fg, if (current) 700 else 600, lh = 1.4f, modifier = Modifier.weight(1f, fill = false))
                 if (t.vip) { Spacer(Modifier.width(6.dp)); VipTag() }
             }
-            T(t.artist, 13, p.s, lh = 1.4f)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SourceTag(t)
+                T(t.artist, 13, p.s, lh = 1.4f)
+            }
         }
         Spacer(Modifier.width(12.dp))
         Column(horizontalAlignment = Alignment.End) {

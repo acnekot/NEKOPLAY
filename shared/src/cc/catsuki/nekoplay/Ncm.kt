@@ -130,6 +130,8 @@ object Ncm {
 
     /** 按 id 取歌曲详情：每 200 首一个请求，并行发出 */
     suspend fun details(ids: List<String>): List<Track> = coroutineScope {
+        // 插件的歌没有「按 id 取详情」，跳过（它们的信息在列表里已经带全了）
+        if (ids.any { Plugins.isPlugin(it) }) return@coroutineScope details(ids.filter { !Plugins.isPlugin(it) })
         if (ids.any { Qqm.isQq(it) || Kgm.isKg(it) }) { val q = Qqm.details(ids).associateBy { it.id }; val n = details(ids.filter { !Qqm.isQq(it) && !Kgm.isKg(it) }).associateBy { it.id }; return@coroutineScope ids.mapNotNull { q[it] ?: n[it] } }
         val parts = ids.chunked(200).map { part ->
             async {
@@ -156,6 +158,7 @@ object Ncm {
     private val urlMemo = HashMap<String, Pair<Stream, Long>>()
 
     suspend fun stream(id: String, quality: Int): Stream {
+        if (Plugins.isPlugin(id)) return Plugins.stream(id, quality)
         if (Qqm.isQq(id)) return Qqm.stream(id, quality)
         if (Kgm.isKg(id)) return Kgm.stream(id, quality)
         val key = "${id}_$quality"
@@ -179,6 +182,7 @@ object Ncm {
     }
 
     suspend fun lyric(id: String): Pair<String, String?> {
+        if (Plugins.isPlugin(id)) return Plugins.lyric(id).let { it.lrc to it.tr }
         if (Qqm.isQq(id)) return Qqm.lyric(id).let { it.lrc to it.tr }
         if (Kgm.isKg(id)) return Kgm.lyric(id).let { it.lrc to it.tr }
         val j = api("/weapi/song/lyric", JSONObject().put("id", id).put("lv", -1).put("tv", -1).put("rv", -1).put("kv", -1).put("_nmclfl", 1))
@@ -213,6 +217,7 @@ object Ncm {
     }
 
     suspend fun playlistTracks(id: String): List<Track> {
+        if (Plugins.isPlugin(id)) return Plugins.playlistTracks(id)
         if (Qqm.isQq(id)) return Qqm.playlistTracks(id)
         if (Kgm.isKg(id)) return Kgm.playlistTracks(id)
         val ids = api("/weapi/v6/playlist/detail", JSONObject().put("id", id).put("n", 0).put("s", 0))
@@ -221,7 +226,7 @@ object Ncm {
     }
 
     // ---------- 歌手 / 专辑 / 用户 ----------
-    suspend fun artist(id: String): Artist = if (Qqm.isQq(id)) Qqm.artist(id) else if (Kgm.isKg(id)) Kgm.artist(id) else try { artistV1(id) } catch (e: Exception) {
+    suspend fun artist(id: String): Artist = if (Plugins.isPlugin(id)) Plugins.artist(id) else if (Qqm.isQq(id)) Qqm.artist(id) else if (Kgm.isKg(id)) Kgm.artist(id) else try { artistV1(id) } catch (e: Exception) {
         // 老接口被拦（返回 HTML）时，换成 头部信息 + 热门 50 首 两个新接口拼起来
         runCatching {
             val d = api("/weapi/artist/head/info/get", JSONObject().put("id", id)).optJSONObject("data") ?: throw e
@@ -247,6 +252,7 @@ object Ncm {
 
     /** 歌手的专辑分页 → (这一页, 还有没有更多) */
     suspend fun artistAlbumsPage(id: String, offset: Int, limit: Int = 60): Pair<List<Album>, Boolean> {
+        if (Plugins.isPlugin(id)) return emptyList<Album>() to false
         if (Qqm.isQq(id)) return Qqm.artistAlbums(id, offset, limit)
         if (Kgm.isKg(id)) return emptyList<Album>() to false
         val j = api("/weapi/artist/albums/$id", JSONObject().put("limit", limit).put("offset", offset).put("total", true))
@@ -255,6 +261,7 @@ object Ncm {
     }
 
     suspend fun album(id: String): Pair<Album, List<Track>> {
+        if (Plugins.isPlugin(id)) return Plugins.album(id)
         if (Qqm.isQq(id)) return Qqm.album(id)
         if (Kgm.isKg(id)) return Kgm.album(id)
         val j = api("/weapi/v1/album/$id")
@@ -281,6 +288,7 @@ object Ncm {
     }
 
     suspend fun like(id: String, like: Boolean) {
+        if (Plugins.isPlugin(id)) return Plugins.like(id, like)
         if (Kgm.isKg(id)) return // 酷狗的歌只记在本机
         if (Qqm.isQq(id)) return Qqm.like(id, like) // 登录 QQ 音乐时同步到它的「我喜欢」，没登录只记在本机
         api("/weapi/radio/like", JSONObject().put("alg", "itembased").put("trackId", id).put("like", like).put("time", "3"))
@@ -289,6 +297,7 @@ object Ncm {
     // ---------- 第 1 批：私人FM / 逐字歌词 / 评论 / 相似 / 搜索 ----------
     /** 歌词全套：普通 LRC、翻译、逐字（yrc，没有就是 null） */
     suspend fun lyricFull(id: String): LyricData {
+        if (Plugins.isPlugin(id)) return Plugins.lyric(id)
         if (Qqm.isQq(id)) return Qqm.lyric(id)
         if (Kgm.isKg(id)) return Kgm.lyric(id)
         val j = api("/weapi/song/lyric", JSONObject().put("id", id).put("lv", -1).put("tv", -1).put("rv", -1).put("kv", -1).put("yv", -1).put("ytv", -1).put("_nmclfl", 1))
@@ -307,7 +316,7 @@ object Ncm {
 
     /** 歌曲评论：hot=true 热门，false 最新 → (评论, 总数) */
     suspend fun comments(id: String, hot: Boolean, offset: Int, before: Long = 0): Pair<List<Comment>, Int> {
-        if (Qqm.isQq(id) || Kgm.isKg(id)) return emptyList<Comment>() to 0
+        if (Qqm.isQq(id) || Kgm.isKg(id) || Plugins.isPlugin(id)) return emptyList<Comment>() to 0
         // 热门用新版接口：带楼层回复数（cursor = normalHot#偏移）；最新还用老接口（按时间排）
         if (hot) runCatching {
             val d = api("/weapi/v2/resource/comments", JSONObject().put("threadId", "R_SO_4_$id").put("pageNo", offset / 20 + 1).put("pageSize", 20)
@@ -338,18 +347,18 @@ object Ncm {
     }
 
     suspend fun simiSongs(id: String): List<Track> {
-        if (Qqm.isQq(id) || Kgm.isKg(id)) return emptyList()
+        if (Qqm.isQq(id) || Kgm.isKg(id) || Plugins.isPlugin(id)) return emptyList()
         val a = api("/weapi/v1/discovery/simiSong", JSONObject().put("songid", id).put("limit", 50).put("offset", 0)).optJSONArray("songs") ?: JSONArray()
         return details((0 until a.length()).map { a.getJSONObject(it).get("id").toString() })
     }
     suspend fun simiArtists(id: String): List<Artist> {
-        if (Qqm.isQq(id) || Kgm.isKg(id)) return emptyList()
+        if (Qqm.isQq(id) || Kgm.isKg(id) || Plugins.isPlugin(id)) return emptyList()
         val a = api("/weapi/discovery/simiArtist", JSONObject().put("artistid", id)).optJSONArray("artists") ?: JSONArray()
         return (0 until a.length()).map { a.getJSONObject(it).let { o -> Artist(o.get("id").toString(), o.optString("name"), pic(o.optString("picUrl")), "", o.optInt("musicSize"), o.optInt("albumSize"), emptyList()) } }
     }
     private fun plOf(o: JSONObject) = Playlist(o.get("id").toString(), o.optString("name"), o.optInt("trackCount"), pic(o.optString("coverImgUrl").ifEmpty { o.optString("picUrl") }), mine = false)
     suspend fun simiPlaylists(songId: String): List<Playlist> {
-        if (Qqm.isQq(songId) || Kgm.isKg(songId)) return emptyList()
+        if (Qqm.isQq(songId) || Kgm.isKg(songId) || Plugins.isPlugin(songId)) return emptyList()
         val a = api("/weapi/discovery/simiPlaylist", JSONObject().put("songid", songId).put("limit", 50).put("offset", 0)).optJSONArray("playlists") ?: JSONArray()
         return (0 until a.length()).map { plOf(a.getJSONObject(it)) }
     }
@@ -461,12 +470,12 @@ object Ncm {
 
     /** 听歌记录回传：startplay 进「最近播放」，play（带收听秒数）计入听歌排行 */
     suspend fun scrobbleStart(id: String) = runCatching {
-        if (Qqm.isQq(id) || Kgm.isKg(id)) return@runCatching
+        if (Qqm.isQq(id) || Kgm.isKg(id) || Plugins.isPlugin(id)) return@runCatching
         api("/weapi/feedback/weblog", JSONObject().put("logs", JSONArray().put(JSONObject().put("action", "startplay")
             .put("json", JSONObject().put("id", id).put("type", "song").put("mainsite", "1").put("mainsiteWeb", "1").put("content", "id="))).toString()))
     }
     suspend fun scrobble(id: String, seconds: Long) = runCatching {
-        if (Qqm.isQq(id) || Kgm.isKg(id)) return@runCatching
+        if (Qqm.isQq(id) || Kgm.isKg(id) || Plugins.isPlugin(id)) return@runCatching
         api("/weapi/feedback/weblog", JSONObject().put("logs", JSONArray().put(JSONObject().put("action", "play")
             .put("json", JSONObject().put("download", 0).put("end", "playend").put("id", id).put("sourceId", "").put("time", seconds)
                 .put("type", "song").put("wifi", 0).put("source", "list").put("mainsite", "1").put("mainsiteWeb", "1").put("content", "id="))).toString()))

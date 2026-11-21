@@ -40,13 +40,19 @@ object QqStore {
 
 /** 搜索来源：0 网易云 / 1 QQ 音乐 / 2 酷狗 */
 object SearchSource {
-    var src by mutableIntStateOf(0)
-    val qq get() = src == 1
-    val kg get() = src == 2
-    val labels get() = Features.sources.map { listOf("网易云", "QQ 音乐", "酷狗")[it] }
+    /** "0" 网易云 / "1" QQ 音乐 / "2" 酷狗 / "@插件id" */
+    var key by mutableStateOf("0")
+    var src: Int get() = key.toIntOrNull() ?: -1
+        set(v) { key = v.toString() }
+    val qq get() = key == "1"
+    val kg get() = key == "2"
+    val plugin: String? get() = key.takeIf { it.startsWith("@") }?.drop(1)
+    /** (名字, key)：开着的内置音源 + 开着且能搜索的插件 */
+    val options: List<Pair<String, String>> get() = Features.sources.map { listOf("网易云", "QQ 音乐", "酷狗")[it] to it.toString() } +
+        Plugins.enabled.filter { it.has("search") || it.caps.isEmpty() }.map { it.name to "@" + it.id }
+    val labels get() = options.map { it.first }
     /** 当前选的来源被关掉了就换成第一个开着的 */
-    fun fix() { val s = Features.sources; if (src !in s && s.isNotEmpty()) src = s.first() }
-    fun idOf(label: String) = when (label) { "QQ 音乐" -> 1; "酷狗" -> 2; else -> 0 }
+    fun fix() { val o = options.map { it.second }; if (key !in o && o.isNotEmpty()) key = o.first() }
 }
 
 /** 曲库页里的 QQ 音乐区：没登录时一行入口，登录后列出歌单（第一个是「我喜欢」） */

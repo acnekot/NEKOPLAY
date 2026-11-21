@@ -54,6 +54,7 @@ object Credentials {
 class Headers internal constructor(internal val list: List<Pair<String, String>>) {
     operator fun get(name: String): String? = list.lastOrNull { it.first.equals(name, true) }?.second
     fun values(name: String) = list.filter { it.first.equals(name, true) }.map { it.second }
+    fun names(): Set<String> = list.mapTo(LinkedHashSet()) { it.first }
 }
 
 class Request private constructor(val url: String, val method: String, val headers: Headers, val body: RequestBody?) {
