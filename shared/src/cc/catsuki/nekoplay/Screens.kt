@@ -795,7 +795,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         if (Debug.on) item { NavRow("请求记录", "最近的接口请求和返回内容", "${Debug.reqs.collectAsState().value.size} 条") { nav.push(Page.DebugLog) } }
        }
        "about" -> {
-        item { NavRow("版本", null, "0.3.0", clickable = false) {} }
+        item { NavRow("版本", null, APP_VERSION, clickable = false) {} }
         item { NavRow("源代码", "github.com/acnekot/NEKOPLAY", null, clickable = false) {} }
        }
       }

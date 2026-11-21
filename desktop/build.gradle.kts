@@ -27,6 +27,10 @@ dependencies {
     implementation("io.github.dokar3:quickjs-kt:1.0.18")
 }
 
+// 版本号统一写在 shared/…/Version.kt
+val appVersion = Regex("APP_VERSION = \"([^\"]+)\"").find(file("../shared/src/cc/catsuki/nekoplay/Version.kt").readText())!!.groupValues[1]
+// Windows 安装包和 macOS 要求主版本号 ≥ 1：这两个平台用 1.次版本.修订（0.5.0 → 1.5.0），程序里显示的仍是真实版本号
+val installerVersion = appVersion.split('.').let { (_, b, c) -> "1.$b.$c" }
 compose.desktop {
     application {
         mainClass = "cc.catsuki.nekoplay.MainKt"
@@ -37,14 +41,14 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb) // AppImage 和 dmg 共用输出目录会冲突；免安装版另外打 zip
             packageName = "NEKOPLAY"
-            packageVersion = "1.0.0" // Windows 安装包和 macOS 要求主版本号 ≥ 1
+            packageVersion = appVersion
             description = "NEKOPLAY music player" // 安装包元数据用英文：WiX 默认代码页处理不了中文
             vendor = "acnekot"
             modules("java.sql", "jdk.unsupported", "jdk.management") // jdk.management：性能浮窗读 CPU
             // 播放内核 libmpv：打包时放进 resources/<系统>/（由 GitHub Actions 下载），装好就能直接播放
             appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
-            windows { menuGroup = "NEKOPLAY"; shortcut = true; upgradeUuid = "8f2a6c3e-5b1d-4e7a-9c40-3d2f1a6b7e91"; iconFile.set(project.file("icons/icon.ico")) }
-            macOS { iconFile.set(project.file("icons/icon.icns")) }
+            windows { packageVersion = installerVersion; menuGroup = "NEKOPLAY"; shortcut = true; upgradeUuid = "8f2a6c3e-5b1d-4e7a-9c40-3d2f1a6b7e91"; iconFile.set(project.file("icons/icon.ico")) }
+            macOS { packageVersion = installerVersion; dmgPackageVersion = installerVersion; iconFile.set(project.file("icons/icon.icns")) }
             linux { iconFile.set(project.file("icons/icon.png")) }
         }
     }

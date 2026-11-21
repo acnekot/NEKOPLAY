@@ -2,15 +2,17 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+// 版本号统一写在 shared/…/Version.kt
+val appVersion = Regex("APP_VERSION = \"([^\"]+)\"").find(rootProject.file("shared/src/cc/catsuki/nekoplay/Version.kt").readText())!!.groupValues[1]
 android {
     namespace = "cc.catsuki.nekoplay"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "cc.catsuki.nekoplay.native"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersion.split('.').map { it.toInt() }.let { (a, b, c) -> a * 10000 + b * 100 + c }   // 0.5.0 → 500
+        versionName = appVersion
     }
     buildTypes {
         release {

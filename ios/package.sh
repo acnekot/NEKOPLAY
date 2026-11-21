@@ -2,7 +2,7 @@
 # 在 macOS 上把链接好的可执行文件装成 NEKOPLAY.app，再打成未签名 IPA（用 AltStore / Sideloadly / 巨魔等自签安装）
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION="${VERSION:-0.3.0}"; BUILD="${BUILD:-1}"
+VERSION="${VERSION:-$(sed -n 's/.*APP_VERSION = "\([^"]*\)".*/\1/p' ../shared/src/cc/catsuki/nekoplay/Version.kt)}"; BUILD="${BUILD:-1}"
 SDK=$(xcrun --sdk iphoneos --show-sdk-version)
 OUT=build/ipa; APP=$OUT/Payload/NEKOPLAY.app
 rm -rf "$OUT"; mkdir -p "$APP/font"
