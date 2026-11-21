@@ -20,7 +20,7 @@
     {
       "id": "qqmusic",
       "name": "QQ 音乐",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "author": "NEKOPLAY",
       "desc": "QQ 音乐音源：搜索、播放、歌词、歌单、专辑、歌手、排行榜，QQ 扫码登录后看自己的歌单",
       "url": "qqmusic.js"

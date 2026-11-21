@@ -1,6 +1,6 @@
 // @id qqmusic
 // @name QQ 音乐
-// @version 1.2.0
+// @version 1.2.1
 // @author NEKOPLAY
 // @desc QQ 音乐音源：搜索、播放、歌词、歌单、专辑、歌手、排行榜，QQ 扫码登录后看自己的歌单
 // @api 1
@@ -12,10 +12,12 @@ const CDN = 'https://isure.stream.qqmusic.qq.com/';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 // ---------- 工具 ----------
+// 用 BigInt：普通数字乘 33 会超过 2^53 丢精度，算出的 ptqrtoken 不对，QQ 会直接回 403
 function hash33(s, h0) {
-  let h = h0 || 0;
-  for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) % 281474976710656; // 保留 48 位
-  return h % 2147483648;
+  const M = (1n << 48n) - 1n;
+  let h = BigInt(h0 || 0);
+  for (let i = 0; i < s.length; i++) h = ((h << 5n) + h + BigInt(s.charCodeAt(i))) & M;
+  return Number(h & 2147483647n);
 }
 function guid() {
   let g = nk.store.get('guid');
@@ -257,8 +259,9 @@ nk.register({
       await finish(await call('music.login.LoginServer', 'Login', { code: m[2], strAppid: WX_APPID }, { tmeLoginType: 1 }), 1);
       return { state: 'done' };
     }
-    const t = (await req('https://xui.ptlogin2.qq.com/ssl/ptqrlogin?' + qs({ u1: U1, ptqrtoken: hash33(key), ptredirect: '0', h: '1', t: '1', g: '1', from_ui: '1', ptlang: '2052', action: '0-0-' + Date.now(), js_ver: '25100115', js_type: '1', login_sig: jarGet('pt_login_sig') || '', pt_uistyle: '40', aid: '716027609', daid: '383', pt_3rd_aid: '100497308', o1vId: '', pt_js_version: 'v1.0.0' }))).body;
-    const m = /ptuiCB\((.*?)\)/.exec(t); if (!m) return { state: 'wait' };
+    const pr = (await req('https://xui.ptlogin2.qq.com/ssl/ptqrlogin?' + qs({ u1: U1, ptqrtoken: hash33(key), ptredirect: '0', h: '1', t: '1', g: '1', from_ui: '1', ptlang: '2052', action: '0-0-' + Date.now(), js_ver: '25100115', js_type: '1', login_sig: jarGet('pt_login_sig') || '', pt_uistyle: '40', aid: '716027609', daid: '383', pt_3rd_aid: '100497308', o1vId: '', pt_js_version: 'v1.0.0' })));
+    const t = pr.body;
+    const m = /ptuiCB\((.*?)\)/.exec(t); if (!m) return { state: 'wait', message: pr.status !== 200 ? 'QQ 返回 HTTP ' + pr.status + '，还在重试' : undefined };
     const args = (m[1].match(/'((?:\\.|[^'])*)'/g) || []).map(x => x.slice(1, -1));
     const code = Number(args[0]);
     const st = qrState(code); if (st !== 'done') return { state: st };
