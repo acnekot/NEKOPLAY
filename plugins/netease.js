@@ -68,11 +68,12 @@ function commentOf(c) {
 }
 /** 按 id 取歌曲详情：每 200 首一个请求 */
 async function details(ids) {
-  const by = {};
-  for (let i = 0; i < ids.length; i += 200) {
-    const part = ids.slice(i, i + 200);
-    const a = (await api('/weapi/v3/song/detail', { c: JSON.stringify(part.map(id => ({ id: Number(id) }))) })).songs || [];
-    a.forEach(s => { const t = song(s); by[t.id] = t; });
+  // 每批 200 首，最多 4 批同时请求（大歌单快一些，也不至于一下子打太多）
+  const by = {}, parts = [];
+  for (let i = 0; i < ids.length; i += 200) parts.push(ids.slice(i, i + 200));
+  for (let i = 0; i < parts.length; i += 4) {
+    const rs = await Promise.all(parts.slice(i, i + 4).map(part => api('/weapi/v3/song/detail', { c: JSON.stringify(part.map(id => ({ id: Number(id) }))) })));
+    rs.forEach(r => (r.songs || []).forEach(s => { const t = song(s); by[t.id] = t; }));
   }
   return ids.map(id => by[id]).filter(Boolean);
 }

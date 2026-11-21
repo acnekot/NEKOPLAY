@@ -40,6 +40,8 @@ object Backup {
 
     /** 登录信息：每个插件自己的存储（cookie、凭证都在里面） */
     private val LOGINS get() = Plugins.list.value.map { "plugin_" + it.id } + "davmusic"
+    /** 备份里有没有登录信息（老版本的内置音源，或插件存储 / WebDAV 音乐） */
+    fun hasLogin(root: JSONObject) = root.keys().asSequence().any { it in setOf("ncm", "qq", "kugou", "davmusic") || it.startsWith("plugin_") }
     fun dump(login: Boolean = withLogin): JSONObject {
         val root = JSONObject().put("v", 1).put("from", Plat.impl.name).put("at", System.currentTimeMillis())
         for (name in SETS + if (login) LOGINS else emptyList()) {
@@ -166,7 +168,7 @@ object Backup {
     var login by remember { mutableStateOf(false) }
     fun importText(text: String) {
         val root = runCatching { JSONObject(text.trim()) }.getOrNull() ?: run { nav.toast = "不是有效的配置"; return }
-        nav.sheet = SheetSpec("导入配置？", "会覆盖本机现在的设置" + (if (root.has("ncm") || root.has("qq") || root.has("kugou")) "，包括里面带的账号登录" else ""), listOf(
+        nav.sheet = SheetSpec("导入配置？", "会覆盖本机现在的设置" + (if (Backup.hasLogin(root)) "，包括里面带的账号登录" else ""), listOf(
             SheetItem("导入并覆盖", danger = true) {
                 scope.launch {
                     runCatching { Backup.apply(root) }.onSuccess { Boot.reloadPrefs(); nav.toast = "已导入，部分设置和登录重启后生效" }.onFailure { nav.toast = "导入失败：${it.message}" }

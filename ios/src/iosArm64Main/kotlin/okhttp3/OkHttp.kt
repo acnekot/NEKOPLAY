@@ -59,6 +59,8 @@ class Headers internal constructor(internal val list: List<Pair<String, String>>
 
 class Request private constructor(val url: String, val method: String, val headers: Headers, val body: RequestBody?) {
     fun header(n: String) = headers[n]
+    /** 跟随跳转后的落地地址（和 OkHttp 的 response.request.url 一致） */
+    internal fun withUrl(u: String) = if (u == url) this else Request(u, method, headers, body)
     class Builder {
         private var url = ""; private var method = "GET"; private var body: RequestBody? = null
         private val hs = ArrayList<Pair<String, String>>()
@@ -158,7 +160,7 @@ class OkHttpClient private constructor(private val connectMs: Long, private val 
                 hs += "Set-Cookie" to parts.joinToString("; ")
             }
             val ct = hs.lastOrNull { it.first.equals("Content-Type", true) }?.second
-            return Response(r, hr.statusCode.toInt(), NSHTTPURLResponse.localizedStringForStatusCode(hr.statusCode), Headers(hs),
+            return Response(r.withUrl(hr.URL?.absoluteString ?: r.url), hr.statusCode.toInt(), NSHTTPURLResponse.localizedStringForStatusCode(hr.statusCode), Headers(hs),
                 ResponseBody(data?.toByteArray() ?: ByteArray(0), ct))
         }
     }

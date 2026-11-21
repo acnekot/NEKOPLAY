@@ -37,7 +37,8 @@ data class Mv(val id: String, val name: String, val cover: String?, val artist: 
 data class Radio(val id: String, val name: String, val pic: String?, val desc: String, val count: Int)
 data class LyricData(val lrc: String, val tr: String?, val yrc: String?)
 data class UserBrief(val uid: String, val name: String, val avatar: String?, val signature: String)
-data class Stream(val url: String, val format: String, val kbps: Int, val level: String)
+/** trial：只能放试听片段时给用户看的提示 */
+data class Stream(val url: String, val format: String, val kbps: Int, val level: String, val trial: String? = null)
 class NcmError(msg: String) : Exception(msg)
 
 /**

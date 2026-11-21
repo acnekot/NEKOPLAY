@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 酷狗排行榜的老接口只有 http；其它站点仍然只走 https -->
+<!-- 允许 http：局域网 NAS / OpenList 的 WebDAV、自建音源插件大多是 http://192.168.x.x；酷狗排行榜的老接口也只有 http -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">mobilecdnbj.kugou.com</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors><certificates src="system"/></trust-anchors>
+    </base-config>
 </network-security-config>

@@ -4,10 +4,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.dokar.quickjs.QuickJs
-import com.dokar.quickjs.binding.asyncFunction
 import com.dokar.quickjs.binding.define
 import com.dokar.quickjs.binding.function
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -67,23 +69,56 @@ class JsSource(val file: File) {
         }
     }
 
-    fun close() { js?.close(); js = null }
+    fun close() {
+        scope.coroutineContext.cancelChildren()
+        waiting.values.toList().forEach { it.complete(false to "插件已关闭") }
+        js?.close(); js = null
+    }
+
+    /*
+     * 并发：quickjs-kt 的 evaluate 会一直等到这次求值里的异步任务全部结束，多个 evaluate 之间是排队的。
+     * 所以这里自己做事件循环：evaluate 只负责「开始一次调用」或「把一个网络结果交回脚本」，马上返回；
+     * 网络请求在脚本外面并发跑，完成后再用一次很短的 evaluate 唤醒等待它的 Promise。
+     * 这样一个插件里慢的调用（微信扫码长轮询、大歌单）不会挡住切歌、歌词这些。
+     */
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+    private var seq = 0L
+    /** 等结果的调用 / 等交回脚本的网络结果；只在 lock 里读写 */
+    private val waiting = HashMap<Long, kotlinx.coroutines.CompletableDeferred<Pair<Boolean, String?>>>()
+    private val results = HashMap<Long, Pair<Boolean, String>>()
 
     /** 调用脚本里 source 对象的方法：参数和返回值都是 JSON */
     suspend fun call(fn: String, vararg args: Any?): Any? {
         if (js == null && !start()) throw NcmError("音源「$name」加载失败：$error")
         val argJson = JSONArray().apply { args.forEach { put(it ?: JSONObject.NULL) } }.toString()
         val t0 = System.currentTimeMillis()
-        val out = try {
-            lock.withLock { js!!.evaluate<String?>("await __invoke(${q(fn)}, ${q(argJson)})", filename = "call.js") }
-        } catch (e: Throwable) {
-            val msg = (e.message ?: e.toString()).substringBefore("\n")
+        val d = kotlinx.coroutines.CompletableDeferred<Pair<Boolean, String?>>()
+        var cid = 0L
+        val (ok, out) = try {
+            lock.withLock {
+                val q = js ?: throw NcmError("音源「$name」已关闭")
+                cid = ++seq; waiting[cid] = d
+                q.evaluate<Any?>("__call($cid, ${q(fn)}, ${q(argJson)})", filename = "call.js")
+            }
+            d.await()
+        } catch (e: kotlinx.coroutines.CancellationException) { lock.withLock { waiting.remove(cid) }; throw e }
+        catch (e: Throwable) { lock.withLock { waiting.remove(cid) }; false to (e.message ?: e.toString()) }
+        if (!ok) {
+            val msg = (out ?: "").substringBefore("\n").removePrefix("Error: ")
             Debug.log("js:$id.$fn", 0, System.currentTimeMillis() - t0, "error", msg)
             throw NcmError(msg)
         }
         Debug.log("js:$id.$fn", 200, System.currentTimeMillis() - t0, "application/json", out ?: "null")
-        if (out == null) return null
+        if (out == null || out == "null") return null
         return when (out.firstOrNull()) { '{' -> JSONObject(out); '[' -> JSONArray(out); else -> JSONArray("[$out]").opt(0) }
+    }
+
+    /** 网络请求在脚本外面跑，完成后把结果交回脚本 */
+    private fun httpStart(rid: Long, req: String) {
+        scope.launch {
+            val r = try { true to http(JSONObject(req)).toString() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Throwable) { false to (e.message ?: e.toString()) }
+            runCatching { lock.withLock { val q = js ?: return@withLock; results[rid] = r; q.evaluate<Any?>("__resolve($rid)", filename = "resolve.js") } }
+        }
     }
 
     // ---------------- 给脚本用的宿主接口 ----------------
@@ -92,7 +127,9 @@ class JsSource(val file: File) {
     @OptIn(ExperimentalEncodingApi::class)
     private fun installHost(q: QuickJs) {
         q.define("__host") {
-            asyncFunction("http") { args -> http(JSONObject(args[0] as String)).toString() }
+            function("httpStart") { args -> httpStart((args[0] as Number).toLong(), args[1] as String); null }
+            function("take") { args -> results.remove((args[0] as Number).toLong())?.let { (ok, v) -> JSONArray().put(ok).put(v).toString() } }
+            function("done") { args -> waiting.remove((args[0] as Number).toLong())?.complete((args[1] as Boolean) to (args.getOrNull(2) as? String)); null }
             function("md5") { args -> Hash.md5((args[0] as String).encodeToByteArray()) }
             function("md5b64") { args -> Hash.md5(Base64.decode(args[0] as String)) }
             function("aes") { args -> aes(JSONObject(args[0] as String)) }
@@ -121,8 +158,10 @@ class JsSource(val file: File) {
         val base = if (o.optBoolean("redirect", true)) Ncm.http else noRedirect
         // timeout：秒，长轮询（微信扫码状态）要等得久一点
         val client = o.optInt("timeout", 0).takeIf { it > 0 }?.let { t -> base.newBuilder().readTimeout(t.toLong(), java.util.concurrent.TimeUnit.SECONDS).build() } ?: base
+        // 调用方取消（比如退出登录页）时把连接也断掉，不让长轮询挂着
+        val call = client.newCall(b.build())
         try {
-            client.newCall(b.build()).execute().use { r ->
+            coroutineScope { val job = async { call.execute() }; try { job.await() } catch (e: kotlinx.coroutines.CancellationException) { call.cancel(); throw e } }.use { r ->
                 val hs = JSONObject()
                 r.headers.names().forEach { n -> hs.put(n.lowercase(), JSONArray(r.headers(n))) }
                 val res = JSONObject().put("status", r.code).put("url", r.request.url.toString()).put("headers", hs)
@@ -151,8 +190,12 @@ class JsSource(val file: File) {
 
         /** 脚本运行前先注入的工具：nk.http / nk.md5 / nk.aes / nk.store / nk.log，以及注册音源用的 nk.register */
         val PRELUDE = """
+            const __p = {}; let __seq = 0;
+            const __http = (req) => new Promise((res, rej) => { const id = ++__seq; __p[id] = { res, rej }; __host.httpStart(id, req); });
+            globalThis.__resolve = (id) => { const p = __p[id]; delete __p[id]; const r = JSON.parse(__host.take(id) || '[false,"无结果"]'); if (p) r[0] ? p.res(r[1]) : p.rej(new Error(r[1])); };
+            globalThis.__call = (cid, fn, args) => { __invoke(fn, args).then(r => __host.done(cid, true, r), e => __host.done(cid, false, String(e && e.message || e))); };
             globalThis.nk = {
-              http: async (o) => { const r = JSON.parse(await __host.http(JSON.stringify(typeof o === 'string' ? { url: o } : o)));
+              http: async (o) => { const r = JSON.parse(await __http(JSON.stringify(typeof o === 'string' ? { url: o } : o)));
                 r.header = (n) => (r.headers[n.toLowerCase()] || [])[0];
                 r.cookies = () => { const m = {}; (r.headers['set-cookie'] || []).forEach(c => { const kv = c.split(';')[0]; const i = kv.indexOf('='); if (i > 0) m[kv.slice(0, i).trim()] = kv.slice(i + 1).trim(); }); return m; };
                 r.json = () => JSON.parse(r.body); return r; },
@@ -278,11 +321,23 @@ object Plugins {
             else -> items.map { track(pid, it) }
         }
     }
+    /** 播放地址缓存：预加载下一首时取到的地址，真正切歌时直接用，不再请求一次（少触发风控） */
+    private class CachedStream(val s: Stream, val at: Long)
+    private val streamCache = HashMap<String, CachedStream>()
+    private val streamLock = kotlinx.coroutines.sync.Mutex()
+    private const val STREAM_TTL = 8 * 60_000L
+    /** 地址放不了（过期 / 失效）时丢掉缓存 */
+    fun forgetStream(id: String) { kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { streamLock.withLock { streamCache.keys.removeAll { it.startsWith("$id|") } } } }
     suspend fun stream(id: String, quality: Int): Stream {
+        val key = "$id|$quality"
+        val now = System.currentTimeMillis()
+        streamLock.withLock { streamCache[key]?.takeIf { now - it.at < STREAM_TTL } }?.let { return it.s }
         val o = of(id).call("stream", raw(id), quality) as? JSONObject ?: throw NcmError("插件没有给出播放地址")
         val url = o.optString("url").ifEmpty { throw NcmError(o.optString("error").ifEmpty { "插件没有给出播放地址" }) }
-        if (o.optBoolean("trial")) Engine.error.value = o.optString("message").ifEmpty { "当前只能放试听片段" }
-        return Stream(url, o.optString("ext").ifEmpty { url.substringBefore('?').substringAfterLast('.', "mp3") }, o.optInt("kbps"), o.optString("level", "standard"))
+        val trial = if (o.optBoolean("trial")) o.optString("message").ifEmpty { "当前只能放试听片段" } else null
+        val st = Stream(url, o.optString("ext").ifEmpty { url.substringBefore('?').substringAfterLast('.', "mp3") }, o.optInt("kbps"), o.optString("level", "standard"), trial)
+        streamLock.withLock { streamCache.entries.removeAll { now - it.value.at >= STREAM_TTL }; streamCache[key] = CachedStream(st, now) }
+        return st
     }
     suspend fun lyric(id: String): LyricData {
         val o = callFor(id, "lyric", raw(id)) as? JSONObject ?: throw NcmError("暂无歌词")

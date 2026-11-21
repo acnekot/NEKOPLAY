@@ -127,7 +127,10 @@ class DesktopPlat : PlatImpl {
         if (f.size > 1) LaunchedEffect(f) { while (true) { delay(f[i].second.coerceAtLeast(20).toLong()); i = (i + 1) % f.size } }
         androidx.compose.foundation.Image(f[i % f.size].first, null, modifier, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
     }
-    private val animCache = HashMap<String, List<Pair<ImageBitmap, Int>>>()
+    /** 动图头像解码后的帧：只留最近 8 个，免得翻评论区时内存一直涨 */
+    private val animCache = java.util.Collections.synchronizedMap(object : LinkedHashMap<String, List<Pair<ImageBitmap, Int>>>(16, .75f, true) {
+        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, List<Pair<ImageBitmap, Int>>>?) = size > 8
+    })
     private fun decodeFrames(url: String): List<Pair<ImageBitmap, Int>> {
         val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0").header("Referer", "https://music.163.com/").build()
         val bytes = Ncm.http.newCall(req).execute().use { it.body!!.bytes() }

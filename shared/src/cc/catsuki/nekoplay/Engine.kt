@@ -135,7 +135,7 @@ object Engine {
             override fun onBuffering(b: Boolean) { state.value = state.value.copy(loading = b) }
             override fun onEnded() = this@Engine.onEnded()
             override fun onAdvanced() = this@Engine.onAdvanced()
-            override fun onError(msg: String) { error.value = "播放失败：$msg"; next() }
+            override fun onError(msg: String) { state.value.current?.let { Plugins.forgetStream(it.id) }; error.value = "播放失败：$msg"; next() }
         }
         // 进度：播放时定时更新
         // 音质参数：开始播放后读一次（读不到就过一会再试）
@@ -199,6 +199,7 @@ object Engine {
                     state.value = state.value.copy(format = hit.second, kbps = 0, cached = true)
                 } else {
                     val s = Ncm.stream(t.id, q)
+                    s.trial?.let { error.value = it }   // 只能放试听：轮到这首真正播放时才提示
                     audio.open(s.url, cacheKey(t.id, s.level), startMs, state.value.want, t); opened = true
                     prefs?.edit()?.putString("fmt_${cacheKey(t.id, s.level)}", s.format)?.apply()
                     state.value = state.value.copy(format = s.format, kbps = s.kbps, cached = false)

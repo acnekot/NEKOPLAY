@@ -14,12 +14,18 @@ android {
         versionCode = appVersion.split('.').map { it.toInt() }.let { (a, b, c) -> a * 10000 + b * 100 + c }   // 0.5.0 → 500
         versionName = appVersion
     }
+    // 正式签名：环境变量里有密钥库就用（GitHub Actions 从 Secrets 解出来），没有就退回 debug 签名
+    val ks = System.getenv("NEKOPLAY_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    if (ks != null) signingConfigs.create("release") {
+        storeFile = ks; storePassword = System.getenv("NEKOPLAY_KEYSTORE_PASS")
+        keyAlias = System.getenv("NEKOPLAY_KEY_ALIAS"); keyPassword = System.getenv("NEKOPLAY_KEY_PASS")
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (ks != null) "release" else "debug")
         }
     }
     buildFeatures { compose = true }
