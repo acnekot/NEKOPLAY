@@ -470,12 +470,17 @@ object Qqm {
 
     private fun stateOf(code: Int) = when (code) { 0, 405 -> QrState.DONE; 66, 408 -> QrState.WAIT; 67, 404 -> QrState.SCANNED; 65, 402 -> QrState.EXPIRED; 68, 403 -> QrState.REFUSED; else -> QrState.WAIT }
 
+    private var loginCookies: Map<String, String> = emptyMap()
     private suspend fun checkQq(q: Qr, step: (String) -> Unit): QrState {
         val text = withContext(Dispatchers.IO) {
             val url = "https://ssl.ptlogin2.qq.com/ptqrlogin?" + query("u1" to "https://graph.qq.com/oauth2.0/login_jump", "ptqrtoken" to hash33(q.id), "ptredirect" to "0",
                 "h" to "1", "t" to "1", "g" to "1", "from_ui" to "1", "ptlang" to "2052", "action" to "0-0-${System.currentTimeMillis()}", "js_ver" to "20102616", "js_type" to "1",
                 "pt_uistyle" to "40", "aid" to "716027609", "daid" to "383", "pt_3rd_aid" to "100497308", "has_onekey" to "1")
-            noRedirect.newCall(Request.Builder().url(url).header("Referer", "https://xui.ptlogin2.qq.com/").header("Cookie", "qrsig=${q.id}").header("User-Agent", UA).build()).execute().use { it.body?.string() ?: "" }
+            noRedirect.newCall(Request.Builder().url(url).header("Referer", "https://xui.ptlogin2.qq.com/").header("Cookie", "qrsig=${q.id}").header("User-Agent", UA).build()).execute().use {
+                // 确认成功时这里会种下 superkey / supertoken 等 .qq.com 的 cookie，后面 check_sig 要带上
+                loginCookies = cookiesOf(it.headers("Set-Cookie")).filterValues { v -> v.isNotEmpty() }
+                it.body?.string() ?: ""
+            }
         }
         val inner = Regex("ptuiCB\\((.*?)\\)").find(text)?.groupValues?.get(1) ?: return QrState.WAIT
         val args = Regex("'((?:\\\\.|[^'])*)'").findAll(inner).map { it.groupValues[1] }.toList()
@@ -490,11 +495,21 @@ object Qqm {
 
     /** 跳转地址本身就是 check_sig，直接请求它拿 p_skey，避免手拆参数时顺序不同拆错 */
     private suspend fun authorizeQq(jump: String, step: (String) -> Unit) {
-        val cookies = withContext(Dispatchers.IO) {
-            noRedirect.newCall(Request.Builder().url(jump).header("Referer", "https://xui.ptlogin2.qq.com/").header("User-Agent", UA).build()).execute().use { cookiesOf(it.headers("Set-Cookie")) }
+        suspend fun sig(url: String) = withContext(Dispatchers.IO) {
+            noRedirect.newCall(Request.Builder().url(url).header("Referer", "https://xui.ptlogin2.qq.com/").header("User-Agent", UA)
+                .apply { if (loginCookies.isNotEmpty()) header("Cookie", loginCookies.entries.joinToString("; ") { "${it.key}=${it.value}" }) }.build()).execute().use { cookiesOf(it.headers("Set-Cookie")) }
                 .filterValues { it.isNotEmpty() }
         }
-        val pSkey = cookies["p_skey"] ?: throw NcmError("QQ 登录：获取 p_skey 失败")
+        var cookies = sig(jump)
+        if (cookies["p_skey"] == null) {
+            // 直接请求跳转地址没拿到：按参数名取出 uin / ptsigx，自己拼一个 check_sig 再试
+            val qs = jump.substringAfter('?', "").split('&').mapNotNull { kv -> kv.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap()
+            val uin = qs["uin"]; val sigx = qs["ptsigx"]
+            if (uin != null && sigx != null) cookies = cookies + sig("https://ssl.ptlogin2.graph.qq.com/check_sig?" + query("uin" to uin, "pttype" to "1", "service" to "ptqrlogin", "nodirect" to "0",
+                "ptsigx" to sigx, "s_url" to "https://graph.qq.com/oauth2.0/login_jump", "ptlang" to "2052", "ptredirect" to "100", "aid" to "716027609", "daid" to "383", "j_later" to "0",
+                "low_login_hour" to "0", "regmaster" to "0", "pt_login_type" to "3", "pt_aid" to "0", "pt_aaid" to "16", "pt_light" to "0", "pt_3rd_aid" to "100497308"))
+        }
+        val pSkey = cookies["p_skey"] ?: throw NcmError("QQ 登录：获取 p_skey 失败（收到 ${cookies.keys.joinToString().ifEmpty { "无 cookie" }}；${jump.substringBefore('?').takeLast(60)}）")
         val location = withContext(Dispatchers.IO) {
             val form = FormBody.Builder().add("response_type", "code").add("client_id", "100497308")
                 .add("redirect_uri", "https://y.qq.com/portal/wx_redirect.html?login_type=1&surl=https://y.qq.com/")

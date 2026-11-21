@@ -141,6 +141,20 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
         return { l.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     }
 
+    @Composable override fun filePicker(onPick: (ByteArray) -> Unit): (() -> Unit)? {
+        val c = LocalContext.current
+        val l = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) c.contentResolver.openInputStream(uri)?.use { onPick(it.readBytes()) } }
+        return { l.launch(arrayOf("*/*")) }
+    }
+    @Composable override fun fileSaver(onDone: (String?) -> Unit): ((String, ByteArray) -> Unit)? {
+        val c = LocalContext.current
+        val data = remember { arrayOfNulls<ByteArray>(1) }
+        val l = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+            if (uri == null) onDone(null) else { c.contentResolver.openOutputStream(uri)?.use { it.write(data[0]) }; onDone(uri.lastPathSegment ?: "已保存") }
+        }
+        return { name, bytes -> data[0] = bytes; l.launch(name) }
+    }
+
     @Composable override fun AnimatedImage(url: String, modifier: Modifier) =
         coil3.compose.AsyncImage(if (UiPref.lowMem) img(url, 256) else url, null, modifier, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
 

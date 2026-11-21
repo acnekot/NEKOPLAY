@@ -88,6 +88,15 @@ class DesktopPlat : PlatImpl {
         return { open = true }
     }
 
+    @Composable override fun filePicker(onPick: (ByteArray) -> Unit): (() -> Unit)? = {
+        val d = java.awt.FileDialog(null as java.awt.Frame?, "选择文件", java.awt.FileDialog.LOAD); d.isVisible = true
+        if (d.file != null) onPick(File(d.directory, d.file).readBytes())
+    }
+    @Composable override fun fileSaver(onDone: (String?) -> Unit): ((String, ByteArray) -> Unit)? = { name, bytes ->
+        val d = java.awt.FileDialog(null as java.awt.Frame?, "保存", java.awt.FileDialog.SAVE); d.file = name; d.isVisible = true
+        if (d.file == null) onDone(null) else { val f = File(d.directory, d.file); f.writeBytes(bytes); onDone(f.absolutePath) }
+    }
+
     @Composable override fun BackHandler(enabled: Boolean, onBack: () -> Unit) {
         val en by rememberUpdatedState(enabled); val cb by rememberUpdatedState(onBack)
         DisposableEffect(Unit) {

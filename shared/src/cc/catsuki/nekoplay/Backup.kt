@@ -38,14 +38,16 @@ object Backup {
     private fun target(): String { val u = url.trim(); require(u.startsWith("http")) { "地址要以 http:// 或 https:// 开头" }; return u.trimEnd('/') + "/nekoplay-backup.json" }
     private fun req(u: String) = Request.Builder().url(u).apply { if (user.isNotEmpty()) header("Authorization", Credentials.basic(user, pass, Charsets.UTF_8)) }
 
-    private fun dump(): JSONObject {
+    private val LOGINS = listOf("ncm", "qq", "kugou")
+    fun dump(login: Boolean = withLogin): JSONObject {
         val root = JSONObject().put("v", 1).put("from", Plat.impl.name).put("at", System.currentTimeMillis())
-        for (name in SETS + if (withLogin) listOf("ncm") else emptyList()) {
+        for (name in SETS + if (login) LOGINS else emptyList()) {
             val o = JSONObject()
             Plat.prefs(name).all().forEach { (k, v) ->
                 when (v) {
                     is Set<*> -> o.put(k, JSONArray(v.map { it.toString() }))
-                    is Boolean, is Int, is Long, is Float, is Double -> o.put(k, v)
+                    is Long -> o.put(k, JSONObject().put("L", v))   // 标出 Long，恢复时类型不会变成 Int
+                    is Boolean, is Int, is Float, is Double -> o.put(k, v)
                     null -> {}
                     else -> o.put(k, v.toString())
                 }
@@ -65,8 +67,13 @@ object Backup {
     /** 下载并写回；返回备份时间 */
     suspend fun restore(): Long = withContext(Dispatchers.IO) {
         val text = Ncm.http.newCall(req(target()).get().build()).execute().use { r -> if (!r.isSuccessful) throw Exception(if (r.code == 404) "还没有备份" else "HTTP ${r.code}"); r.body!!.string() }
-        val root = JSONObject(text)
-        for (name in SETS + if (withLogin) listOf("ncm") else emptyList()) {
+        apply(JSONObject(text))
+    }
+
+    /** 把备份写回本机；备份里有登录信息就一起恢复。返回备份时间 */
+    suspend fun apply(root: JSONObject): Long = withContext(Dispatchers.IO) {
+        if (!root.has("v") || !root.has("ui")) throw Exception("这不是 NEKOPLAY 的配置文件")
+        for (name in SETS + LOGINS) {
             val o = root.optJSONObject(name) ?: continue
             val e = Plat.prefs(name).edit()
             o.keys().forEach { k ->
@@ -77,6 +84,7 @@ object Backup {
                     is Double -> e.putFloat(k, v.toFloat())
                     is Float -> e.putFloat(k, v)
                     is JSONArray -> e.putStringSet(k, (0 until v.length()).map { v.getString(it) }.toSet())
+                    is JSONObject -> if (v.has("L")) e.putLong(k, v.optLong("L")) else e.putString(k, v.toString())
                     else -> e.putString(k, v.toString())
                 }
             }
@@ -103,7 +111,7 @@ object Backup {
         }
     }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 28.dp)) {
-        item {
+        if (Features.on("webdav")) item {
             Column {
                 Tag("BACKUP"); Spacer(Modifier.height(4.dp))
                 T("WebDAV 备份", Fs.HERO, w = 800, lh = 1.3f)
@@ -133,6 +141,52 @@ object Backup {
                 }
                 if (Backup.last > 0) T("上次备份：" + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm").format(java.util.Date(Backup.last)), 12, p.s, mono = true, modifier = Modifier.padding(top = 10.dp))
             }
+        }
+        item { LocalBackup() }
+    }
+}
+
+
+/** 本地配置备份：导出成文件 / 复制成文字，换设备或重装后导入 */
+@Composable private fun LocalBackup() {
+    val nav = LocalNav.current
+    val p = c
+    val scope = rememberCoroutineScope()
+    val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+    var login by remember { mutableStateOf(false) }
+    fun importText(text: String) {
+        val root = runCatching { JSONObject(text.trim()) }.getOrNull() ?: run { nav.toast = "不是有效的配置"; return }
+        nav.sheet = SheetSpec("导入配置？", "会覆盖本机现在的设置" + (if (root.has("ncm") || root.has("qq") || root.has("kugou")) "，包括里面带的账号登录" else ""), listOf(
+            SheetItem("导入并覆盖", danger = true) {
+                scope.launch {
+                    runCatching { Backup.apply(root) }.onSuccess { Boot.reloadPrefs(); nav.toast = "已导入，部分设置和登录重启后生效" }.onFailure { nav.toast = "导入失败：${it.message}" }
+                }
+            }))
+    }
+    val saver = Plat.impl.fileSaver { where -> if (where != null) nav.toast = "已导出：$where" }
+    val picker = Plat.impl.filePicker { bytes -> importText(bytes.decodeToString()) }
+    Column(Modifier.padding(top = 30.dp)) {
+        Tag("LOCAL"); Spacer(Modifier.height(4.dp))
+        T("配置备份 / 导入", Fs.HERO, w = 800, lh = 1.3f)
+        T("把设置、主题、首页布局、效果器、喜欢和最近播放导出成一个文件（或一段文字），在别的设备上导入", 13, p.s, lines = 3)
+        Spacer(Modifier.height(6.dp))
+        SwitchRow("包含账号登录", "网易云 / QQ 音乐 / 酷狗的登录信息会以明文写进文件，别发给别人", login) { login = it }
+        Spacer(Modifier.height(10.dp))
+        ActionRow {
+            if (saver != null) {
+                PrimaryBar("导出到文件", NIcons.download, Modifier.weight(1f)) {
+                    val name = "nekoplay-config-" + java.text.SimpleDateFormat("yyyyMMdd-HHmm").format(java.util.Date()) + ".json"
+                    saver(name, Backup.dump(login).toString(2).encodeToByteArray())
+                }
+                Spacer(Modifier.width(10.dp))
+            }
+            if (picker != null) OutlineBtn("从文件导入", pad = 14.dp) { picker() }
+        }
+        Spacer(Modifier.height(10.dp))
+        ActionRow {
+            OutlineBtn("复制配置", pad = 14.dp) { clip.setText(androidx.compose.ui.text.AnnotatedString(Backup.dump(login).toString())); nav.toast = "已复制到剪贴板" }
+            Spacer(Modifier.width(10.dp))
+            OutlineBtn("从剪贴板导入", pad = 14.dp) { clip.getText()?.text?.let { importText(it) } ?: run { nav.toast = "剪贴板是空的" } }
         }
     }
 }

@@ -628,7 +628,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { SecRow("存储", "下载、本地音乐、播放缓存") { nav.push(Page.SetSub("storage")) } }
         if (Plat.isDesktop) item { SecRow("桌面", "托盘、侧拉模式、Discord、快捷键") { nav.push(Page.SetSub("desktop")) } }
         item { SecRow("功能管理", "开关内置插件：${Features.list.count { Features.on(it.id) }}/${Features.list.size} 已开启") { nav.push(Page.Feats) } }
-        item { SecRow("数据", "WebDAV 备份、听歌统计") { nav.push(Page.SetSub("data")) } }
+        item { SecRow("数据", "配置备份 / 导入、WebDAV、听歌统计") { nav.push(Page.SetSub("data")) } }
         item { SecRow("高级", "性能、内存、调试") { nav.push(Page.SetSub("adv")) } }
         item { SecRow("关于", "0.3.0") { nav.push(Page.SetSub("about")) } }
        }
@@ -743,7 +743,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         item { NavRow("快捷键", "播放、切歌、音量等键盘操作", "${Keys.HELP.size} 个") { nav.push(Page.KeyMap) } }
        }
        "data" -> {
-        if (Features.on("webdav")) item { NavRow("WebDAV 备份", "设置、喜欢和最近播放备份到网盘，换设备一键恢复", if (Backup.last > 0) java.text.SimpleDateFormat("MM-dd HH:mm").format(java.util.Date(Backup.last)) else "未备份") { nav.push(Page.Backup) } }
+        item { NavRow("备份 / 导入", "导出配置文件、从文件或剪贴板导入" + if (Features.on("webdav")) "，或备份到 WebDAV 网盘" else "", if (Backup.last > 0) java.text.SimpleDateFormat("MM-dd").format(java.util.Date(Backup.last)) else null) { nav.push(Page.Backup) } }
         if (Features.on("stats")) item { NavRow("听歌统计", "本机的播放次数和时长", null) { nav.push(Page.Stats) } }
        }
        "adv" -> {
