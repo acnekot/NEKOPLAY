@@ -340,7 +340,7 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                 }
                 Spacer(Modifier.height(16.dp))
                 ActionRow {
-                    PrimaryBar("播放全部", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
+                    PrimaryBar("播放", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(list, 0, shuffle = true) }
                     if (p.kind != "recent" && list.isNotEmpty() && Features.on("dl")) {
                         Spacer(Modifier.width(10.dp))
@@ -349,7 +349,8 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                         }.nbf(1.dp, c.k), contentAlignment = Alignment.Center) { NIcon(NIcons.download, 20.dp) }
                     }
                     // 别人的歌单：可以收藏
-                    if (p.kind == "pl" && Ncm.loggedIn && !mine) {
+                    // QQ / 酷狗的歌单只会是自己建的或已收藏的（曲库里列出来的就是），不显示收藏按钮
+                    if (p.kind == "pl" && Ncm.loggedIn && !mine && !p.id.startsWith("qq:") && !p.id.startsWith("kg:")) {
                         val subbed by produceState<Boolean?>(null, p.id) { value = runCatching { Ncm.playlistSubscribed(p.id) }.getOrNull() }
                         Spacer(Modifier.width(10.dp)); FollowBtn(subbed ?: false, "收藏", "已收藏", ready = subbed != null) { on -> Ncm.subscribePlaylist(p.id, on); Store.refreshPlaylists() }
                     }

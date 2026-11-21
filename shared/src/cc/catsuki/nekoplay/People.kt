@@ -291,7 +291,7 @@ fun openArtists(nav: Nav, t: Track) {
                 }
                 Spacer(Modifier.height(16.dp))
                 ActionRow {
-                    PrimaryBar("播放全部", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
+                    PrimaryBar("播放", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(list, 0, shuffle = true) }
                     if (Ncm.loggedIn) {
                         val subbed by produceState<Boolean?>(null, pg.id) { value = runCatching { Ncm.subAlbums().any { it.id == pg.id } }.getOrDefault(false) }
@@ -607,7 +607,7 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
                 T("听歌排行", Fs.HERO, w = 800, lh = 1.3f); T(pg.name, 13, p.s)
                 Spacer(Modifier.height(12.dp)); ChipRow(listOf("最近一周", "所有时间"), sel) { sel = it }
                 Spacer(Modifier.height(12.dp))
-                ActionRow { PrimaryBar("播放全部", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) } }
+                ActionRow { PrimaryBar("播放", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) } }
                 Spacer(Modifier.height(12.dp)); Rule()
                 when { err != null -> T("加载失败：$err（对方可能隐藏了排行）", 13, p.bad, lines = 3, modifier = Modifier.padding(vertical = 24.dp))
                     data == null -> T("LOADING", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp))

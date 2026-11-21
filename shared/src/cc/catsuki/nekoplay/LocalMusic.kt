@@ -60,7 +60,7 @@ object LocalMusic {
                 ActionRow {
                     if (!granted) PrimaryBar("允许读取音乐", NIcons.chevronRight, Modifier.weight(1f)) { ask() }
                     else {
-                        if (list.isNotEmpty()) { PrimaryBar("播放全部", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }; Spacer(Modifier.width(10.dp)) }
+                        if (list.isNotEmpty()) { PrimaryBar("播放", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }; Spacer(Modifier.width(10.dp)) }
                         OutlineBtn(if (LocalMusic.scanning) "扫描中…" else "重新扫描", pad = 14.dp) { if (!LocalMusic.scanning) scope.launch { runCatching { LocalMusic.scan() }.onFailure { nav.toast = "扫描失败：${it.message}" }; nav.toast = "找到 ${LocalMusic.list.value.size} 首" } }
                     }
                 }
