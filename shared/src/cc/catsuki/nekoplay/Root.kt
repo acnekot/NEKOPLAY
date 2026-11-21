@@ -227,7 +227,7 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     val prof by Store.profile.collectAsState()
     Column(modifier.width(190.dp).background(if (c.dark) c.pop else Color(0xFFF1F7F8)).nb(1.dp, c.k)) {
         T(prof?.name ?: "好奇猫a", 15, w = 800, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
-        listOfNotNull(prof?.let { "我的主页" to Page.User(it.uid, it.name) }, "设置" to Page.Settings, if (prof == null) "登录网易云" to Page.Login else null,
+        listOfNotNull(prof?.let { "我的主页" to Page.User(it.uid, it.name) }, "设置" to Page.Settings, if (prof == null && Features.on("ncm")) "登录网易云" to Page.Login else null,
             if (Features.on("qq") && !Qqm.loggedIn) "登录 QQ 音乐" to Page.QqLogin else null,
             if (Features.on("kugou") && !Kgm.loggedIn) "登录酷狗" to Page.KgLogin else null).forEach { (t, pg) ->
             Box(Modifier.fillMaxWidth().height(48.dp).press { nav.menu = false; nav.player = false; nav.push(pg) }.drawBehind { drawRect(Color(0x1F888888), size = androidx.compose.ui.geometry.Size(size.width, 1f)) }.padding(horizontal = 14.dp),
@@ -271,7 +271,9 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     val pg = shown ?: return
     if (sub.value <= 0f && nav.stack.isEmpty()) return
     val p = c
-    Box(Modifier.fillMaxSize().graphicsLayer { translationX = w * (1 - sub.value) }) {
+    Box(Modifier.fillMaxSize().graphicsLayer { translationX = w * (1 - sub.value) }
+        // 整页挡住下面的首页 / 曲库：点在空白处的手势不会穿透到下层（子组件照常先收到）
+        .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
         // 子页面底色；有自定义背景时铺同一张背景
         Box(Modifier.fillMaxSize().background(p.page)) { BgLayer() }
         Column(Modifier.fillMaxSize()) {

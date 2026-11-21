@@ -62,6 +62,7 @@ object Store {
                 playlists.value = (0 until a.length()).map { val o = a.getJSONObject(it); Playlist(o.getString("id"), o.getString("n"), o.getInt("c"), o.optString("cv").ifEmpty { null }, o.optBoolean("l"), o.optBoolean("m", true)) }
             }
         }
+        if (!Features.on("ncm")) return@launch
         loading.value = true
         runCatching { Ncm.profile() }.onSuccess { p ->
             profile.value = p

@@ -115,6 +115,8 @@ object Qqm {
 
     /** 歌曲 mid → 试听片段的 mid（没权限放整首时退而求其次） */
     private val trials = HashMap<String, String>()
+    /** 会员歌曲的 mid（只有这些拿不到整首时才提示「只能放试听」） */
+    private val vipMids = HashSet<String>()
     /** 歌曲 mid → 数字 id（收藏要用） */
     private val songIds = HashMap<String, Long>()
     /** 歌曲 mid → 文件信息（media_mid、各音质大小），拿播放地址时要用 */
@@ -128,6 +130,7 @@ object Qqm {
         s.optJSONObject("file")?.let { files[mid] = it }
         s.optLong("id").takeIf { it > 0 }?.let { songIds[mid] = it }
         s.optJSONArray("vs")?.optString(0)?.takeIf { it.isNotEmpty() }?.let { trials[mid] = it }
+        if (s.optJSONObject("pay")?.optInt("pay_play") == 1) vipMids += mid else vipMids -= mid
         val singers = arr(s.optJSONArray("singer"))
         val al = s.optJSONObject("album") ?: JSONObject()
         val alMid = al.optString("mid").ifEmpty { s.optString("albummid") }
@@ -232,7 +235,7 @@ object Qqm {
                     }.getOrNull() }
                     val dur = fileDur[mid] ?: 0L
                     val clip = when { total == null -> true; dur > 0 -> total < dur * 128_000L / 8 * 6 / 10; else -> total < 1_500_000 }   // 试听一般 30~60 秒，128k 不到 1MB
-                    if (clip) Engine.error.value = "这首是会员歌曲，当前账号只能放试听片段" + if (err.contains("会员")) "" else "（$err）"
+                    if (clip && mid in vipMids) Engine.error.value = "这首是会员歌曲，当前账号只能放试听片段"
                     return Stream(CDN + purl, "mp3", 128, "standard")
                 }
             }
@@ -410,13 +413,39 @@ object Qqm {
     }
     private fun query(vararg kv: Pair<String, Any>) = kv.joinToString("&") { "${it.first}=${enc(it.second.toString())}" }
 
-    suspend fun qrQq(): Qr = withContext(Dispatchers.IO) {
-        val url = "https://ssl.ptlogin2.qq.com/ptqrshow?" + query("appid" to "716027609", "e" to "2", "l" to "M", "s" to "3", "d" to "72", "v" to "4",
-            "t" to kotlin.random.Random.nextDouble().toString(), "daid" to "383", "pt_3rd_aid" to "100497308")
-        noRedirect.newCall(Request.Builder().url(url).header("Referer", "https://xui.ptlogin2.qq.com/").header("User-Agent", UA).build()).execute().use { r ->
-            val sig = cookiesOf(r.headers("Set-Cookie"))["qrsig"] ?: throw NcmError("获取 QQ 二维码失败")
-            Qr(r.body?.bytes() ?: ByteArray(0), false, sig)
+    // ---- QQ 扫码：照官方电脑版登录框的顺序走，cookie 按域名保存、按域名带上（check_sig 要带上前面种下的 .qq.com cookie 才会给 p_skey） ----
+    private const val U1 = "https://graph.qq.com/oauth2.0/login_jump"
+    private val jar = LinkedHashMap<String, String>()   // "名字@域名" → 值
+    private fun keep(setCookie: List<String>, host: String) {
+        for (c in setCookie) {
+            val parts = c.split(';'); val kv = parts[0].split('=', limit = 2); if (kv.size < 2) continue
+            val dom = parts.drop(1).map { it.trim() }.firstOrNull { it.startsWith("Domain=", true) }?.substringAfter('=')?.trim()?.trimStart('.')?.lowercase() ?: host
+            val k = kv[0].trim() + "@" + dom; val v = kv[1].trim()
+            if (v.isEmpty()) jar.remove(k) else jar[k] = v
         }
+    }
+    private fun cookieFor(host: String) = jar.entries.filter { val d = it.key.substringAfter('@'); host == d || host.endsWith(".$d") }.joinToString("; ") { it.key.substringBefore('@') + "=" + it.value }
+    private fun jarGet(name: String, dom: String? = null) = jar.entries.firstOrNull { it.key.substringBefore('@') == name && (dom == null || it.key.substringAfter('@') == dom) }?.value
+    /** 不跟随跳转地请求，自动带上 / 记下 cookie；返回 (状态码, Location, 正文或字节) */
+    private class Resp(val code: Int, val location: String?, val bytes: ByteArray) { val text get() = bytes.decodeToString() }
+    private suspend fun loginReq(url: String, form: FormBody? = null, referer: String = "https://xui.ptlogin2.qq.com/"): Resp = withContext(Dispatchers.IO) {
+        val host = url.substringAfter("://").substringBefore('/').substringBefore('?').lowercase()
+        val b = Request.Builder().url(url).header("User-Agent", PC_UA).header("Referer", referer)
+        cookieFor(host).takeIf { it.isNotEmpty() }?.let { b.header("Cookie", it) }
+        if (form != null) b.post(form)
+        noRedirect.newCall(b.build()).execute().use { r -> keep(r.headers("Set-Cookie"), host); Resp(r.code, r.header("Location"), r.body?.bytes() ?: ByteArray(0)) }
+    }
+    private const val PC_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+    suspend fun qrQq(): Qr {
+        jar.clear()
+        // 先打开登录框：拿 pt_login_sig 等 cookie
+        loginReq("https://xui.ptlogin2.qq.com/cgi-bin/xlogin?" + query("appid" to "716027609", "daid" to "383", "style" to "33", "login_text" to "登录", "hide_title_bar" to "1",
+            "hide_border" to "1", "target" to "self", "s_url" to U1, "pt_3rd_aid" to "100497308", "theme" to "2"), referer = "https://graph.qq.com/")
+        val r = loginReq("https://xui.ptlogin2.qq.com/ssl/ptqrshow?" + query("appid" to "716027609", "e" to "2", "l" to "M", "s" to "3", "d" to "72", "v" to "4",
+            "t" to kotlin.random.Random.nextDouble().toString(), "daid" to "383", "pt_3rd_aid" to "100497308", "u1" to U1))
+        val sig = jarGet("qrsig") ?: throw NcmError("获取 QQ 二维码失败")
+        return Qr(r.bytes, false, sig)
     }
 
     suspend fun qrWx(): Qr = withContext(Dispatchers.IO) {
@@ -435,8 +464,9 @@ object Qqm {
 
     // ---------- 网页登录（手机上用内嵌网页走 QQ 互联，可以一键拉起手机 QQ） ----------
     const val WEB_REDIRECT = "https://y.qq.com/portal/wx_redirect.html"
-    fun webLoginUrl(): String = "https://graph.qq.com/oauth2.0/authorize?" + query("response_type" to "code", "client_id" to "100497308",
-        "redirect_uri" to "$WEB_REDIRECT?login_type=1&surl=https://y.qq.com/", "state" to "state", "display" to "mobile")
+    /** pc = true：电脑版登录页（显示二维码），false：手机版（一键拉起手机 QQ） */
+    fun webLoginUrl(pc: Boolean = false): String = "https://graph.qq.com/oauth2.0/" + (if (pc) "show?which=Login&" else "authorize?") + query("response_type" to "code", "client_id" to "100497308",
+        "redirect_uri" to "$WEB_REDIRECT?login_type=1&surl=https://y.qq.com/", "state" to "state", "display" to if (pc) "pc" else "mobile")
     /** 网页里「一键登录」拉起 QQ 的地址，加上回跳到本 App */
     fun withCallback(u: String, ios: Boolean): String {
         // 1) p 里带上本 App 的包名，QQ 授权后按它跳回（网页本来是从页面地址的 pt_package / pt_bundleid 读的）
@@ -470,18 +500,10 @@ object Qqm {
 
     private fun stateOf(code: Int) = when (code) { 0, 405 -> QrState.DONE; 66, 408 -> QrState.WAIT; 67, 404 -> QrState.SCANNED; 65, 402 -> QrState.EXPIRED; 68, 403 -> QrState.REFUSED; else -> QrState.WAIT }
 
-    private var loginCookies: Map<String, String> = emptyMap()
     private suspend fun checkQq(q: Qr, step: (String) -> Unit): QrState {
-        val text = withContext(Dispatchers.IO) {
-            val url = "https://ssl.ptlogin2.qq.com/ptqrlogin?" + query("u1" to "https://graph.qq.com/oauth2.0/login_jump", "ptqrtoken" to hash33(q.id), "ptredirect" to "0",
-                "h" to "1", "t" to "1", "g" to "1", "from_ui" to "1", "ptlang" to "2052", "action" to "0-0-${System.currentTimeMillis()}", "js_ver" to "20102616", "js_type" to "1",
-                "pt_uistyle" to "40", "aid" to "716027609", "daid" to "383", "pt_3rd_aid" to "100497308", "has_onekey" to "1")
-            noRedirect.newCall(Request.Builder().url(url).header("Referer", "https://xui.ptlogin2.qq.com/").header("Cookie", "qrsig=${q.id}").header("User-Agent", UA).build()).execute().use {
-                // 确认成功时这里会种下 superkey / supertoken 等 .qq.com 的 cookie，后面 check_sig 要带上
-                loginCookies = cookiesOf(it.headers("Set-Cookie")).filterValues { v -> v.isNotEmpty() }
-                it.body?.string() ?: ""
-            }
-        }
+        val text = loginReq("https://xui.ptlogin2.qq.com/ssl/ptqrlogin?" + query("u1" to U1, "ptqrtoken" to hash33(q.id), "ptredirect" to "0", "h" to "1", "t" to "1", "g" to "1",
+            "from_ui" to "1", "ptlang" to "2052", "action" to "0-0-${System.currentTimeMillis()}", "js_ver" to "25100115", "js_type" to "1", "login_sig" to (jarGet("pt_login_sig") ?: ""),
+            "pt_uistyle" to "40", "aid" to "716027609", "daid" to "383", "pt_3rd_aid" to "100497308", "o1vId" to "", "pt_js_version" to "v1.0.0")).text
         val inner = Regex("ptuiCB\\((.*?)\\)").find(text)?.groupValues?.get(1) ?: return QrState.WAIT
         val args = Regex("'((?:\\\\.|[^'])*)'").findAll(inner).map { it.groupValues[1] }.toList()
         val code = args.firstOrNull()?.toIntOrNull() ?: return QrState.WAIT
@@ -493,33 +515,20 @@ object Qqm {
         return QrState.DONE
     }
 
-    /** 跳转地址本身就是 check_sig，直接请求它拿 p_skey，避免手拆参数时顺序不同拆错 */
     private suspend fun authorizeQq(jump: String, step: (String) -> Unit) {
-        suspend fun sig(url: String) = withContext(Dispatchers.IO) {
-            noRedirect.newCall(Request.Builder().url(url).header("Referer", "https://xui.ptlogin2.qq.com/").header("User-Agent", UA)
-                .apply { if (loginCookies.isNotEmpty()) header("Cookie", loginCookies.entries.joinToString("; ") { "${it.key}=${it.value}" }) }.build()).execute().use { cookiesOf(it.headers("Set-Cookie")) }
-                .filterValues { it.isNotEmpty() }
-        }
-        var cookies = sig(jump)
-        if (cookies["p_skey"] == null) {
-            // 直接请求跳转地址没拿到：按参数名取出 uin / ptsigx，自己拼一个 check_sig 再试
-            val qs = jump.substringAfter('?', "").split('&').mapNotNull { kv -> kv.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap()
-            val uin = qs["uin"]; val sigx = qs["ptsigx"]
-            if (uin != null && sigx != null) cookies = cookies + sig("https://ssl.ptlogin2.graph.qq.com/check_sig?" + query("uin" to uin, "pttype" to "1", "service" to "ptqrlogin", "nodirect" to "0",
-                "ptsigx" to sigx, "s_url" to "https://graph.qq.com/oauth2.0/login_jump", "ptlang" to "2052", "ptredirect" to "100", "aid" to "716027609", "daid" to "383", "j_later" to "0",
-                "low_login_hour" to "0", "regmaster" to "0", "pt_login_type" to "3", "pt_aid" to "0", "pt_aaid" to "16", "pt_light" to "0", "pt_3rd_aid" to "100497308"))
-        }
-        val pSkey = cookies["p_skey"] ?: throw NcmError("QQ 登录：获取 p_skey 失败（收到 ${cookies.keys.joinToString().ifEmpty { "无 cookie" }}；${jump.substringBefore('?').takeLast(60)}）")
-        val location = withContext(Dispatchers.IO) {
-            val form = FormBody.Builder().add("response_type", "code").add("client_id", "100497308")
-                .add("redirect_uri", "https://y.qq.com/portal/wx_redirect.html?login_type=1&surl=https://y.qq.com/")
-                .add("scope", "get_user_info,get_app_friends").add("state", "state").add("switch", "").add("from_ptlogin", "1").add("src", "1")
-                .add("update_auth", "1").add("openapi", "1010_1030").add("g_tk", hash33(pSkey, 5381).toString()).add("auth_time", System.currentTimeMillis().toString())
-                .add("ui", (1..32).map { "0123456789abcdef"[kotlin.random.Random.nextInt(16)] }.joinToString("")).build()
-            val ck = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
-            noRedirect.newCall(Request.Builder().url("https://graph.qq.com/oauth2.0/authorize").post(form).header("Cookie", ck).header("Referer", "https://graph.qq.com/").header("User-Agent", UA).build()).execute().use { it.header("Location") ?: "" }
-        }
-        val code = Regex("[?&]code=([^&]+)").find(location)?.groupValues?.get(1) ?: throw NcmError("QQ 登录：获取 code 失败" + if (location.isEmpty()) "" else "（${location.take(80)}）")
+        // check_sig 会在 .graph.qq.com 种下 p_skey；有的会再跳一两次，跟着走直到拿到
+        var r = loginReq(jump)
+        var hops = 0
+        while (jarGet("p_skey") == null && r.location?.startsWith("http") == true && hops++ < 4) r = loginReq(r.location!!)
+        val pSkey = jarGet("p_skey", "graph.qq.com") ?: jarGet("p_skey")
+            ?: throw NcmError("QQ 登录：获取 p_skey 失败（收到 ${jar.keys.filter { it.endsWith("graph.qq.com") }.joinToString { it.substringBefore('@') }.ifEmpty { "无" }}）")
+        val form = FormBody.Builder().add("response_type", "code").add("client_id", "100497308")
+            .add("redirect_uri", "$WEB_REDIRECT?login_type=1&surl=https://y.qq.com/").add("scope", "").add("state", "state").add("switch", "")
+            .add("from_ptlogin", "1").add("src", "1").add("update_auth", "1").add("openapi", "1010").add("g_tk", hash33(pSkey, 5381).toString())
+            .add("auth_time", System.currentTimeMillis().toString()).add("ui", (1..32).map { "0123456789ABCDEF"[kotlin.random.Random.nextInt(16)] }.joinToString("")).build()
+        val loc = loginReq("https://graph.qq.com/oauth2.0/authorize", form, referer = "https://graph.qq.com/").location ?: ""
+        val code = Regex("[?&]code=([^&]+)").find(loc)?.groupValues?.get(1) ?: throw NcmError("QQ 登录：获取 code 失败" + if (loc.isEmpty()) "" else "（${loc.take(80)}）")
+        jar.clear()
         step("正在换取 QQ 音乐凭证…")
         loginWithQqCode(code)
     }

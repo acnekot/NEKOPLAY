@@ -43,7 +43,9 @@ object SearchSource {
     var src by mutableIntStateOf(0)
     val qq get() = src == 1
     val kg get() = src == 2
-    val labels get() = listOf("网易云") + (if (Features.on("qq")) listOf("QQ 音乐") else emptyList()) + (if (Features.on("kugou")) listOf("酷狗") else emptyList())
+    val labels get() = Features.sources.map { listOf("网易云", "QQ 音乐", "酷狗")[it] }
+    /** 当前选的来源被关掉了就换成第一个开着的 */
+    fun fix() { val s = Features.sources; if (src !in s && s.isNotEmpty()) src = s.first() }
     fun idOf(label: String) = when (label) { "QQ 音乐" -> 1; "酷狗" -> 2; else -> 0 }
 }
 
@@ -120,7 +122,7 @@ fun LazyListScope.qqLibrary(nav: Nav) {
                 Box(Modifier.press { if (!on) { if (v == null) web = true else { web = false; wx = v } } }.background(if (on) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(l, 13, if (on) p.tagFg else p.k, 700) }
             }
         }
-        if (web) { Spacer(Modifier.height(12.dp)); QqWebLogin(Modifier.weight(1f)); return@Column }
+        if (web) { Spacer(Modifier.height(12.dp)); QqWebLogin(Modifier.weight(1f), pc = false); return@Column }
         Spacer(Modifier.height(18.dp))
         Box(Modifier.size(240.dp).align(Alignment.CenterHorizontally).nb(1.dp, p.k).background(Color.White).press { round++ }, contentAlignment = Alignment.Center) {
             img?.let { Image(it, "二维码", Modifier.size(220.dp)) } ?: T("…", 20, Color.Black)
@@ -142,12 +144,12 @@ fun LazyListScope.qqLibrary(nav: Nav) {
 }
 
 /** 手机上的网页登录：内嵌 QQ 互联登录页，最后跳到 y.qq.com 时截下 code 换 QQ 音乐凭证 */
-@Composable private fun QqWebLogin(modifier: Modifier) {
+@Composable private fun QqWebLogin(modifier: Modifier, pc: Boolean) {
     val nav = LocalNav.current
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     val scope = rememberCoroutineScope()
-    var url by remember { mutableStateOf(Qqm.webLoginUrl()) }
-    var status by remember { mutableStateOf("在下面登录 QQ；点「一键登录」会跳到手机 QQ，确认后自动回来") }
+    var url by remember(pc) { mutableStateOf(Qqm.webLoginUrl(pc)) }
+    var status by remember(pc) { mutableStateOf(if (pc) "用手机 QQ 扫下面官方页面里的二维码并确认；同一台手机可以截图后在 QQ 扫一扫里选相册" else "在下面登录 QQ；点「一键登录」会跳到手机 QQ，确认后自动回来") }
     var busy by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf("") }
     val back by DeepLink.url.collectAsState()
@@ -162,7 +164,7 @@ fun LazyListScope.qqLibrary(nav: Nav) {
         if (info.isNotEmpty()) T(info, 12, p.s, lines = 2, mono = true)
         Spacer(Modifier.height(8.dp))
         Box(Modifier.fillMaxWidth().weight(1f).nbf(1.dp, p.k)) {
-            Plat.impl.WebPage(url, Modifier.fillMaxSize(), onInfo = { info = it }) { u ->
+            Plat.impl.WebPage(url, Modifier.fillMaxSize(), desktopUa = pc, onInfo = { info = it }) { u ->
                 val code = Qqm.codeOf(u)
                 when {
                     code != null -> {
@@ -170,7 +172,7 @@ fun LazyListScope.qqLibrary(nav: Nav) {
                             status = "正在换取 QQ 音乐凭证…"
                             try { Qqm.loginWithQqCode(code); QqStore.refresh(); nav.toast = "QQ 音乐登录成功"; nav.back() }
                             catch (e: kotlinx.coroutines.CancellationException) { throw e }
-                            catch (e: Exception) { status = "出错了：${e.message}"; busy = false; url = Qqm.webLoginUrl() + "&r=" + System.currentTimeMillis() }
+                            catch (e: Exception) { status = "出错了：${e.message}"; busy = false; url = Qqm.webLoginUrl(pc) + "&r=" + System.currentTimeMillis() }
                         } }
                         true
                     }
