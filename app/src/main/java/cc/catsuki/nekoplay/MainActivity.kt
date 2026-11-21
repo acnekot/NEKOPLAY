@@ -27,7 +27,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(i: android.content.Intent) { super.onNewIntent(i); deepLink(i) }
     /** QQ 授权后跳回来的 nekoplay://… */
-    private fun deepLink(i: android.content.Intent?) { i?.dataString?.takeIf { it.startsWith("nekoplay:") }?.let { DeepLink.url.value = it } }
+    private fun deepLink(i: android.content.Intent?) { i?.dataString?.takeIf { it.startsWith("nekoplay:") || "ptlogin2.qq.com/jump" in it }?.let { DeepLink.url.value = it } }
 
     override fun onStart() {
         super.onStart()

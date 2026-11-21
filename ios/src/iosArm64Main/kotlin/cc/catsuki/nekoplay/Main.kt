@@ -75,4 +75,4 @@ fun MainViewController(): UIViewController {
 fun onBackground() { if (booted) Engine.savePosition() }
 
 /** QQ 授权后跳回来的 nekoplay://…（Xcode 工程的 Swift 入口也调用这个） */
-fun onOpenUrl(u: String) { if (u.startsWith("nekoplay:")) DeepLink.url.value = u }
+fun onOpenUrl(u: String) { if (u.startsWith("nekoplay:") || "ptlogin2.qq.com/jump" in u) DeepLink.url.value = u }

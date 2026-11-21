@@ -165,7 +165,7 @@ fun LazyListScope.qqLibrary(nav: Nav) {
                     }
                     u.startsWith("wtloginmqq") -> {
                         status = "正在打开手机 QQ…"
-                        runCatching { uri.openUri(Qqm.withCallback(u)) }.onFailure { status = "没能打开手机 QQ（没装 QQ？）" }
+                        runCatching { uri.openUri(Qqm.withCallback(u, Plat.impl.name == "ios")) }.onFailure { status = "没能打开手机 QQ（没装 QQ？）" }
                         true
                     }
                     u.startsWith("http") || u.startsWith("about:") -> false

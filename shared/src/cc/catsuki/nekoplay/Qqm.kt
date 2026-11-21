@@ -430,14 +430,23 @@ object Qqm {
     fun webLoginUrl(): String = "https://graph.qq.com/oauth2.0/authorize?" + query("response_type" to "code", "client_id" to "100497308",
         "redirect_uri" to "$WEB_REDIRECT?login_type=1&surl=https://y.qq.com/", "state" to "state", "display" to "mobile")
     /** 网页里「一键登录」拉起 QQ 的地址，加上回跳到本 App */
-    fun withCallback(u: String): String {
-        // 网页会按浏览器类型自己填回跳地址（WebView 会被当成 Chrome 填 googlechrome://），一律换成本 App
+    fun withCallback(u: String, ios: Boolean): String {
+        // 1) p 里带上本 App 的包名，QQ 授权后按它跳回（网页本来是从页面地址的 pt_package / pt_bundleid 读的）
+        var r = u
+        Regex("([?&]p=)([^&]*)").find(r)?.let { m ->
+            var inner = dec(m.groupValues[2])
+            val key = if (ios) "pt_bundleid" else "pt_package"
+            if ("$key=" !in inner) inner += "&$key=" + (if (ios) "cc.catsuki.nekoplay" else "cc.catsuki.nekoplay.native")
+            r = r.replaceRange(m.groups[2]!!.range, enc(inner))
+        }
+        // 2) 网页会按浏览器类型自己填回跳 scheme（WebView 会被当成 Chrome 填 googlechrome://），换成本 App
         val cb = "schemacallback=" + enc("nekoplay://")
-        return if (Regex("[?&]schemacallback=").containsMatchIn(u)) u.replace(Regex("schemacallback=[^&]*"), cb) else "$u&$cb"
+        return if (Regex("[?&]schemacallback=").containsMatchIn(r)) r.replace(Regex("schemacallback=[^&]*"), cb) else "$r&$cb"
     }
     /** QQ 跳回来的 nekoplay://… 里取出要继续加载的网页地址 */
     fun callbackToUrl(cb: String): String? {
         val r = cb.removePrefix("nekoplay://").replace("(null)", "")
+        if (r.startsWith("https://") || r.startsWith("http://")) return r
         val i = r.indexOf("http"); if (i < 0) return null
         var u = r.substring(i)
         if (u.startsWith("http%3A", true) || u.startsWith("https%3A", true)) u = dec(u)
