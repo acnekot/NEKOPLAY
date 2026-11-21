@@ -4,6 +4,7 @@
 // @author NEKOPLAY
 // @desc 网易云音源：搜索、播放、逐字歌词、日推、私人 FM、歌单广场、排行榜、评论、MV、电台、云盘，扫码登录后同步歌单和喜欢
 // @api 1
+// @search track,album,artist,playlist,user,lyric
 //
 // 用网页端加密接口（weapi）。为了兼容老数据，网易云的 id 在本体里不加插件前缀。
 

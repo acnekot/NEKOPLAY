@@ -109,11 +109,21 @@ async function req(url, o) {
   const host = url.split('://')[1].split(/[/?]/)[0].toLowerCase();
   const headers = { 'User-Agent': UA, Referer: (o && o.referer) || 'https://xui.ptlogin2.qq.com/' };
   const ck = cookieFor(host); if (ck) headers.Cookie = ck;
-  const r = await nk.http(Object.assign({ url, headers, redirect: false }, o && o.form ? { form: o.form } : {}, o && o.binary ? { binary: true } : {}));
+  const r = await nk.http(Object.assign({ url, headers, redirect: false }, o && o.form ? { form: o.form } : {}, o && o.binary ? { binary: true } : {}, o && o.timeout ? { timeout: o.timeout } : {}));
   keep(r, host);
   return r;
 }
 const qs = (o) => Object.keys(o).map(k => k + '=' + encodeURIComponent(o[k])).join('&');
+const REDIRECT = 'https://y.qq.com/portal/wx_redirect.html';
+const WX_APPID = 'wx48db31d50e334801';
+const qrState = (c) => [0, 405].includes(c) ? 'done' : [67, 404].includes(c) ? 'scanned' : [65, 402].includes(c) ? 'expired' : [68, 403].includes(c) ? 'refused' : 'wait';
+/** 换到的凭证存起来，顺便取昵称头像 */
+async function finish(d, type) {
+  const id = Number(d.musicid || d.str_musicid || 0);
+  if (!d.musickey || !id) throw new Error('登录失败：没有拿到凭证');
+  nk.store.set('cred', { id, key: d.musickey, type });
+  try { const h = await call('music.UnifiedHomepage.UnifiedHomepageSrv', 'GetHomepageHeader', { uin: String(id), IsQueryTabDetail: 1 }); const b = h.Info && h.Info.BaseInfo; if (b) nk.store.set('cred', { id, key: d.musickey, type, nick: b.Name, avatar: https(b.Avatar) }); } catch (e) {}
+}
 
 nk.register({
   // ---------- 搜索 ----------
@@ -218,8 +228,17 @@ nk.register({
   },
   async logout() { nk.store.set('cred', null); },
 
+  /** 登录方式：网页登录（内嵌 QQ 互联页，手机上能一键拉起手机 QQ）、QQ 扫码、微信扫码 */
+  loginModes() { return [{ id: 'web', name: 'QQ 登录', web: true }, { id: 'qq', name: 'QQ 扫码' }, { id: 'wx', name: '微信扫码' }]; },
+
   /** 扫码登录第一步：返回二维码图片（base64）和查询用的 key */
-  async loginQr() {
+  async loginQr(mode) {
+    if (mode === 'wx') {
+      const page = await req('https://open.weixin.qq.com/connect/qrconnect?' + qs({ appid: WX_APPID, redirect_uri: REDIRECT + '?login_type=2&surl=https://y.qq.com/', response_type: 'code', scope: 'snsapi_login', state: 'STATE', href: 'https://y.qq.com/mediastyle/music_v17/src/css/popup_wechat.css#wechat_redirect' }));
+      const m = /uuid=(.+?)"/.exec(page.body); if (!m) throw new Error('获取微信二维码失败');
+      const img = await req('https://open.weixin.qq.com/connect/qrcode/' + m[1], { binary: true, referer: 'https://open.weixin.qq.com/connect/qrconnect' });
+      return { image: img.bodyBase64, key: 'wx:' + m[1], hint: '用微信扫码，并在手机上点确认', poll: 300, saveApp: 'weixin://dl/scan', saveAppName: '微信' };
+    }
     jar = {};
     await req('https://xui.ptlogin2.qq.com/cgi-bin/xlogin?' + qs({ appid: '716027609', daid: '383', style: '33', login_text: '登录', hide_title_bar: '1', hide_border: '1', target: 'self', s_url: U1, pt_3rd_aid: '100497308', theme: '2' }), { referer: 'https://graph.qq.com/' });
     const r = await req('https://xui.ptlogin2.qq.com/ssl/ptqrshow?' + qs({ appid: '716027609', e: '2', l: 'M', s: '3', d: '72', v: '4', t: String(Math.random()), daid: '383', pt_3rd_aid: '100497308', u1: U1 }), { binary: true });
@@ -228,31 +247,67 @@ nk.register({
   },
   /** 扫码登录第二步：轮询状态 wait / scanned / done / expired / refused */
   async loginCheck(key) {
+    if (key.startsWith('wx:')) {
+      // 微信是长轮询：一次最多挂 30 秒
+      let t = '';
+      try { t = (await req('https://lp.open.weixin.qq.com/connect/l/qrconnect?uuid=' + key.slice(3) + '&_=' + Date.now(), { referer: 'https://open.weixin.qq.com/', timeout: 35 })).body; } catch (e) { return { state: 'wait' }; }
+      const m = /window\.wx_errcode=(\d+);window\.wx_code='([^']*)'/.exec(t); if (!m) return { state: 'wait' };
+      const st = qrState(Number(m[1])); if (st !== 'done') return { state: st };
+      if (!m[2]) throw new Error('微信登录：获取 code 失败');
+      await finish(await call('music.login.LoginServer', 'Login', { code: m[2], strAppid: WX_APPID }, { tmeLoginType: 1 }), 1);
+      return { state: 'done' };
+    }
     const t = (await req('https://xui.ptlogin2.qq.com/ssl/ptqrlogin?' + qs({ u1: U1, ptqrtoken: hash33(key), ptredirect: '0', h: '1', t: '1', g: '1', from_ui: '1', ptlang: '2052', action: '0-0-' + Date.now(), js_ver: '25100115', js_type: '1', login_sig: jarGet('pt_login_sig') || '', pt_uistyle: '40', aid: '716027609', daid: '383', pt_3rd_aid: '100497308', o1vId: '', pt_js_version: 'v1.0.0' }))).body;
     const m = /ptuiCB\((.*?)\)/.exec(t); if (!m) return { state: 'wait' };
     const args = (m[1].match(/'((?:\\.|[^'])*)'/g) || []).map(x => x.slice(1, -1));
     const code = Number(args[0]);
-    if ([66, 408].includes(code)) return { state: 'wait' };
-    if ([67, 404].includes(code)) return { state: 'scanned' };
-    if ([65, 402].includes(code)) return { state: 'expired' };
-    if ([68, 403].includes(code)) return { state: 'refused' };
-    if (code !== 0) return { state: 'wait' };
+    const st = qrState(code); if (st !== 'done') return { state: st };
     // 确认了：check_sig 拿 p_skey → authorize 拿 code → 换 QQ 音乐凭证
     let r = await req(args[2]);
     for (let i = 0; !jarGet('p_skey') && r.header('location') && i < 4; i++) r = await req(r.header('location'));
     const pskey = jarGet('p_skey', 'graph.qq.com') || jarGet('p_skey');
     if (!pskey) throw new Error('QQ 登录：获取 p_skey 失败');
     const a = await req('https://graph.qq.com/oauth2.0/authorize', { referer: 'https://graph.qq.com/', form: {
-      response_type: 'code', client_id: '100497308', redirect_uri: 'https://y.qq.com/portal/wx_redirect.html?login_type=1&surl=https://y.qq.com/', scope: '', state: 'state', switch: '',
+      response_type: 'code', client_id: '100497308', redirect_uri: REDIRECT + '?login_type=1&surl=https://y.qq.com/', scope: '', state: 'state', switch: '',
       from_ptlogin: '1', src: '1', update_auth: '1', openapi: '1010', g_tk: String(hash33(pskey, 5381)), auth_time: String(Date.now()),
       ui: Array.from({ length: 32 }, () => '0123456789ABCDEF'[Math.floor(Math.random() * 16)]).join('') } });
     const cm = /[?&]code=([^&]+)/.exec(a.header('location') || ''); if (!cm) throw new Error('QQ 登录：获取 code 失败');
     jar = {};
-    const d = await call('QQConnectLogin.LoginServer', 'QQLogin', { code: cm[1] }, { tmeLoginType: 2 });
-    const id = Number(d.musicid || d.str_musicid || 0);
-    if (!d.musickey || !id) throw new Error('登录失败：没有拿到凭证');
-    nk.store.set('cred', { id, key: d.musickey, type: 2 });
-    try { const h = await call('music.UnifiedHomepage.UnifiedHomepageSrv', 'GetHomepageHeader', { uin: String(id), IsQueryTabDetail: 1 }); const b = h.Info && h.Info.BaseInfo; if (b) nk.store.set('cred', { id, key: d.musickey, type: 2, nick: b.Name, avatar: https(b.Avatar) }); } catch (e) {}
+    await finish(await call('QQConnectLogin.LoginServer', 'QQLogin', { code: cm[1] }, { tmeLoginType: 2 }), 2);
     return { state: 'done' };
+  },
+
+  // ---------- 网页登录 ----------
+  /** done：网页跳到这里就算登录完成；open：这些地址交给系统打开（拉起手机 QQ） */
+  loginWeb() {
+    return { url: 'https://graph.qq.com/oauth2.0/authorize?' + qs({ response_type: 'code', client_id: '100497308', redirect_uri: REDIRECT + '?login_type=1&surl=https://y.qq.com/', state: 'state', display: 'mobile' }),
+      done: '^https://y\\.qq\\.com/portal/wx_redirect\\.html', open: '^wtloginmqq', hint: '在下面登录 QQ；点「一键登录」会跳到手机 QQ，确认后自动回来' };
+  },
+  async loginWebDone(url) {
+    const m = /[?&]code=([^&#]+)/.exec(url); if (!m) throw new Error('没有拿到登录 code');
+    await finish(await call('QQConnectLogin.LoginServer', 'QQLogin', { code: m[1] }, { tmeLoginType: 2 }), 2);
+    return { state: 'done' };
+  },
+  /** 拉起手机 QQ 前改写地址：带上本 App 的包名和回跳 scheme */
+  loginWebOpen(u, app) {
+    let r = u;
+    const m = /([?&]p=)([^&]*)/.exec(r);
+    if (m) {
+      let inner = decodeURIComponent(m[2]);
+      const key = app.ios ? 'pt_bundleid' : 'pt_package';
+      if (inner.indexOf(key + '=') < 0) inner += '&' + key + '=' + app.id;
+      r = r.slice(0, m.index + m[1].length) + encodeURIComponent(inner) + r.slice(m.index + m[0].length);
+    }
+    const cb = 'schemacallback=' + encodeURIComponent(app.scheme);
+    return /[?&]schemacallback=/.test(r) ? r.replace(/schemacallback=[^&]*/, cb) : r + '&' + cb;
+  },
+  /** 手机 QQ 跳回来的 nekoplay://… 里取出要继续加载的网页 */
+  loginWebBack(cb) {
+    const r = cb.replace(/^[a-z]+:\/\//, '').replace(/\(null\)/g, '');
+    if (/^https?:\/\//.test(r)) return r;
+    const i = r.indexOf('http'); if (i < 0) return null;
+    let u = r.slice(i);
+    if (/^https?%3A/i.test(u)) u = decodeURIComponent(u);
+    return u;
   },
 });

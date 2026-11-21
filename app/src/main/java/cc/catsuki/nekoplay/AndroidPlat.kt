@@ -282,7 +282,14 @@ class ExoAudio(private val c: Context) : Audio {
     private val cache = SimpleCache(File(c.cacheDir, "audio"), LeastRecentlyUsedCacheEvictor(1024L * 1024 * 1024), StandaloneDatabaseProvider(c))
     init {
         val lc = DefaultLoadControl.Builder().setBufferDurationsMs(15_000, 25_000, 1_500, 4_000).setTargetBufferBytes(4 * 1024 * 1024).build()
-        val upstream = DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0").setConnectTimeoutMs(10_000).setReadTimeoutMs(15_000)
+        val http = DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0").setConnectTimeoutMs(10_000).setReadTimeoutMs(15_000)
+        // 地址里带账号密码（WebDAV 音乐 https://用户:密码@主机/…）：去掉并改成 Basic 认证头，HttpURLConnection 自己不认
+        val upstream = androidx.media3.datasource.ResolvingDataSource.Factory(http) { spec ->
+            val ui = spec.uri.encodedUserInfo
+            if (ui.isNullOrEmpty()) spec
+            else spec.withUri(spec.uri.buildUpon().encodedAuthority(spec.uri.encodedAuthority!!.substringAfter('@')).build())
+                .withAdditionalHeaders(mapOf("Authorization" to "Basic " + android.util.Base64.encodeToString(android.net.Uri.decode(ui).toByteArray(), android.util.Base64.NO_WRAP)))
+        }
         val ds = CacheDataSource.Factory().setCache(cache).setUpstreamDataSourceFactory(upstream).setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         exo = ExoPlayer.Builder(c).setLoadControl(lc).setMediaSourceFactory(DefaultMediaSourceFactory(ds))
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)

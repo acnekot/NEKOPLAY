@@ -34,11 +34,14 @@ data class SheetSpec(val title: String, val sub: String?, val items: List<SheetI
 /** 曲目长按：下一首播放 / 加入队列 / 喜欢 / 歌手 / 专辑 */
 fun trackActions(nav: Nav, t: Track, fromPl: String? = null) {
     val liked = t.id in Store.likedIds.value
-    // 本地歌：只有和网易云无关的几项
+    // 本地 / WebDAV 的歌：没有在线来源的那几项
     if (t.local) {
         nav.sheet = SheetSpec(t.title, t.artist, buildList {
             add(SheetItem("下一首播放") { Engine.enqueueNext(t); nav.toast = "已加入「下一首播放」" })
             add(SheetItem("加入播放队列") { Engine.enqueue(t); nav.toast = "已加入播放队列" })
+            add(SheetItem(if (liked) "取消喜欢" else "加入「本机喜欢」") { Store.toggleLike(t) { nav.toast = it }; nav.toast = if (liked) "已取消喜欢" else "已加入「本机喜欢」" })
+            add(SheetItem("添加到歌单…") { addToPlaylist(nav, t) })
+            if (fromPl?.startsWith("lpl:") == true) add(SheetItem("从这个歌单删除", danger = true) { LocalLib.remove(fromPl, t.id); nav.toast = "已从歌单删除" })
             if (Features.on("card")) add(SheetItem("歌词卡片") { nav.player = false; nav.push(Page.LyricCard(t)) })
             if (Features.on("offset") && Engine.state.value.current?.id == t.id) add(SheetItem("歌词偏移") { offsetSheet(nav, t) })
             add(SheetItem("效果器 / 均衡器") { nav.player = false; nav.push(Page.Effects) })
@@ -51,8 +54,9 @@ fun trackActions(nav: Nav, t: Track, fromPl: String? = null) {
         add(SheetItem(if (liked) "取消喜欢" else "加入「我喜欢」") { Store.toggleLike(t) { nav.toast = it }; nav.toast = if (liked) "已取消喜欢" else "已加入「我喜欢」" })
         t.artists.forEach { (id, name) -> add(SheetItem("歌手：$name") { nav.player = false; nav.push(Page.Artist(id, name)) }) }
         if (t.albumId.isNotEmpty() && t.albumId != "0") add(SheetItem("专辑：${t.album}") { nav.player = false; nav.push(Page.Album(t.albumId, t.album, t.cover)) })
-        if (Ncm.loggedIn) add(SheetItem("添加到歌单…") { addToPlaylist(nav, t) })
+        add(SheetItem("添加到歌单…") { addToPlaylist(nav, t) })
         if (fromPl != null) add(SheetItem("从这个歌单删除", danger = true) {
+            if (fromPl.startsWith("lpl:")) { LocalLib.remove(fromPl, t.id); nav.toast = "已从歌单删除"; return@SheetItem }
             Store.run { try { Ncm.playlistTracks(fromPl, "del", listOf(t.id)); nav.toast = "已从歌单删除"; Store.refreshPlaylists(fromPl) } catch (e: Exception) { nav.toast = "删除失败：${e.message}" } }
         })
         if (Downloads.has(t.id)) add(SheetItem("删除下载", danger = true) { Downloads.delete(t.id); nav.toast = "已删除下载" })
@@ -66,27 +70,50 @@ fun trackActions(nav: Nav, t: Track, fromPl: String? = null) {
     })
 }
 
-/** 选择要加入的歌单（自己创建的），或新建一个 */
+/** 选择要加入的歌单：账号里自己创建的（同一个来源才能加）和本地歌单，或新建一个 */
 fun addToPlaylist(nav: Nav, t: Track) {
-    val mine = Store.playlists.value.filter { it.mine }
+    // 账号歌单只能放同一个插件的歌
+    val sameSrc = Ncm.loggedIn && Plugins.isPlugin(t.id) && Plugins.pidOf(t.id) == Plugins.main()?.id && Plugins.main()?.has("editPlaylist") == true
+    val mine = if (sameSrc) Store.playlists.value.filter { it.mine } else emptyList()
     fun add(pl: Playlist) = Store.run {
         try { Ncm.playlistTracks(pl.id, "add", listOf(t.id)); nav.toast = "已加入「${if (pl.liked) "我喜欢" else pl.name}」"; Store.refreshPlaylists(pl.id) }
         catch (e: Exception) { nav.toast = "添加失败：${e.message}" }
     }
-    nav.sheet = SheetSpec("添加到歌单", t.title, listOf(SheetItem("＋ 新建歌单") {
-        nav.input = InputSpec("新建歌单", "歌单名称") { name ->
-            Store.run {
-                try { val id = Ncm.createPlaylist(name, false); add(Playlist(id, name, 0, null)) ; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "新建失败：${e.message}" }
+    fun addLocal(id: String, name: String) { nav.toast = if (LocalLib.add(id, listOf(t)) > 0) "已加入「$name」" else "「$name」里已经有这首" }
+    nav.sheet = SheetSpec("添加到歌单", t.title, buildList {
+        add(SheetItem("＋ 新建本地歌单") { nav.input = InputSpec("新建本地歌单", "歌单名称") { name -> addLocal(LocalLib.create(name).id, name) } })
+        if (sameSrc) add(SheetItem("＋ 新建${Plugins.main()?.name}歌单") {
+            nav.input = InputSpec("新建歌单", "歌单名称") { name ->
+                Store.run { try { val id = Ncm.createPlaylist(name, false); add(Playlist(id, name, 0, null)); Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "新建失败：${e.message}" } }
             }
-        }
-    }) + mine.map { pl -> SheetItem(if (pl.liked) "我喜欢" else pl.name) { add(pl) } })
+        })
+        LocalLib.lists.value.forEach { l -> add(SheetItem("本地 · " + l.name) { addLocal(l.id, l.name) }) }
+        mine.forEach { pl -> add(SheetItem(if (pl.liked) "我喜欢" else pl.name) { add(pl) }) }
+    })
 }
 
-/** 新建歌单（曲库页用） */
+/** 新建歌单（曲库页用）：没有账号或主插件不支持时直接建本地的 */
 fun newPlaylist(nav: Nav) {
-    nav.input = InputSpec("新建歌单", "歌单名称") { name ->
-        Store.run { try { Ncm.createPlaylist(name, false); nav.toast = "已新建「$name」"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "新建失败：${e.message}" } }
-    }
+    if (!Ncm.loggedIn || Plugins.main()?.has("createPlaylist") != true) { newLocalPlaylist(nav); return }
+    nav.sheet = SheetSpec("新建歌单", "", listOf(
+        SheetItem("${Plugins.main()?.name}歌单") {
+            nav.input = InputSpec("新建歌单", "歌单名称") { name ->
+                Store.run { try { Ncm.createPlaylist(name, false); nav.toast = "已新建「$name」"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "新建失败：${e.message}" } }
+            }
+        },
+        SheetItem("本地歌单") { newLocalPlaylist(nav) },
+    ))
+}
+fun newLocalPlaylist(nav: Nav) { nav.input = InputSpec("新建本地歌单", "歌单名称") { name -> LocalLib.create(name); nav.toast = "已新建「$name」" } }
+
+/** 长按本地歌单：改名 / 删除 */
+fun localPlaylistActions(nav: Nav, id: String, name: String) {
+    nav.sheet = SheetSpec(name, "本地歌单", listOf(
+        SheetItem("改名") { nav.input = InputSpec("歌单改名", name) { n -> LocalLib.rename(id, n); nav.toast = "已改名" } },
+        SheetItem("删除歌单", danger = true) {
+            nav.sheet = SheetSpec("确定删除「$name」？", "删除后无法恢复", listOf(SheetItem("删除", danger = true) { LocalLib.delete(id); nav.toast = "已删除" }))
+        },
+    ))
 }
 
 /** 曲库里长按歌单：自己的可以删除，收藏的可以取消收藏 */

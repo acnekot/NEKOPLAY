@@ -19,20 +19,17 @@ object HomeLayout {
     val ALL = listOf(
         "continue" to "继续收听", "daily" to "每日推荐", "fm" to "私人 FM", "discover" to "发现",
         "foryou" to "推荐歌单", "collections" to "推荐合集", "stats" to "统计",
-        "qqcharts" to "QQ 音乐排行榜", "qqnew" to "QQ 音乐新碟", "kgcharts" to "酷狗排行榜",
+        "charts" to "排行榜", "newalbums" to "新碟",
     )
-    /** 只有网易云有的模块 */
-    val NET_ONLY = setOf("daily", "fm", "foryou", "stats")
-    /** 这个模块在当前首页来源下能不能显示（QQ / 酷狗没有日推、FM 这些） */
-    fun available(id: String, net: Boolean, qq: Boolean, kg: Boolean): Boolean = when (id) {
-        in NET_ONLY -> net
-        "discover" -> net || Features.on("local")
-        "qqcharts", "qqnew" -> qq
-        "kgcharts" -> kg
-        else -> pairOf(id)?.let { (a, b) -> available(a, net, qq, kg) || available(b, net, qq, kg) } ?: true
+    /** 模块要求首页来源里有插件实现的功能（QQ / 酷狗没有日推、FM 这些） */
+    private val NEED = mapOf("daily" to "daily", "fm" to "fm", "foryou" to "recPlaylists", "charts" to "toplists", "newalbums" to "newAlbums")
+    fun available(id: String): Boolean = when (id) {
+        in NEED -> HomeSrc.has(NEED.getValue(id))
+        "discover" -> HomeSrc.has("square") || HomeSrc.has("toplists") || Features.on("local")
+        "stats" -> Features.on("stats")
+        else -> pairOf(id)?.let { (a, b) -> available(a) || available(b) } ?: true
     }
-    /** 按设置里的首页来源判断 */
-    fun availableNow(id: String): Boolean { val s = HomeSrc.current; return available(id, Features.on("ncm") && (s == 0 || s == 3), Features.on("qq") && (s == 1 || s == 3), Features.on("kugou") && (s == 2 || s == 3)) }
+    fun availableNow(id: String) = available(id)
     /** 新加的可选布局默认关着 */
     private val OFF_BY_DEFAULT = emptySet<String>()
     private val names = ALL.toMap()
@@ -47,7 +44,8 @@ object HomeLayout {
         prefs = Plat.prefs("ui")
         val saved = prefs!!.getString("home_layout", "")!!.split(',').mapNotNull { e ->
             val on = e.substringAfterLast(':') == "1"
-            when (val id = e.substringBeforeLast(':')) {
+            // 旧的按音源分开的模块换成通用的
+            when (val id = e.substringBeforeLast(':').replace("qqcharts", "charts").replace("kgcharts", "charts").replace("qqnew", "newalbums")) {
                 "combo" -> "pair:continue+daily" to on          // 旧的固定组合
                 in names -> id to on
                 else -> if (pairOf(id) != null) id to on else null
@@ -58,7 +56,7 @@ object HomeLayout {
         ALL.forEach { (id, _) ->
             if (items.none { it.first == id }) {
                 val after = items.indexOfFirst { it.first == "discover" }
-                if (id in setOf("qqcharts", "qqnew", "kgcharts") && after >= 0) items.add(after + 1 + items.drop(after + 1).takeWhile { it.first in setOf("qqcharts", "qqnew", "kgcharts") }.size, id to true)
+                if (id in setOf("charts", "newalbums") && after >= 0) items.add(after + 1 + items.drop(after + 1).takeWhile { it.first in setOf("charts", "newalbums") }.size, id to true)
                 else items += id to (id !in OFF_BY_DEFAULT)
             }
         }

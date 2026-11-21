@@ -29,6 +29,8 @@ data class PlayState(
 
 /** 播放引擎：队列自己管，ExoPlayer 一次只放一首（网易云地址会过期，播到哪首才去取地址）。 */
 object Engine {
+    /** 曲目自带的地址：WebDAV 的「dav:/路径」换成带认证的完整地址 */
+    private fun srcUrl(src: String) = if (src.startsWith("dav:")) DavMusic.playUrl(src) else src
     private val audio get() = Plat.impl.audio
     val state = MutableStateFlow(PlayState())
     val position = MutableStateFlow(0L)
@@ -79,7 +81,7 @@ object Engine {
                 val dl = Downloads.file(nt.id)
                 val hit = cachedLevel(nt.id)
                 when {
-                    nt.src != null -> { audio.queueNext(nt.src, "loc_${nt.id}", nt); queuedFmt = nt.src.substringAfterLast('.', "").lowercase() }
+                    nt.src != null -> { audio.queueNext(srcUrl(nt.src), "loc_${nt.id}", nt); queuedFmt = nt.src.substringAfterLast('.', "").lowercase() }
                     dl != null -> { audio.queueNext(dl.toURI().toString(), "dl_${nt.id}", nt); queuedFmt = dl.extension.lowercase() }
                     hit != null && !Plat.isDesktop -> { audio.queueNext(null, cacheKey(nt.id, hit.first), nt); queuedFmt = hit.second }
                     else -> { val st = Ncm.stream(nt.id, q); audio.queueNext(st.url, cacheKey(nt.id, st.level), nt); queuedFmt = st.format; prefs?.edit()?.putString("fmt_${cacheKey(nt.id, st.level)}", st.format)?.apply() }
@@ -186,7 +188,7 @@ object Engine {
                 val hit = cachedLevel(t.id)
                 val dl = Downloads.file(t.id)
                 if (t.src != null) {
-                    audio.open(t.src, "loc_${t.id}", startMs, state.value.want, t); opened = true
+                    audio.open(srcUrl(t.src), "loc_${t.id}", startMs, state.value.want, t); opened = true
                     state.value = state.value.copy(format = t.src.substringAfterLast('.', "").takeIf { it.length in 2..4 }?.lowercase() ?: "", kbps = 0, cached = true)
                 } else if (dl != null) {
                     if (t.durationMs > 0) localKbps = (dl.length() * 8 / t.durationMs).toInt()

@@ -19,10 +19,8 @@ import androidx.compose.ui.unit.dp
 object Features {
     class F(val id: String, val name: String, val desc: String, val desktop: Boolean? = null, val group: String = "")
     private val ALL = listOf(
-        F("ncm", "网易云音乐", "音源：搜索、播放、歌词，日推、私人 FM、歌单、评论、MV，登录后看网易云的歌单", group = "音源"),
-        F("qq", "QQ 音乐", "音源：搜索、播放、歌词、排行榜、新碟，扫码登录后看 QQ 音乐的歌单", group = "音源"),
-        F("kugou", "酷狗音乐", "音源：搜索、播放、歌词、排行榜，扫码登录后看酷狗的歌单", group = "音源"),
         F("local", "本地音乐", "扫描并播放本机的音乐文件", group = "本地"),
+        F("davmusic", "WebDAV 音乐", "直接播放网盘（WebDAV）里的歌", group = "本地"),
         F("dl", "下载", "把歌下载到本地，附带歌词；下载管理页", group = "本地"),
         F("offset", "歌词偏移", "单首歌调整歌词提前 / 推后", group = "播放与歌词"),
         F("card", "歌词卡片", "把选中的歌词做成分享图片", group = "播放与歌词"),
@@ -39,12 +37,9 @@ object Features {
     fun set(id: String, v: Boolean) {
         off = if (v) off - id else off + id
         Plat.prefs("ui").edit().putStringSet("featOff", off).apply()
-        if (id == "ncm" && v) Store.refreshAll()
         SearchSource.fix()
     }
     fun load() { off = Plat.prefs("ui").getStringSet("featOff", null) ?: emptySet() }
-    /** 开着的在线音源（0 网易云 / 1 QQ 音乐 / 2 酷狗）；全关时本体只剩本地功能 */
-    val sources: List<Int> get() = listOfNotNull(if (on("ncm")) 0 else null, if (on("qq")) 1 else null, if (on("kugou")) 2 else null)
 }
 
 /** 设置 → 功能管理 */

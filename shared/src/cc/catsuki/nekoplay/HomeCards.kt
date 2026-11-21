@@ -13,7 +13,7 @@ import java.util.Calendar
  * 首页的并排组合：任意两个模块左右各占一半。
  * 每个模块在这里有一个「半宽卡片」版本；只有网易云有的模块在没开网易云时不显示，另一块就占满整行。
  */
-@Composable fun HomePair(a: String, b: String, topPad: Boolean, showNet: Boolean) {
+@Composable fun HomePair(a: String, b: String, topPad: Boolean) {
     val ids = listOf(a, b).filter { HomeLayout.availableNow(it) }
     if (ids.isEmpty()) return
     Row(Modifier.padding(top = if (topPad) 32.dp else 0.dp).fillMaxWidth().height(IntrinsicSize.Min)) {
@@ -73,7 +73,10 @@ private var recCache: List<Playlist>? = null
             "discover" -> {
                 Tag("DISCOVER"); Spacer(Modifier.height(6.dp))
                 buildList {
-                    if (Features.on("ncm")) { add("排行榜" to { nav.push(Page.Playlists("top", "", "排行榜")) }); add("歌单广场" to { nav.push(Page.Square) }); add("新碟上架" to { nav.push(Page.NewAlbums) }); add("MV 精选" to { nav.push(Page.Mvs) }) }
+                    if (HomeSrc.has("toplists")) add("排行榜" to { nav.push(Page.Playlists("top", "", "排行榜")) })
+                    if (HomeSrc.has("square")) add("歌单广场" to { nav.push(Page.Square) })
+                    if (HomeSrc.has("newAlbums")) add("新碟上架" to { nav.push(Page.NewAlbums) })
+                    if (HomeSrc.has("recMvs")) add("MV 精选" to { nav.push(Page.Mvs) })
                     if (Features.on("local")) add("本地音乐" to { nav.push(Page.Local) })
                 }.forEach { (t, go) ->
                     Row(Modifier.fillMaxWidth().press(onClick = go).padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { T(t, 14, w = 700, modifier = Modifier.weight(1f)); NIcon(NIcons.chevronRight, 14.dp, p.s) }
@@ -91,17 +94,14 @@ private var recCache: List<Playlist>? = null
                 LinkBtn("全部推荐", 13) { nav.push(Page.Playlists("rec", "", "推荐歌单")) }
             }
             "collections" -> {
-                val liked = pls.firstOrNull { it.liked }
                 Tag("COLLECTIONS"); Spacer(Modifier.height(10.dp))
-                if (liked != null && Features.on("ncm")) Row(Modifier.fillMaxWidth().press { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    LikedCover(liked.cover, 40.dp); Spacer(Modifier.width(8.dp)); Column { T("我喜欢", 14, w = 700); T("${two(liked.count)} 首", 11, p.s, mono = true) }
-                }
-                // QQ 音乐 / 酷狗的「我喜欢」（按首页来源）
-                val hs = HomeSrc.current
-                val qqLiked = QqStore.playlists.collectAsState().value.firstOrNull { it.liked }.takeIf { Features.on("qq") && (hs == 1 || hs == 3) }
-                val kgLiked = KgStore.playlists.collectAsState().value.firstOrNull { it.liked }.takeIf { Features.on("kugou") && (hs == 2 || hs == 3) }
-                listOfNotNull(qqLiked?.let { it to "QQ 我喜欢" }, kgLiked?.let { it to "酷狗 我喜欢" }).forEach { (pl, name) ->
-                    Row(Modifier.fillMaxWidth().press { nav.push(Page.Detail("pl", pl.id, name, pl.cover)) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                // 首页来源里每个插件的「我喜欢」
+                val allPls by PluginStore.playlists.collectAsState()
+                val mainId = Plugins.main()?.id
+                val lk = HomeSrc.plugins.mapNotNull { s -> allPls[s.id]?.firstOrNull { it.liked }?.let { s to it } }
+                lk.forEach { (src, pl) ->
+                    val name = if (lk.size > 1) "${src.name} 我喜欢" else "我喜欢"
+                    Row(Modifier.fillMaxWidth().press { nav.push(Page.Detail(if (src.id == mainId) "liked" else "pl", pl.id, name, pl.cover)) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         LikedCover(pl.cover, 40.dp); Spacer(Modifier.width(8.dp)); Column { T(name, 14, w = 700); T("${two(pl.count)} 首", 11, p.s, mono = true) }
                     }
                 }
@@ -109,10 +109,10 @@ private var recCache: List<Playlist>? = null
                     RecentCover(rec.firstOrNull()?.cover, 40.dp); Spacer(Modifier.width(8.dp)); Column { T("最近播放", 14, w = 700); T("${two(rec.size)} 首", 11, p.s, mono = true) }
                 }
             }
-            "qqcharts", "kgcharts" -> {
-                val src = if (id == "qqcharts") 1 else 2
-                val l by produceState(HomeSrc.charts[src], src) { if (value == null) runCatching { value = (if (src == 1) Qqm.toplists() else Kgm.toplists()).also { HomeSrc.charts[src] = it } } }
-                Tag(if (src == 1) "QQ CHARTS" else "KUGOU CHARTS"); Spacer(Modifier.height(6.dp))
+            "charts" -> {
+                val src = HomeSrc.plugins.firstOrNull { it.has("toplists") }
+                val l by produceState(src?.let { HomeSrc.pluginCharts[it.id] }, src?.id) { if (value == null && src != null) runCatching { value = Plugins.toplists(src.id).also { HomeSrc.pluginCharts[src.id] = it } } }
+                Tag("CHARTS" + (src?.let { " · " + it.name.uppercase() } ?: "")); Spacer(Modifier.height(6.dp))
                 val list = l
                 if (list == null) T("LOADING", 11, p.s, mono = true)
                 else list.take(5).forEach { pl ->
@@ -121,9 +121,10 @@ private var recCache: List<Playlist>? = null
                     }
                 }
             }
-            "qqnew" -> {
-                val l by produceState(HomeSrc.qqAlbums) { if (value == null) value = runCatching { Qqm.newAlbums(1, num = 20) }.getOrDefault(emptyList()).also { HomeSrc.qqAlbums = it } }
-                Tag("QQ NEW ALBUMS"); Spacer(Modifier.height(6.dp))
+            "newalbums" -> {
+                val src = HomeSrc.plugins.firstOrNull { it.has("newAlbums") }
+                val l by produceState(src?.let { HomeSrc.albums[it.id] }, src?.id) { if (value == null && src != null) value = runCatching { Plugins.newAlbums(src.id) }.getOrDefault(emptyList()).also { HomeSrc.albums[src.id] = it } }
+                Tag("NEW ALBUMS" + (src?.let { " · " + it.name.uppercase() } ?: "")); Spacer(Modifier.height(6.dp))
                 val list = l
                 if (list == null) T("LOADING", 11, p.s, mono = true)
                 else list.take(4).forEach { a ->
