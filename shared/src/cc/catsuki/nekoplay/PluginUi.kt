@@ -208,7 +208,8 @@ private val CAP_NAMES = linkedMapOf(
     val p = c
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     val scope = rememberCoroutineScope()
-    val cfg by produceState<org.json.JSONObject?>(null, s.id) { value = runCatching { s.call("loginWeb") as? org.json.JSONObject }.getOrNull() }
+    // desktop：电脑版用电脑网页（扫码 / 本机 QQ 快捷登录），手机用手机网页（拉起 App）
+    val cfg by produceState<org.json.JSONObject?>(null, s.id) { value = runCatching { s.call("loginWeb", org.json.JSONObject().put("desktop", Plat.isDesktop)) as? org.json.JSONObject }.getOrNull() }
     val c0 = cfg ?: run { Box(modifier) { T("LOADING", 12, p.s, mono = true) }; return }
     var url by remember(c0) { mutableStateOf(c0.optString("url")) }
     var status by remember(c0) { mutableStateOf(c0.optString("hint")) }
@@ -229,7 +230,7 @@ private val CAP_NAMES = linkedMapOf(
         if (info.isNotEmpty()) T(info, 12, p.s, lines = 2, mono = true)
         Spacer(Modifier.height(8.dp))
         Box(Modifier.fillMaxWidth().weight(1f).nbf(1.dp, p.k)) {
-            Plat.impl.WebPage(url, Modifier.fillMaxSize(), desktopUa = c0.optBoolean("pc"), onInfo = { info = it }) { u ->
+            Plat.impl.WebPage(url, Modifier.fillMaxSize(), desktopUa = c0.optBoolean("pc"), onInfo = { info = it }, stopOn = c0.optString("done").ifEmpty { null }) { u ->
                 when {
                     doneRe?.containsMatchIn(u) == true -> {
                         if (!busy) { busy = true; scope.launch {

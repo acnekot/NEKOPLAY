@@ -179,7 +179,7 @@ class IosPlat : PlatImpl {
     }
 
     override val hasWebView get() = true
-    @Composable override fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean, onInfo: (String) -> Unit, intercept: (String) -> Boolean) {
+    @Composable override fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean, onInfo: (String) -> Unit, stopOn: String?, intercept: (String) -> Boolean) {
         val cb by rememberUpdatedState(intercept)
         val del = remember { WebDelegate { cb } }
         val loaded = remember { arrayOfNulls<String>(1) }

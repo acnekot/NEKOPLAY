@@ -105,6 +105,11 @@ class DesktopPlat : PlatImpl {
         }
     }
 
+    // 内嵌网页（插件的网页登录）：Windows 用系统的 WebView2，其它系统暂时没有
+    override val hasWebView get() = DesktopWebView.available
+    @Composable override fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean, onInfo: (String) -> Unit, stopOn: String?, intercept: (String) -> Boolean) =
+        DesktopWebPage(url, modifier, stopOn, onInfo, intercept)
+
     /** MV：另开一个 mpv 窗口播放（嵌入播放以后再做） */
     @Composable override fun VideoPlayer(url: String?, modifier: Modifier, onState: (Boolean, Long, Long, String?) -> Unit, control: VideoControl) {
         LaunchedEffect(url) {

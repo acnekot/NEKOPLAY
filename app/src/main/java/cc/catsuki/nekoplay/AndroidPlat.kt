@@ -162,7 +162,7 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
 
     override val hasWebView get() = true
     @android.annotation.SuppressLint("SetJavaScriptEnabled")
-    @Composable override fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean, onInfo: (String) -> Unit, intercept: (String) -> Boolean) {
+    @Composable override fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean, onInfo: (String) -> Unit, stopOn: String?, intercept: (String) -> Boolean) {
         val cb by rememberUpdatedState(intercept); val info by rememberUpdatedState(onInfo)
         val loaded = remember { arrayOfNulls<String>(1) }
         androidx.compose.ui.viewinterop.AndroidView(factory = { ctx ->

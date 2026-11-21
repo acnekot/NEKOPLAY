@@ -1,6 +1,6 @@
 // @id qqmusic
 // @name QQ 音乐
-// @version 1.1.0
+// @version 1.2.0
 // @author NEKOPLAY
 // @desc QQ 音乐音源：搜索、播放、歌词、歌单、专辑、歌手、排行榜，QQ 扫码登录后看自己的歌单
 // @api 1
@@ -279,9 +279,12 @@ nk.register({
 
   // ---------- 网页登录 ----------
   /** done：网页跳到这里就算登录完成；open：这些地址交给系统打开（拉起手机 QQ） */
-  loginWeb() {
-    return { url: 'https://graph.qq.com/oauth2.0/authorize?' + qs({ response_type: 'code', client_id: '100497308', redirect_uri: REDIRECT + '?login_type=1&surl=https://y.qq.com/', state: 'state', display: 'mobile' }),
-      done: '^https://y\\.qq\\.com/portal/wx_redirect\\.html', open: '^wtloginmqq', hint: '在下面登录 QQ；点「一键登录」会跳到手机 QQ，确认后自动回来' };
+  loginWeb(env) {
+    const pc = !!(env && env.desktop);
+    const q = qs({ response_type: 'code', client_id: '100497308', redirect_uri: REDIRECT + '?login_type=1&surl=https://y.qq.com/', state: 'state', display: pc ? 'pc' : 'mobile' });
+    return { url: 'https://graph.qq.com/oauth2.0/' + (pc ? 'show?which=Login&' : 'authorize?') + q, pc,
+      done: '^https://y\\.qq\\.com/portal/wx_redirect\\.html', open: '^wtloginmqq',
+      hint: pc ? '用手机 QQ 扫码，或者电脑上已经登录了 QQ 时直接点头像快捷登录' : '在下面登录 QQ；点「一键登录」会跳到手机 QQ，确认后自动回来' };
   },
   async loginWebDone(url) {
     const m = /[?&]code=([^&#]+)/.exec(url); if (!m) throw new Error('没有拿到登录 code');
