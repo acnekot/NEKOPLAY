@@ -178,6 +178,16 @@ class IosPlat : PlatImpl {
         UIKitViewController(factory = { AVPlayerViewController().apply { this.player = player; showsPlaybackControls = false; videoGravity = AVLayerVideoGravityResizeAspect } }, modifier = modifier)
     }
 
+    override val hasWebView get() = true
+    @Composable override fun WebPage(url: String, modifier: Modifier, intercept: (String) -> Boolean) {
+        val cb by rememberUpdatedState(intercept)
+        val del = remember { WebDelegate { cb } }
+        val loaded = remember { arrayOfNulls<String>(1) }
+        androidx.compose.ui.viewinterop.UIKitView(factory = {
+            platform.WebKit.WKWebView(frame = platform.CoreGraphics.CGRectZero.readValue(), configuration = platform.WebKit.WKWebViewConfiguration()).apply { navigationDelegate = del }
+        }, modifier = modifier, update = { w -> if (loaded[0] != url) { loaded[0] = url; NSURL.URLWithString(url)?.let { w.loadRequest(NSURLRequest.requestWithURL(it)) } } })
+    }
+
     @Composable override fun AnimatedImage(url: String, modifier: Modifier) =
         coil3.compose.AsyncImage(if (UiPref.lowMem) img(url, 256) else url, null, modifier, contentScale = ContentScale.Crop)
 
@@ -232,5 +242,15 @@ private class JsonKV(val f: File) : KV {
         override fun remove(k: String) = apply { ops += { m.remove(k) } }
         override fun clear() = apply { ops += { m.clear() } }
         override fun apply() { synchronized(m) { ops.forEach { it() } }; save() }
+    }
+}
+
+
+/** 网页跳转拦截（QQ 网页登录） */
+private class WebDelegate(val cb: () -> ((String) -> Boolean)) : NSObject(), platform.WebKit.WKNavigationDelegateProtocol {
+    override fun webView(webView: platform.WebKit.WKWebView, decidePolicyForNavigationAction: platform.WebKit.WKNavigationAction, decisionHandler: (platform.WebKit.WKNavigationActionPolicy) -> Unit) {
+        val u = decidePolicyForNavigationAction.request.URL?.absoluteString ?: ""
+        val main = decidePolicyForNavigationAction.targetFrame?.mainFrame ?: true
+        decisionHandler(if (main && cb()(u)) platform.WebKit.WKNavigationActionPolicy.WKNavigationActionPolicyCancel else platform.WebKit.WKNavigationActionPolicy.WKNavigationActionPolicyAllow)
     }
 }

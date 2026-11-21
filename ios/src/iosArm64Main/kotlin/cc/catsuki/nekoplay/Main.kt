@@ -38,6 +38,7 @@ class AppDelegate @OverrideInit constructor() : UIResponder(), UIApplicationDele
         return true
     }
 
+    override fun application(app: UIApplication, openURL: platform.Foundation.NSURL, options: Map<Any?, *>): Boolean { onOpenUrl(openURL.absoluteString ?: ""); return true }
     override fun applicationDidEnterBackground(application: UIApplication) = onBackground()
     override fun applicationWillTerminate(application: UIApplication) = onBackground()
 }
@@ -72,3 +73,6 @@ fun MainViewController(): UIViewController {
 
 /** 退到后台 / 退出时保存播放进度 */
 fun onBackground() { if (booted) Engine.savePosition() }
+
+/** QQ 授权后跳回来的 nekoplay://…（Xcode 工程的 Swift 入口也调用这个） */
+fun onOpenUrl(u: String) { if (u.startsWith("nekoplay:")) DeepLink.url.value = u }

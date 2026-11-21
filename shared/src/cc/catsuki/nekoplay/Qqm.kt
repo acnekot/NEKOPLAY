@@ -391,6 +391,15 @@ object Qqm {
             if (ch in 'a'..'z' || ch in 'A'..'Z' || ch in '0'..'9' || ch in "-_.~") append(ch) else { append('%'); append("0123456789ABCDEF"[c shr 4]); append("0123456789ABCDEF"[c and 15]) }
         }
     }
+    private fun dec(s: String): String {
+        val out = ArrayList<Byte>(); var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            if (c == '%' && i + 2 < s.length + 0 && i + 2 <= s.length - 1) { out.add(s.substring(i + 1, i + 3).toInt(16).toByte()); i += 3 }
+            else { c.toString().encodeToByteArray().forEach { out.add(it) }; i++ }
+        }
+        return out.toByteArray().decodeToString()
+    }
     private fun query(vararg kv: Pair<String, Any>) = kv.joinToString("&") { "${it.first}=${enc(it.second.toString())}" }
 
     suspend fun qrQq(): Qr = withContext(Dispatchers.IO) {
@@ -416,8 +425,25 @@ object Qqm {
     /** step：确认之后换凭证的每一步，用来在界面上显示进度 */
     suspend fun qrCheck(q: Qr, step: (String) -> Unit = {}): QrState = if (q.wx) checkWx(q, step) else checkQq(q, step)
 
-    /** 手机上不用扫码：把二维码地址直接交给手机 QQ（和 ptlogin 网页在微信里拉起 QQ 的方式一样），QQ 里确认后跳回 nekoplay:// */
-    fun qqAppLink(qrText: String, ios: Boolean): String = (if (ios) "wtloginmqq3" else "wtloginmqq") + "://ptlogin/qlogin?" + query("qrcode" to qrText, "schemacallback" to "nekoplay://")
+    // ---------- 网页登录（手机上用内嵌网页走 QQ 互联，可以一键拉起手机 QQ） ----------
+    const val WEB_REDIRECT = "https://y.qq.com/portal/wx_redirect.html"
+    fun webLoginUrl(): String = "https://graph.qq.com/oauth2.0/authorize?" + query("response_type" to "code", "client_id" to "100497308",
+        "redirect_uri" to "$WEB_REDIRECT?login_type=1&surl=https://y.qq.com/", "state" to "state", "display" to "mobile")
+    /** 网页里「一键登录」拉起 QQ 的地址，加上回跳到本 App */
+    fun withCallback(u: String): String = if ("schemacallback=" in u) u else u + "&schemacallback=" + enc("nekoplay://")
+    /** QQ 跳回来的 nekoplay://… 里取出要继续加载的网页地址 */
+    fun callbackToUrl(cb: String): String? {
+        var r = cb.removePrefix("nekoplay://").replace("(null)", "")
+        if (r.startsWith("http%3A", true) || r.startsWith("https%3A", true)) r = dec(r)
+        val i = r.indexOf("http"); return if (i >= 0) r.substring(i) else null
+    }
+    /** 网页登录最后跳到 y.qq.com 时带的 code */
+    fun codeOf(u: String): String? = if (u.startsWith(WEB_REDIRECT)) Regex("[?&]code=([^&#]+)").find(u)?.groupValues?.get(1) else null
+    suspend fun loginWithQqCode(code: String) {
+        val d = call("QQConnectLogin.LoginServer", "QQLogin", JSONObject().put("code", code), JSONObject().put("tmeLoginType", 2))
+        saveCredential(d.put("loginType", 2))
+        refreshProfile()
+    }
 
     private fun stateOf(code: Int) = when (code) { 0, 405 -> QrState.DONE; 66, 408 -> QrState.WAIT; 67, 404 -> QrState.SCANNED; 65, 402 -> QrState.EXPIRED; 68, 403 -> QrState.REFUSED; else -> QrState.WAIT }
 
@@ -457,9 +483,7 @@ object Qqm {
         }
         val code = Regex("[?&]code=([^&]+)").find(location)?.groupValues?.get(1) ?: throw NcmError("QQ 登录：获取 code 失败" + if (location.isEmpty()) "" else "（${location.take(80)}）")
         step("正在换取 QQ 音乐凭证…")
-        val d = call("QQConnectLogin.LoginServer", "QQLogin", JSONObject().put("code", code), JSONObject().put("tmeLoginType", 2))
-        saveCredential(d.put("loginType", 2))
-        refreshProfile()
+        loginWithQqCode(code)
     }
 
     private suspend fun checkWx(q: Qr, step: (String) -> Unit): QrState {

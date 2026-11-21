@@ -144,6 +144,21 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
     @Composable override fun AnimatedImage(url: String, modifier: Modifier) =
         coil3.compose.AsyncImage(if (UiPref.lowMem) img(url, 256) else url, null, modifier, contentScale = androidx.compose.ui.layout.ContentScale.Crop)
 
+    override val hasWebView get() = true
+    @android.annotation.SuppressLint("SetJavaScriptEnabled")
+    @Composable override fun WebPage(url: String, modifier: Modifier, intercept: (String) -> Boolean) {
+        val cb by rememberUpdatedState(intercept)
+        val loaded = remember { arrayOfNulls<String>(1) }
+        androidx.compose.ui.viewinterop.AndroidView(factory = { ctx ->
+            android.webkit.WebView(ctx).apply {
+                settings.javaScriptEnabled = true; settings.domStorageEnabled = true
+                webViewClient = object : android.webkit.WebViewClient() {
+                    override fun shouldOverrideUrlLoading(v: android.webkit.WebView, r: android.webkit.WebResourceRequest): Boolean = r.isForMainFrame && cb(r.url.toString())
+                }
+            }
+        }, modifier = modifier, update = { w -> if (loaded[0] != url) { loaded[0] = url; w.loadUrl(url) } }, onRelease = { it.destroy() })
+    }
+
     @Composable override fun BackHandler(enabled: Boolean, onBack: () -> Unit) = androidx.activity.compose.BackHandler(enabled, onBack)
 
     @Composable override fun VideoPlayer(url: String?, modifier: Modifier, onState: (Boolean, Long, Long, String?) -> Unit, control: VideoControl) {

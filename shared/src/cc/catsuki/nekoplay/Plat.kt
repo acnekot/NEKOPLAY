@@ -127,6 +127,9 @@ interface PlatImpl {
     @Composable fun VideoPlayer(url: String?, modifier: Modifier, onState: (playing: Boolean, pos: Long, dur: Long, err: String?) -> Unit, control: VideoControl)
     /** 能动的图片（动态头像 GIF 等），不支持就按静态图显示 */
     @Composable fun AnimatedImage(url: String, modifier: Modifier)
+    /** 内嵌网页（QQ 网页登录用）。intercept 返回 true 表示拦下这次跳转；url 变了就重新加载。不支持的平台不显示 */
+    @Composable fun WebPage(url: String, modifier: Modifier, intercept: (String) -> Boolean) {}
+    val hasWebView: Boolean get() = false
     /** 桌面版：本进程 CPU（%）和内存（MB）；安卓返回 null（用 /proc） */
     fun cpuMem(): Pair<Float, Long>? = null
     fun memInfo(): String
@@ -138,6 +141,9 @@ class VideoControl {
     var toggle: () -> Unit = {}
     var seek: (Long) -> Unit = {}
 }
+
+/** 别的 App 跳回来的地址（nekoplay://…），QQ 授权后用 */
+object DeepLink { val url = kotlinx.coroutines.flow.MutableStateFlow<String?>(null) }
 
 object Plat {
     lateinit var impl: PlatImpl

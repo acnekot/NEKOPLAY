@@ -1,5 +1,6 @@
 package cc.catsuki.nekoplay
 
+import androidx.compose.foundation.clickable
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -148,7 +149,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                         }, onDragCancel = {
                             scope.launch { drag.animateTo(0f, spring(1f, Anim.stiff(Spring.StiffnessMediumLow))) }
                         }) { ch, dy -> ch.consume(); scope.launch { drag.snapTo((drag.value + dy).coerceAtLeast(0f)) } }
-                    }.press(.97f) { nav.lyrics = !nav.lyrics }) { Cover(t.cover, coverDp, t.title) }
+                    }.then(Modifier.clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { nav.lyrics = !nav.lyrics })) { Cover(t.cover, coverDp, t.title) }
                     // 标题：两套各在自己的位置淡入淡出
                     // 信息块：和封面左边对齐，宽度等于封面；爱心在歌名同一行最右，对齐封面右边缘
                     if (lt < .45f) Column(Modifier.width(coverDp).graphicsLayer {
