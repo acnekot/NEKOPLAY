@@ -88,7 +88,7 @@ fun LazyListScope.qqLibrary(nav: Nav) {
                 val f = File(Plat.impl.cacheDir, "qq_qr"); f.writeBytes(q.png)
                 Plat.impl.decodeImage(f.path, 600)
             }
-            if (!wx && mobile) link = withContext(Dispatchers.Default) { Plat.impl.qrText(q.png) }?.let { Qqm.qqAppLink(it) }
+            if (!wx && mobile) link = withContext(Dispatchers.Default) { Plat.impl.qrText(q.png) }?.let { Qqm.qqAppLink(it, Plat.impl.name == "ios") }
             status = if (wx) "用微信扫码，并在手机上点确认" else if (link != null) "点「打开手机 QQ 登录」，确认后回到这里；也可以用另一台手机扫码" else "用手机 QQ 扫码，并在手机上点确认"
             var fails = 0
             while (isActive) {

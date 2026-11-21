@@ -416,8 +416,8 @@ object Qqm {
     /** step：确认之后换凭证的每一步，用来在界面上显示进度 */
     suspend fun qrCheck(q: Qr, step: (String) -> Unit = {}): QrState = if (q.wx) checkWx(q, step) else checkQq(q, step)
 
-    /** 手机上不用扫码：把二维码里的地址交给手机 QQ 打开，直接弹出确认登录 */
-    fun qqAppLink(qrText: String): String = "mqqapi://forward/url?version=1&src_type=web&url_prefix=" + java.util.Base64.getEncoder().encodeToString(qrText.encodeToByteArray())
+    /** 手机上不用扫码：把二维码地址直接交给手机 QQ（和 ptlogin 网页在微信里拉起 QQ 的方式一样），QQ 里确认后跳回 nekoplay:// */
+    fun qqAppLink(qrText: String, ios: Boolean): String = (if (ios) "wtloginmqq3" else "wtloginmqq") + "://ptlogin/qlogin?" + query("qrcode" to qrText, "schemacallback" to "nekoplay://")
 
     private fun stateOf(code: Int) = when (code) { 0, 405 -> QrState.DONE; 66, 408 -> QrState.WAIT; 67, 404 -> QrState.SCANNED; 65, 402 -> QrState.EXPIRED; 68, 403 -> QrState.REFUSED; else -> QrState.WAIT }
 
