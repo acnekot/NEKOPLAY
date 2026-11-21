@@ -122,6 +122,10 @@ interface PlatImpl {
     @Composable fun audioPermission(): Pair<Boolean, () -> Unit> = true to {}
     /** 选图片：返回一个「打开选择器」的函数，选好后回调图片的字节 */
     @Composable fun imagePicker(onPick: (ByteArray) -> Unit): () -> Unit
+    /** 选一个文件读出来（备份导入、导入音源脚本用）；不支持的平台返回 null */
+    @Composable fun filePicker(onPick: (ByteArray) -> Unit): (() -> Unit)? = null
+    /** 「另存为」：返回启动函数 (默认文件名, 内容)，保存后回调位置（取消为 null）；不支持返回 null */
+    @Composable fun fileSaver(onDone: (String?) -> Unit): ((String, ByteArray) -> Unit)? = null
     @Composable fun BackHandler(enabled: Boolean, onBack: () -> Unit)
     /** MV 播放区域 */
     @Composable fun VideoPlayer(url: String?, modifier: Modifier, onState: (playing: Boolean, pos: Long, dur: Long, err: String?) -> Unit, control: VideoControl)
