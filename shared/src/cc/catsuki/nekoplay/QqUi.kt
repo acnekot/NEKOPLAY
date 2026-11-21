@@ -77,18 +77,26 @@ fun LazyListScope.qqLibrary(nav: Nav) {
     var round by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf("正在获取二维码…") }
     var img by remember { mutableStateOf<ImageBitmap?>(null) }
+    var link by remember { mutableStateOf<String?>(null) }
+    val mobile = Plat.impl.name != "desktop"
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
     LaunchedEffect(wx, round) {
-        img = null; status = "正在获取二维码…"
+        img = null; link = null; status = "正在获取二维码…"
         try {
             val q = if (wx) Qqm.qrWx() else Qqm.qrQq()
             img = withContext(Dispatchers.IO) {
                 val f = File(Plat.impl.cacheDir, "qq_qr"); f.writeBytes(q.png)
                 Plat.impl.decodeImage(f.path, 600)
             }
-            status = if (wx) "用微信扫码，并在手机上点确认" else "用手机 QQ 扫码，并在手机上点确认"
+            if (!wx && mobile) link = withContext(Dispatchers.Default) { Plat.impl.qrText(q.png) }?.let { Qqm.qqAppLink(it) }
+            status = if (wx) "用微信扫码，并在手机上点确认" else if (link != null) "点「打开手机 QQ 登录」，确认后回到这里；也可以用另一台手机扫码" else "用手机 QQ 扫码，并在手机上点确认"
+            var fails = 0
             while (isActive) {
                 delay(if (wx) 300 else 2000)
-                when (Qqm.qrCheck(q)) {
+                // 切去手机 QQ 确认时 App 会被挂起，回来第一次请求可能失败，网络错误重试几次
+                val st = try { Qqm.qrCheck(q) { status = it } } catch (e: NcmError) { throw e } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { if (++fails > 5) throw e; continue }
+                fails = 0
+                when (st) {
                     Qqm.QrState.WAIT -> {}
                     Qqm.QrState.SCANNED -> status = "已扫码，请在手机上点「确认登录」"
                     Qqm.QrState.EXPIRED -> { status = "二维码已过期，点二维码刷新"; break }
@@ -112,6 +120,11 @@ fun LazyListScope.qqLibrary(nav: Nav) {
             img?.let { Image(it, "二维码", Modifier.size(220.dp)) } ?: T("…", 20, Color.Black)
         }
         Spacer(Modifier.height(14.dp)); T(status, 13, p.s, lines = 3, lh = 1.5f)
+        if (mobile) Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            link?.let { l -> Box(Modifier.press { runCatching { uri.openUri(l) }.onFailure { nav.toast = "没能打开手机 QQ" } }.background(p.k).padding(horizontal = 14.dp, vertical = 8.dp)) { T("打开手机 QQ 登录", 13, p.tagFg, 700) } }
+            img?.let { im -> Box(Modifier.press { nav.toast = runCatching { "已保存到" + Plat.impl.savePicture(im, "QQ音乐登录二维码") + "，在 " + (if (wx) "微信" else "QQ") + " 扫一扫里选相册" }.getOrElse { "保存失败：${it.message}" } }
+                .nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 8.dp)) { T("保存二维码", 13, p.k, 700) } }
+        }
         Spacer(Modifier.height(10.dp))
         T("登录后可以播放账号有权限的歌、查看 QQ 音乐的歌单；登录后 QQ 音乐的歌点喜欢会同步到 QQ 音乐的「我喜欢」", 12, p.s, lines = 3, lh = 1.5f)
     }

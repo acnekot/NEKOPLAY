@@ -102,6 +102,8 @@ interface PlatImpl {
     fun saveJpeg(img: ImageBitmap, file: File)
     /** 存一张 PNG 到相册 / 图片文件夹，返回给人看的位置 */
     fun savePicture(img: ImageBitmap, name: String): String
+    /** 识别二维码图片里的文字；不支持的平台返回 null */
+    fun qrText(png: ByteArray): String? = null
     /** 下载歌曲存放的目录 */
     fun downloadDir(): File = File(filesDir, "downloads")
     /** 下载位置的常用选项（名字 to 路径），设置里直接点选 */

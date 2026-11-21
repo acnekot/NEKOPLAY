@@ -95,6 +95,14 @@ class IosPlat : PlatImpl {
         val data = org.jetbrains.skia.Image.makeFromBitmap(img.asSkiaBitmap()).encodeToData(org.jetbrains.skia.EncodedImageFormat.JPEG, 90) ?: return
         file.writeBytes(data.bytes)
     }
+    override fun qrText(png: ByteArray): String? = runCatching {
+        // 图很小，先放大 4 倍再给 CoreImage 识别
+        val ci = platform.CoreImage.CIImage.imageWithData(png.toNSData())?.imageByApplyingTransform(platform.CoreGraphics.CGAffineTransformMakeScale(4.0, 4.0)) ?: return null
+        val det = platform.CoreImage.CIDetector.detectorOfType(platform.CoreImage.CIDetectorTypeQRCode, null,
+            mapOf<Any?, Any?>(platform.CoreImage.CIDetectorAccuracy to platform.CoreImage.CIDetectorAccuracyHigh)) ?: return null
+        (det.featuresInImage(ci).firstOrNull() as? platform.CoreImage.CIQRCodeFeature)?.messageString
+    }.getOrNull()
+
     override fun savePicture(img: ImageBitmap, name: String): String {
         val data = org.jetbrains.skia.Image.makeFromBitmap(img.asSkiaBitmap()).encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG) ?: throw Exception("编码失败")
         val ui = UIImage.imageWithData(data.bytes.toNSData()) ?: throw Exception("编码失败")
