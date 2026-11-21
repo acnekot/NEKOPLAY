@@ -70,13 +70,15 @@ import java.util.Calendar
     val kgPls by KgStore.playlists.collectAsState()
     val recPl by produceState<List<Playlist>>(emptyList(), showNet) { if (showNet) runCatching { value = Ncm.recPlaylists() } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 24.dp)) {
-        var srcDone = false
         // 首页模块：按「首页布局」里的顺序和开关排列；只有网易云有的模块在别的来源下不显示
         HomeLayout.visible.forEachIndexed { mi, m ->
             // 并排组合：两块各占一半
             HomeLayout.pairOf(m)?.let { (a, b) -> item(key = m) { HomePair(a, b, mi > 0, showNet) }; return@forEachIndexed }
-            if (!showNet && m in setOf("daily", "fm", "foryou", "stats")) return@forEachIndexed
+            if (!HomeLayout.available(m, showNet, showQq, showKg)) return@forEachIndexed
             when (m) {
+                "qqcharts" -> item(key = m) { SrcCharts(1, mi == 0) }
+                "qqnew" -> item(key = m) { QqNewAlbums() }
+                "kgcharts" -> item(key = m) { SrcCharts(2, mi == 0) }
                 "continue" -> {
                 // ---- CONTINUE LISTENING
                 item {
@@ -153,9 +155,6 @@ import java.util.Calendar
                 }
                 }
                 "discover" -> {
-                srcDone = true
-                if (showQq) srcSections(1, first = !showNet && mi == 0)
-                if (showKg) srcSections(2, first = !showNet && !showQq && mi == 0)
                 // ---- DISCOVER
                 if (showNet) item {
                     Column(Modifier.padding(top = 32.dp)) {
@@ -225,7 +224,6 @@ import java.util.Calendar
             }
         }
         // 「发现」模块被关掉时，QQ / 酷狗的区块放到最后
-        if (!srcDone) { if (showQq) srcSections(1, false); if (showKg) srcSections(2, false) }
     }
 }
 
@@ -245,13 +243,7 @@ object HomeSrc {
     var qqAlbums: List<Album>? = null
 }
 
-/** QQ 音乐 / 酷狗在首页的区块：排行榜（QQ 还有新碟） */
-fun LazyListScope.srcSections(src: Int, first: Boolean) {
-    item(key = "charts$src") { SrcCharts(src, first) }
-    if (src == 1) item(key = "newal$src") { QqNewAlbums() }
-}
-
-@Composable private fun SrcCharts(src: Int, first: Boolean) {
+@Composable fun SrcCharts(src: Int, first: Boolean) {
     val nav = LocalNav.current
     var err by remember { mutableStateOf<String?>(null) }
     val lists by produceState(HomeSrc.charts[src], src) {
@@ -271,7 +263,7 @@ fun LazyListScope.srcSections(src: Int, first: Boolean) {
     }
 }
 
-@Composable private fun QqNewAlbums() {
+@Composable fun QqNewAlbums() {
     val nav = LocalNav.current
     val albums by produceState(HomeSrc.qqAlbums) { if (value == null) value = runCatching { Qqm.newAlbums(1, num = 20) }.getOrDefault(emptyList()).also { HomeSrc.qqAlbums = it } }
     val l = albums ?: return

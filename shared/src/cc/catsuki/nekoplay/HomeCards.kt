@@ -14,7 +14,7 @@ import java.util.Calendar
  * 每个模块在这里有一个「半宽卡片」版本；只有网易云有的模块在没开网易云时不显示，另一块就占满整行。
  */
 @Composable fun HomePair(a: String, b: String, topPad: Boolean, showNet: Boolean) {
-    val ids = listOf(a, b).filter { showNet || it !in NET_ONLY }
+    val ids = listOf(a, b).filter { HomeLayout.availableNow(it) }
     if (ids.isEmpty()) return
     Row(Modifier.padding(top = if (topPad) 32.dp else 0.dp).fillMaxWidth().height(IntrinsicSize.Min)) {
         ids.forEachIndexed { i, id ->
@@ -24,7 +24,6 @@ import java.util.Calendar
     }
 }
 
-private val NET_ONLY = setOf("daily", "fm", "foryou", "stats")
 /** 推荐歌单缓存：卡片来回滚动不重复请求 */
 private var recCache: List<Playlist>? = null
 
@@ -97,8 +96,40 @@ private var recCache: List<Playlist>? = null
                 if (liked != null && Features.on("ncm")) Row(Modifier.fillMaxWidth().press { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     LikedCover(liked.cover, 40.dp); Spacer(Modifier.width(8.dp)); Column { T("我喜欢", 14, w = 700); T("${two(liked.count)} 首", 11, p.s, mono = true) }
                 }
+                // QQ 音乐 / 酷狗的「我喜欢」（按首页来源）
+                val hs = HomeSrc.current
+                val qqLiked = QqStore.playlists.collectAsState().value.firstOrNull { it.liked }.takeIf { Features.on("qq") && (hs == 1 || hs == 3) }
+                val kgLiked = KgStore.playlists.collectAsState().value.firstOrNull { it.liked }.takeIf { Features.on("kugou") && (hs == 2 || hs == 3) }
+                listOfNotNull(qqLiked?.let { it to "QQ 我喜欢" }, kgLiked?.let { it to "酷狗 我喜欢" }).forEach { (pl, name) ->
+                    Row(Modifier.fillMaxWidth().press { nav.push(Page.Detail("pl", pl.id, name, pl.cover)) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        LikedCover(pl.cover, 40.dp); Spacer(Modifier.width(8.dp)); Column { T(name, 14, w = 700); T("${two(pl.count)} 首", 11, p.s, mono = true) }
+                    }
+                }
                 Row(Modifier.fillMaxWidth().press { nav.push(Page.Detail("recent", "recent", "最近播放")) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     RecentCover(rec.firstOrNull()?.cover, 40.dp); Spacer(Modifier.width(8.dp)); Column { T("最近播放", 14, w = 700); T("${two(rec.size)} 首", 11, p.s, mono = true) }
+                }
+            }
+            "qqcharts", "kgcharts" -> {
+                val src = if (id == "qqcharts") 1 else 2
+                val l by produceState(HomeSrc.charts[src], src) { if (value == null) runCatching { value = (if (src == 1) Qqm.toplists() else Kgm.toplists()).also { HomeSrc.charts[src] = it } } }
+                Tag(if (src == 1) "QQ CHARTS" else "KUGOU CHARTS"); Spacer(Modifier.height(6.dp))
+                val list = l
+                if (list == null) T("LOADING", 11, p.s, mono = true)
+                else list.take(5).forEach { pl ->
+                    Row(Modifier.fillMaxWidth().press { nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Cover(pl.cover, 32.dp, pl.name); Spacer(Modifier.width(8.dp)); T(pl.name, 13, w = 700, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+            "qqnew" -> {
+                val l by produceState(HomeSrc.qqAlbums) { if (value == null) value = runCatching { Qqm.newAlbums(1, num = 20) }.getOrDefault(emptyList()).also { HomeSrc.qqAlbums = it } }
+                Tag("QQ NEW ALBUMS"); Spacer(Modifier.height(6.dp))
+                val list = l
+                if (list == null) T("LOADING", 11, p.s, mono = true)
+                else list.take(4).forEach { a ->
+                    Row(Modifier.fillMaxWidth().press { nav.push(Page.Album(a.id, a.name, a.pic)) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Cover(a.pic, 32.dp, a.name); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { T(a.name, 13, w = 700); T(a.artist, 11, p.s) }
+                    }
                 }
             }
             "stats" -> {
