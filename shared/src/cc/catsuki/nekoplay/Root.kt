@@ -197,16 +197,27 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
                 Box(Modifier.background(c.k).padding(horizontal = 16.dp, vertical = 11.dp)) { T(nav.toast ?: "", 14, c.tagFg, lines = 3, lh = 1.4f, align = TextAlign.Center) }
             }
             val po by Perf.overlay.collectAsState()
-            // 桌面版没有系统帧统计：浮窗开着时自己数帧（两帧间隔超过 1.5 倍刷新周期算卡顿）
+            // 桌面版没有系统帧统计：浮窗开着时自己数帧。
+            // 刷新周期取最近 120 帧里最短的间隔（60Hz / 120Hz 屏都对），间隔超过 1.5 倍算掉帧；
+            // 超过 0.5 秒的空档是窗口在后台 / 被系统节流，不算
             if (po && Plat.isDesktop) LaunchedEffect(Unit) {
                 var last = 0L
-                while (true) androidx.compose.runtime.withFrameNanos { t -> if (last != 0L) { val d = t - last; Perf.frame(d, 0, d > 25_000_000) }; last = t }
+                val win = ArrayDeque<Long>()
+                while (true) androidx.compose.runtime.withFrameNanos { t ->
+                    val d = t - last
+                    if (last != 0L && d < 500_000_000L) {
+                        win.addLast(d); if (win.size > 120) win.removeFirst()
+                        val period = win.min().coerceAtLeast(4_000_000L)
+                        Perf.frame(d, 0, d > period * 3 / 2)
+                    }
+                    last = t
+                }
             }
             if (po) {
                 val ps by Perf.stat.collectAsState()
                 Box(Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 6.dp, bottom = 140.dp).background(Color(0xCC000000)).padding(horizontal = 6.dp, vertical = 4.dp)) {
-                    T(if (Plat.isDesktop) "CPU %.0f%%  %dfps\n帧 %.1fms 卡%d\n内存 %dM".format(ps.cpu, ps.fps, ps.frameMs, ps.jank, ps.pss)
-                      else "CPU %.0f%%  %dfps\n帧 %.1f GPU %.1fms 卡%d\nGPU %s  PSS %dM".format(ps.cpu, ps.fps, ps.frameMs, ps.gpuMs, ps.jank, ps.gpu ?: "-", ps.pss), 10, Color.White, mono = true, lines = 3, lh = 1.3f)
+                    T(if (Plat.isDesktop) "CPU %.0f%%  %dfps\n帧 %.1fms 掉帧%d/s\n内存 %dM".format(ps.cpu, ps.fps, ps.frameMs, ps.jank, ps.pss)
+                      else "CPU %.0f%%  %dfps\n帧 %.1f GPU %.1fms 掉帧%d/s\nGPU %s  PSS %dM".format(ps.cpu, ps.fps, ps.frameMs, ps.gpuMs, ps.jank, ps.gpu ?: "-", ps.pss), 10, Color.White, mono = true, lines = 3, lh = 1.3f)
                 }
             }
         }
