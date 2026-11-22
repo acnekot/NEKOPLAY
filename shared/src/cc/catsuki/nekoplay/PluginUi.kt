@@ -122,7 +122,10 @@ private val CAP_NAMES = linkedMapOf(
         }
     }
     var mode by remember { mutableStateOf<org.json.JSONObject?>(null) }
-    LaunchedEffect(modes) { if (mode == null) mode = modes.firstOrNull() }
+    // 桌面端优先默认原生扫码登录（秒开、零 WebView 依赖），移动端优先网页登录（可一键拉起 App）；仍可随时点上方切换
+    LaunchedEffect(modes) {
+        if (mode == null) mode = if (Plat.isDesktop) (modes.firstOrNull { !it.optBoolean("web") } ?: modes.firstOrNull()) else modes.firstOrNull()
+    }
     var round by remember { mutableIntStateOf(0) }
     var img by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var qrInfo by remember { mutableStateOf<org.json.JSONObject?>(null) }
