@@ -1,6 +1,6 @@
 // @id qqmusic
 // @name QQ 音乐
-// @version 1.6.1
+// @version 1.6.2
 // @author NEKOPLAY
 // @desc QQ 音乐完整音源：搜索（单曲/专辑/歌手/歌单/热搜/联想）、播放、歌词、私人 FM、每日推荐、推荐歌单、歌单广场、新碟/新歌、排行榜、MV 精选、歌曲评论与点赞、相似歌曲/歌手/歌单、歌单增删收藏、关注歌手与曲库同步
 // @api 1
@@ -26,7 +26,7 @@ function guid() {
   return g;
 }
 function cred() { return nk.store.get('cred'); }
-const https = (u) => (u || '').replace(/^http:/, 'https:');
+const https = (u) => (typeof u === 'string' ? u : ((u && (u.picurl || u.url)) || '')).replace(/^http:/, 'https:');
 const albumPic = (mid, size) => mid ? `https://y.gtimg.cn/music/photo_new/T002R${size || 500}x${size || 500}M000${mid}.jpg` : null;
 const singerPic = (mid) => mid ? `https://y.gtimg.cn/music/photo_new/T001R500x500M000${mid}.jpg` : null;
 const b64 = (s) => { const t = (s || '').trim(); if (!t) return ''; if (t.startsWith('[')) return t; try { return nk.base64.decode(t); } catch (e) { return ''; } };
@@ -812,7 +812,7 @@ nk.register({
       uid: uin,
       name: cr.nick || (isMe && c.nick) || uin,
       avatar: https(cr.headpic || (isMe && c.avatar) || '') || null,
-      bg: https(cr.backpic || '') || null,
+      bg: https(cr.backpic && cr.backpic.picurl ? cr.backpic.picurl : cr.backpic) || null,
       signature: cr.encrypt_uin ? 'QQ 音乐用户' : '',
       level: 0,
       listened: 0,
