@@ -132,7 +132,7 @@ import kotlinx.coroutines.flow.map
         if (!Plat.isDesktop) Row(Modifier.fillMaxWidth().height(64.dp).press { nav.stack.clear(); nav.push(if (prof != null) Page.User(prof!!.uid, prof!!.name) else Page.Login) }.padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Avatar(36.dp, 16); Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) { T(prof?.name ?: "好奇猫a", 14, w = 700); T(if (prof == null) "点击登录网易云" else "NETEASE", 11, p.s, mono = true) }
+            Column(Modifier.weight(1f)) { T(prof?.name ?: "本地用户", 14, w = 700); T(if (prof == null) "点击登录" else (Plugins.main()?.name ?: "ACCOUNT").uppercase(), 11, p.s, mono = true) }
             Box(Modifier.size(36.dp).press { nav.stack.clear(); nav.push(Page.Settings) }, contentAlignment = Alignment.Center) { NIcon(NIcons.gear, 18.dp, p.s) }
         }
     }

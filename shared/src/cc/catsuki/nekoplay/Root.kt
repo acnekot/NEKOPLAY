@@ -252,7 +252,7 @@ object Boot {
     val nav = LocalNav.current
     val prof by Store.profile.collectAsState()
     Column(modifier.width(190.dp).background(if (c.dark) c.pop else Color(0xFFF1F7F8)).nb(1.dp, c.k)) {
-        T(prof?.name ?: "好奇猫a", 15, w = 800, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+        T(prof?.name ?: "本地用户", 15, w = 800, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         val acc by PluginStore.accounts.collectAsState()
         (listOfNotNull(prof?.let { "我的主页" to Page.User(it.uid, it.name) }, "设置" to Page.Settings) +
             Plugins.enabled.filter { it.has("loginQr") || it.has("loginWeb") }.filter { acc[it.id] == null }.map { "登录${it.name}" to Page.PluginLogin(it.id) }).forEach { (t, pg) ->

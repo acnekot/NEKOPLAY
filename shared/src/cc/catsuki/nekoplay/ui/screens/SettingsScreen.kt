@@ -68,7 +68,7 @@ import java.util.Calendar
         item {
             Row(Modifier.fillMaxWidth().bottomLine(p.k, 2.dp).press { prof?.let { nav.push(Page.User(it.uid, it.name)) } }.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(54.dp, 24); Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) { T(prof?.name ?: "好奇猫a", 20, w = 800); T(if (prof == null) "LOCAL ACCOUNT" else (Plugins.main()?.name ?: "").uppercase(), 11, p.s, mono = true, ls = .08f) }
+                Column(Modifier.weight(1f)) { T(prof?.name ?: "本地用户", 20, w = 800); T(if (prof == null) "LOCAL ACCOUNT" else (Plugins.main()?.name ?: "").uppercase(), 11, p.s, mono = true, ls = .08f) }
                 if (prof != null) NIcon(NIcons.chevronRight, 16.dp, p.s)
             }
         }
