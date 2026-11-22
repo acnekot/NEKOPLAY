@@ -1,4 +1,5 @@
 import UIKit
+import CarPlay
 import NekoApp
 
 // Xcode 工程入口：界面和逻辑都在 Kotlin 编译出的 NekoApp 框架里
@@ -6,6 +7,11 @@ import NekoApp
 class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool { true }
     func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        if connectingSceneSession.role == .carTemplateApplication {
+            let cfg = UISceneConfiguration(name: "CarPlay Configuration", sessionRole: connectingSceneSession.role)
+            cfg.delegateClass = CarPlaySceneDelegate.self
+            return cfg
+        }
         let cfg = UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
         cfg.delegateClass = SceneDelegate.self
         return cfg

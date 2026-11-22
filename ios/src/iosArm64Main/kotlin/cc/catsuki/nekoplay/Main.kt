@@ -45,8 +45,8 @@ class AppDelegate @OverrideInit constructor() : UIResponder(), UIApplicationDele
 
 private var booted = false
 
-/** 整个界面（Xcode 工程里的 Swift 入口也调用这个） */
-fun MainViewController(): UIViewController {
+/** 确保应用内核已完成初始化（iPhone 主界面与 CarPlay 场景共用，谁先启动由谁初始化一次） */
+fun ensureBooted() {
     if (!booted) {
         booted = true
         Perf.markLaunch()
@@ -58,6 +58,11 @@ fun MainViewController(): UIViewController {
         Store.refreshAll()
         UIApplication.sharedApplication.beginReceivingRemoteControlEvents()
     }
+}
+
+/** 整个界面（Xcode 工程里的 Swift 入口也调用这个） */
+fun MainViewController(): UIViewController {
+    ensureBooted()
     return ComposeUIViewController {
         NekoTheme {
             Box(Modifier.fillMaxSize()) {
