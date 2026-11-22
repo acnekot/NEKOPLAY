@@ -1,6 +1,11 @@
 name: 打包全部版本（安卓 / iOS / Windows / macOS / Linux）
 on:
   workflow_dispatch:
+    inputs:
+      release:
+        description: "打包后发布正式版（标签 v + Version.kt 里的版本号）"
+        type: boolean
+        default: false
   push:
     tags: ["v*"]
 permissions:
@@ -120,13 +125,27 @@ jobs:
 
   # 推 v 开头的标签时：把所有版本放进同一个 GitHub Release
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # 推 v* 标签，或手动运行时勾选「发布正式版」
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release
     needs: [android, ios, desktop]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: 版本号和这个版本的说明（从 CHANGELOG.md 取）
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"
+          else v=$(sed -n 's/.*APP_VERSION = "\([^"]*\)".*/\1/p' shared/src/cc/catsuki/nekoplay/core/Version.kt); fi
+          echo "v=$v" >> "$GITHUB_OUTPUT"
+          awk -v v="$v" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "见 CHANGELOG.md" > notes.md
+          cat notes.md
       - uses: actions/download-artifact@v4
         with: { path: dist, merge-multiple: true }
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.ver.outputs.v }}
+          target_commitish: ${{ github.sha }}
+          name: NEKOPLAY v${{ steps.ver.outputs.v }}
+          body_path: notes.md
           files: dist/*
-          generate_release_notes: true

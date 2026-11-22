@@ -1,0 +1,37 @@
+name: 问题反馈
+description: 软件出错、闪退、功能不正常
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 设置 → 关于 → 版本（例如 0.5.0 · 2ee9f2f）
+    validations: { required: true }
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options: [安卓, Windows, macOS, Linux, iOS]
+    validations: { required: true }
+  - type: input
+    id: plugin
+    attributes:
+      label: 相关插件和版本
+      description: 和在线音源有关时填写，例如 QQ 音乐 1.2.1
+  - type: textarea
+    id: steps
+    attributes:
+      label: 怎么出现的
+      description: 按顺序写操作步骤
+      placeholder: "1. 打开…\n2. 点…\n3. 出现…"
+    validations: { required: true }
+  - type: textarea
+    id: expect
+    attributes:
+      label: 应该是什么样
+  - type: textarea
+    id: logs
+    attributes:
+      label: 截图或日志
+      description: 设置 → 调试模式 → 请求记录里能看到出错的请求。不要贴 Cookie、账号凭证

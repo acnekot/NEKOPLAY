@@ -102,7 +102,7 @@ object Updater {
     }
 
     /** "2026-11-20T17:44:00Z" / "+08:00" → 秒（不依赖 java.time，iOS 也能用） */
-    private fun epoch(iso: String): Long {
+    internal fun epoch(iso: String): Long {
         val m = Regex("""(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(?:\.\d+)?(Z|[+-]\d\d:\d\d)?""").find(iso) ?: return 0
         val g = m.groupValues
         var y = g[1].toLong(); val mo = g[2].toLong(); val d = g[3].toLong()

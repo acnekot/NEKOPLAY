@@ -38,6 +38,8 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.17.0")
     implementation("io.github.dokar3:quickjs-kt:1.0.18")
     testImplementation(kotlin("test"))
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     // 内嵌网页：Windows 用系统 WebView2；Linux 用 JavaFX WebView；macOS 不打包 JavaFX（避开与 Skiko Metal 冲突且省 42MB）
     val os = System.getProperty("os.name").lowercase()
     val arm = System.getProperty("os.arch") in listOf("aarch64", "arm64")
@@ -124,4 +126,14 @@ tasks.register("archCheck") {
         }
         println("archCheck PASSED: 0 reverse UI dependencies, all shared .kt files <= 400 lines.")
     }
+}
+
+// 单元测试：用临时目录作为 user.home，避免影响本机 NEKOPLAY 数据
+tasks.test {
+    useJUnitPlatform()
+    val home = layout.buildDirectory.dir("test-home").get().asFile
+    doFirst { home.deleteRecursively(); home.mkdirs() }
+    systemProperty("user.home", home.absolutePath)
+    systemProperty("nekoplay.repo", rootDir.parentFile.absolutePath)
+    testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
