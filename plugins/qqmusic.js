@@ -1,8 +1,8 @@
 // @id qqmusic
 // @name QQ 音乐
-// @version 1.6.2
+// @version 1.7.0
 // @author NEKOPLAY
-// @desc QQ 音乐完整音源：搜索（单曲/专辑/歌手/歌单/热搜/联想）、播放、歌词、私人 FM、每日推荐、推荐歌单、歌单广场、新碟/新歌、排行榜、MV 精选、歌曲评论与点赞、相似歌曲/歌手/歌单、歌单增删收藏、关注歌手与曲库同步
+// @desc QQ 音乐完整音源：搜索、播放、QRC 逐字歌词、私人 FM、每日推荐、推荐歌单、歌单广场、新碟/新歌、排行榜、MV 精选、评论与点赞、相似推荐、个人主页、听歌排行与播放上报
 // @api 1
 // @search track,album,artist,playlist
 //
@@ -827,6 +827,80 @@ nk.register({
     const d = await call('music.musicasset.PlaylistBaseRead', 'GetPlaylistByUin', { uin: String(u) });
     const pic = (p) => https(['picUrl', 'bigpicUrl', 'bigPicUrl', 'coverUrl', 'logo'].map(k => p[k]).find(x => x && x.startsWith('http')));
     return (d.v_playlist || []).map(p => ({ id: p.dirId === 201 ? 'liked' : String(p.tid), name: p.dirId === 201 ? '我喜欢' : p.dirName, count: p.songNum || 0, cover: pic(p), liked: p.dirId === 201, mine: false }));
+  },
+  async playRecord(u, week) {
+    const c = cred();
+    const out = [], seen = {};
+    // 1. 优先拉取 QQ 音乐云端最近播放（PlayRecentlyRead）
+    if (c) {
+      try {
+        const d = await call('music.musicasset.PlayRecentlyRead', 'GetPlayRecentlyInfo', { uin: String(u || c.id), type: 1, offset: 0, size: 100 });
+        const list = (d.data && d.data.songList) || d.songList || [];
+        list.forEach((it, idx) => {
+          const t = song(it.songInfo || it);
+          if (t && t.id && !seen[t.id]) {
+            seen[t.id] = 1;
+            out.push({ track: t, count: Number(it.playCount || it.count || Math.max(1, list.length - idx)) });
+          }
+        });
+      } catch (e) {}
+    }
+    // 2. 合并本插件 scrobble 记录的听歌统计（区分最近一周 / 所有时间）
+    const stats = nk.store.get('playStats') || {};
+    const now = Date.now(), weekAgo = now - 7 * 86400 * 1000;
+    const entries = Object.keys(stats).map(mid => {
+      const st = stats[mid] || {};
+      const cnt = week ? (st.lastAt >= weekAgo ? (st.weekCount || st.count || 0) : 0) : (st.count || 0);
+      return { mid, count: cnt, lastAt: st.lastAt || 0 };
+    }).filter(x => x.count > 0 && !seen[x.mid]).sort((a, b) => b.count - a.count || b.lastAt - a.lastAt).slice(0, 60);
+    if (entries.length) {
+      try {
+        const tracks = await details(entries.map(e => e.mid));
+        const byId = {};
+        tracks.forEach(t => { byId[t.id] = t; });
+        entries.forEach(e => { if (byId[e.mid]) out.push({ track: byId[e.mid], count: e.count }); });
+      } catch (e) {}
+    }
+    return out.sort((a, b) => b.count - a.count);
+  },
+  async scrobbleStart(mid) {
+    if (!mid) return;
+    const stats = nk.store.get('playStats') || {};
+    const cur = stats[mid] || { count: 0, weekCount: 0, lastAt: 0 };
+    cur.startedAt = Date.now();
+    stats[mid] = cur;
+    nk.store.set('playStats', stats);
+  },
+  async scrobble(mid, seconds) {
+    if (!mid) return;
+    // 1. 持久化听歌次数（供个人主页「听歌排行」最近一周 / 所有时间展示）
+    const stats = nk.store.get('playStats') || {};
+    const now = Date.now(), weekAgo = now - 7 * 86400 * 1000;
+    const cur = stats[mid] || { count: 0, weekCount: 0, lastAt: 0 };
+    const nextWeek = cur.lastAt >= weekAgo ? (cur.weekCount || 0) + 1 : 1;
+    stats[mid] = { count: (cur.count || 0) + 1, weekCount: nextWeek, lastAt: now };
+    const ks = Object.keys(stats);
+    if (ks.length > 300) {
+      ks.sort((a, b) => (stats[a].lastAt || 0) - (stats[b].lastAt || 0)).slice(0, ks.length - 300).forEach(k => delete stats[k]);
+    }
+    nk.store.set('playStats', stats);
+    // 2. 静默向 QQ 音乐网页端上报听歌时长（不影响正常播放）
+    const c = cred();
+    if (!c) return;
+    try {
+      if (!ids[mid]) await details([mid]);
+      const sid = ids[mid] || 0;
+      const q = qs({
+        format: 'json', inCharset: 'utf8', outCharset: 'utf-8',
+        g_tk: hash33(c.key, 5381), uin: c.id,
+        id: sid, songid: sid, mid, songtype: 0, type: 1,
+        playtime: Math.max(1, Math.round(Number(seconds) || 0)), guid: guid().toUpperCase(),
+      });
+      await nk.http({
+        url: 'https://stat6.y.qq.com/pc/fcgi-bin/cgi_music_webreport.fcg?' + q,
+        headers: { 'User-Agent': UA, Referer: 'https://y.qq.com/', Cookie: `uin=${c.id}; qqmusic_uin=${c.id}; qm_keyst=${c.key}; qqmusic_key=${c.key}; tmeLoginType=${c.type}` },
+      });
+    } catch (e) {}
   },
   async subAlbums() {
     const c = cred(); if (!c) return [];
