@@ -1,8 +1,8 @@
 // @id qqmusic
 // @name QQ 音乐
-// @version 1.3.0
+// @version 1.4.0
 // @author NEKOPLAY
-// @desc QQ 音乐音源：搜索（歌曲/专辑/歌手/歌单/热搜/联想）、播放、歌词、推荐歌单、歌单广场、新碟/新歌、排行榜、专辑收藏与歌单管理
+// @desc QQ 音乐完整音源：搜索（单曲/专辑/歌手/歌单/热搜/联想）、播放、歌词、私人 FM、每日推荐、推荐歌单、歌单广场、新碟/新歌、排行榜、MV 精选、歌曲评论、相似推荐与曲库同步
 // @api 1
 // @search track,album,artist,playlist
 //
@@ -132,11 +132,28 @@ const REDIRECT = 'https://y.qq.com/portal/wx_redirect.html';
 const WX_APPID = 'wx48db31d50e334801';
 const qrState = (c) => [0, 405].includes(c) ? 'done' : [67, 404].includes(c) ? 'scanned' : [65, 402].includes(c) ? 'expired' : [68, 403].includes(c) ? 'refused' : 'wait';
 /** 换到的凭证存起来，顺便取昵称头像 */
+async function fetchProfile(c) {
+  if (!c || !c.id) return c;
+  try {
+    const r = await nk.http({
+      url: `https://c.y.qq.com/rsc/fcgi-bin/fcg_get_profile_homepage.fcg?cid=205360838&userid=${c.id}&reqfrom=1&format=json`,
+      headers: { 'User-Agent': UA, Referer: 'https://y.qq.com/', Cookie: `uin=${c.id}; qqmusic_uin=${c.id}; qm_keyst=${c.key}; qqmusic_key=${c.key}; tmeLoginType=${c.type}` },
+    });
+    const cr = ((r.json() || {}).data || {}).creator || {};
+    if (cr.nick || cr.headpic) {
+      const next = Object.assign({}, c, { nick: cr.nick || c.nick, avatar: https(cr.headpic) || c.avatar });
+      nk.store.set('cred', next);
+      return next;
+    }
+  } catch (e) {}
+  return c;
+}
 async function finish(d, type) {
   const id = Number(d.musicid || d.str_musicid || 0);
   if (!d.musickey || !id) throw new Error('登录失败：没有拿到凭证');
-  nk.store.set('cred', { id, key: d.musickey, type });
-  try { const h = await call('music.UnifiedHomepage.UnifiedHomepageSrv', 'GetHomepageHeader', { uin: String(id), IsQueryTabDetail: 1 }); const b = h.Info && h.Info.BaseInfo; if (b) nk.store.set('cred', { id, key: d.musickey, type, nick: b.Name, avatar: https(b.Avatar) }); } catch (e) {}
+  const base = { id, key: d.musickey, type };
+  nk.store.set('cred', base);
+  await fetchProfile(base);
 }
 
 nk.register({
@@ -307,9 +324,92 @@ nk.register({
     } catch (e) {}
     return (await this.newSongs(0)).slice(0, 30);
   },
+  async fm() {
+    const d = await call('pf.radiosvr', 'GetRadiosonglist', { id: 99, firstplay: 1, num: 10 });
+    return (d.track_list || []).map(song);
+  },
+  async simiSongs(mid) {
+    if (!ids[mid]) await details([mid]);
+    if (!ids[mid]) return [];
+    const d = await call('music.recommend.TrackRelationServer', 'GetSimilarSongs', { songid: Number(ids[mid]), songtype: 0 });
+    return (d.vecSong || []).map(song);
+  },
+  async comments(mid, hot, offset) {
+    if (!ids[mid]) await details([mid]);
+    if (!ids[mid]) return { items: [], total: 0 };
+    const size = 20, page = Math.floor((offset || 0) / size);
+    const param = hot
+      ? { BizType: 1, BizId: String(ids[mid]), LastCommentSeqNo: '', PageSize: size, PageNum: page, HotType: 1, WithAirborne: 1 }
+      : { BizType: 1, BizId: String(ids[mid]), LastCommentSeqNo: '', PageSize: size, PageNum: page, FromCommentId: '', WithAirborne: 1 };
+    const d = await call('music.globalComment.CommentRead', hot ? 'GetHotCommentList' : 'GetNewCommentList', param);
+    const cl = d.CommentList || {};
+    const items = (cl.Comments || []).map(c => ({
+      id: c.CmId || c.CommentId || 0,
+      user: c.Nick || 'QQ音乐用户',
+      uid: String(c.EncryptUin || ''),
+      avatar: https(c.Avatar || ''),
+      content: c.Content || '',
+      liked: c.PraiseNum || 0,
+      time: (c.PubTime || 0) * 1000,
+      reply: null,
+      replies: (c.SubComments && c.SubComments.length) || 0,
+      likedByMe: !!c.IsPraised,
+    }));
+    return { items, total: cl.CommentTotal || items.length };
+  },
+  async recMvs() {
+    const d = await call('MvService.MvInfoProServer', 'GetAllocMvInfo', { area_id: 15, version_id: 7, start: 0, size: 30, order: 1 });
+    return (d.list || []).map(m => ({
+      id: String(m.vid || ''), name: m.title || '', cover: https(m.picurl || ''),
+      artist: (m.singers || []).map(s => s.name).join(' / '), duration: (m.duration || 0) * 1000, plays: m.playcnt || 0,
+    })).filter(m => m.id);
+  },
+  async topMvs() {
+    const d = await call('MvService.MvInfoProServer', 'GetAllocMvInfo', { area_id: 15, version_id: 7, start: 0, size: 50, order: 0 });
+    return (d.list || []).map(m => ({
+      id: String(m.vid || ''), name: m.title || '', cover: https(m.picurl || ''),
+      artist: (m.singers || []).map(s => s.name).join(' / '), duration: (m.duration || 0) * 1000, plays: m.playcnt || 0,
+    })).filter(m => m.id);
+  },
+  async artistMvs(id) {
+    const mid = id.replace(/^ar/, '');
+    const d = await call('MvService.MvInfoProServer', 'GetSingerMvList', { singermid: mid, start: 0, count: 30, order: 1 });
+    return (d.list || []).map(m => ({
+      id: String(m.vid || ''), name: m.title || m.name || '', cover: https(m.pic || m.picurl || ''),
+      artist: m.singer_name || (m.singers || []).map(s => s.name).join(' / '), duration: (m.duration || 0) * 1000, plays: m.playcnt || m.listenCount || 0,
+    })).filter(m => m.id);
+  },
+  async mvUrl(vid) {
+    const d = await call('music.stream.MvUrlProxy', 'GetMvUrls', { vids: [String(vid)], request_type: 10003, addrtype: 3, format: 264 });
+    const v = d[String(vid)] || {};
+    const mp4 = (v.mp4 || []).filter(x => x.freeflow_url && x.freeflow_url.length);
+    const best = mp4[mp4.length - 1];
+    return best ? https(best.freeflow_url[0]) : null;
+  },
 
   // ---------- 账号 ----------
-  async account() { const c = cred(); return c ? { name: c.nick || String(c.id), avatar: c.avatar || null } : null; },
+  async account() {
+    let c = cred(); if (!c) return null;
+    if (!c.nick || !c.avatar) c = await fetchProfile(c);
+    return { name: c.nick || String(c.id), avatar: c.avatar || null };
+  },
+  async subAlbums() {
+    const c = cred(); if (!c) return [];
+    const d = await call('music.musicasset.AlbumFavRead', 'GetAlbumFavInfo', { uin: String(c.id), offset: 0, size: 100 });
+    return (d.v_list || []).map(a => {
+      const mid = a.albumMid || a.mid || '';
+      if (a.albumId && mid) alIds[mid] = a.albumId;
+      return { id: 'al' + mid, name: a.albumName || a.name || '', cover: albumPic(mid), artist: a.singerName || '', year: (a.pubTime || '').slice(0, 4), count: a.songNum || 0 };
+    }).filter(a => a.id !== 'al');
+  },
+  async subArtists() {
+    const c = cred(); if (!c) return [];
+    const d = await call('music.concern.RelationList', 'GetFollowSingerList', { From: 0, Size: 100 });
+    return (d.List || []).map(a => {
+      const mid = a.MID || a.mid || a.SingerMid || '';
+      return { id: 'ar' + mid, name: a.Name || a.name || '', cover: https(a.Pic || '') || singerPic(mid), songs: a.SongNum || 0, albums: a.AlbumNum || 0, followed: true };
+    }).filter(a => a.id !== 'ar');
+  },
   async myPlaylists() {
     const c = cred(); if (!c) return [];
     const pic = (p) => https(['picUrl', 'bigpicUrl', 'bigPicUrl', 'coverUrl', 'logo'].map(k => p[k]).find(x => x && x.startsWith('http')));
