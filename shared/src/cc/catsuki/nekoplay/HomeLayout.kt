@@ -42,7 +42,7 @@ object HomeLayout {
 
     fun init() {
         prefs = Plat.prefs("ui")
-        val saved = prefs!!.getString("home_layout", "")!!.split(',').mapNotNull { e ->
+        val saved = prefs?.getString("home_layout", "").orEmpty().split(',').mapNotNull { e ->
             val on = e.substringAfterLast(':') == "1"
             // 旧的按音源分开的模块换成通用的
             when (val id = e.substringBeforeLast(':').replace("qqcharts", "charts").replace("kgcharts", "charts").replace("qqnew", "newalbums")) {

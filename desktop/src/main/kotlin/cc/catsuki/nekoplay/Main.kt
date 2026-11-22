@@ -289,8 +289,8 @@ private fun TrayMenu(at: java.awt.Point, playing: Boolean, close: () -> Unit, sh
     val w = 180; val h = items.sumOf { (if (it.second == null) 9 else 36).toInt() } + 8
     // 放在鼠标旁边，不超出屏幕可用区域（任务栏在上 / 下 / 左 / 右都行）
     val u = WinFrame.usable(at)
-    val x = (at.x - w).coerceIn(u.x, u.x + u.width - w)
-    val y = (if (at.y - h >= u.y) at.y - h else at.y).coerceIn(u.y, u.y + u.height - h)
+    val x = (at.x - w).coerceIn(u.x, (u.x + u.width - w).coerceAtLeast(u.x))
+    val y = (if (at.y - h >= u.y) at.y - h else at.y).coerceIn(u.y, (u.y + u.height - h).coerceAtLeast(u.y))
     val ws = rememberWindowState(size = DpSize(w.dp, h.dp), position = androidx.compose.ui.window.WindowPosition(x.dp, y.dp))
     Window(onCloseRequest = close, state = ws, title = "NEKOPLAY", undecorated = true, resizable = false, alwaysOnTop = true) {
         LaunchedEffect(Unit) {

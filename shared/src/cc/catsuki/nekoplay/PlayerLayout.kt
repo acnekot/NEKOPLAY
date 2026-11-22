@@ -111,7 +111,8 @@ class BtnCtx(val t: Track, val st: PlayState, val showTr: Boolean, val toggleTr:
             val dls by Downloads.items.collectAsState(); val act by Downloads.active.collectAsState()
             val has = dls.any { it.track.id == t.id }; val ing = t.id in act
             Box(Modifier.size(44.dp).press(haptic = true) { if (has) nav.toast = "已经下载过了" else if (!ing) downloadSheet(nav, listOf(t)) }, contentAlignment = Alignment.Center) {
-                if (ing) T(act[t.id]!!.let { if (it < 0) "…" else "%.0f".format(it * 100) }, 12, p.p, 700, mono = true) else NIcon(NIcons.download, 22.dp, if (has) p.p else p.k)
+                val prog = act[t.id]
+                if (ing && prog != null) T(if (prog < 0) "…" else "${(prog * 100f).toInt()}", 12, p.p, 700, mono = true) else NIcon(NIcons.download, 22.dp, if (has) p.p else p.k)
             }
         }
         "more" -> IconBtn(NIcons.more) { trackActions(nav, t) }

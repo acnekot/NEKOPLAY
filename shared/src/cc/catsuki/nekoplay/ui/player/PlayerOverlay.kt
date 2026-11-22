@@ -71,7 +71,7 @@ import androidx.compose.runtime.withFrameMillis
         scrub?.let { f ->
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val w = maxWidth
-                val x = (w * f - 26.dp).coerceIn(4.dp, w - 56.dp)
+                val x = (w * f - 26.dp).coerceIn(4.dp, (w - 56.dp).coerceAtLeast(4.dp))
                 Box(Modifier.offset(x = x, y = (-38).dp).size(52.dp, 26.dp).background(p.k), contentAlignment = Alignment.Center) {
                     T(fmt((f * t.durationMs).toLong()), 12, p.tagFg, mono = true)
                 }
@@ -131,7 +131,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     val dp = with(d) { 1.dp.toPx() }
                     // 下面要留给歌名、歌手、音质三行；矮屏这三行各只占一行，封面左右只留 12dp
                     val sh = Screen.short
-                    val coverNow = (free - (if (sh) 106 else 150) * dp).coerceIn(120 * dp, w - (if (sh) 24 else 56) * dp)
+                    val coverNow = (free - (if (sh) 106 else 150) * dp).coerceIn(120 * dp, (w - (if (sh) 24 else 56) * dp).coerceAtLeast(120 * dp))
                     val nowTop = ((free - coverNow - 84 * dp) / 2).coerceIn(8 * dp, 40 * dp)
                     val cs = lerp(coverNow, 48 * dp, lt)
                     val cl = lerp((w - coverNow) / 2, 18 * dp, lt)

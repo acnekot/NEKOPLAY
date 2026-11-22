@@ -37,6 +37,7 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     implementation("net.java.dev.jna:jna:5.17.0")
     implementation("io.github.dokar3:quickjs-kt:1.0.18")
+    testImplementation(kotlin("test"))
     // 内嵌网页：Windows 用系统 WebView2；Linux 用 JavaFX WebView；macOS 不打包 JavaFX（避开与 Skiko Metal 冲突且省 42MB）
     val os = System.getProperty("os.name").lowercase()
     val arm = System.getProperty("os.arch") in listOf("aarch64", "arm64")
