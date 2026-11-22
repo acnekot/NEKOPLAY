@@ -51,6 +51,7 @@ object AnimStyle {
     val labels = listOf("弹簧", "缓动", "线性", "关闭", "osu!")
     var style by mutableIntStateOf(0)
     val osu get() = style == 4
+    val off get() = style == 3
     fun load() { style = Plat.prefs("ui").getInt("animStyle", 0).coerceIn(0, labels.lastIndex) }
     fun set(v: Int) { style = v.coerceIn(0, labels.lastIndex); Plat.prefs("ui").edit().putInt("animStyle", style).apply() }
     val ms get() = (320 / Anim.f).toInt()
@@ -58,6 +59,30 @@ object AnimStyle {
 }
 /** osu! stable 招牌 OutExpo/OutQuint 缓出曲线：瞬间冲出、长尾丝滑刹停、零回弹 */
 val OsuOut = androidx.compose.animation.core.CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
+val DecelOut = androidx.compose.animation.core.CubicBezierEasing(0f, 0f, 0.2f, 1f)
+
+/**
+ * 0.7.0 统一动效令牌（受 Anim 速度档位与 AnimStyle 关闭开关统一控制）：
+ * - quick (120ms 减速)：按钮按下、开关、图标切换
+ * - standard (240ms 标准缓动)：弹窗、菜单、面板展开
+ * - page (320ms 强调缓动)：切页、进出详情
+ * - crossfade (400ms)：换歌封面与背景交叉淡化
+ * - hero (弹簧 阻尼 0.85)：迷你播放条 ↔ 播放页、封面放大
+ */
+object Motion {
+    val quickMs get() = if (AnimStyle.off) 0 else (120 / Anim.f).toInt().coerceAtLeast(1)
+    val standardMs get() = if (AnimStyle.off) 0 else (240 / Anim.f).toInt().coerceAtLeast(1)
+    val pageMs get() = if (AnimStyle.off) 0 else (320 / Anim.f).toInt().coerceAtLeast(1)
+    val crossfadeMs get() = if (AnimStyle.off) 0 else (400 / Anim.f).toInt().coerceAtLeast(1)
+    fun <T> quick(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
+        if (AnimStyle.off) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(quickMs, easing = DecelOut)
+    fun <T> standard(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
+        if (AnimStyle.off) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(standardMs, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+    fun <T> page(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
+        if (AnimStyle.off) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(pageMs, easing = OsuOut)
+    fun <T> hero(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
+        if (AnimStyle.off) androidx.compose.animation.core.snap() else spring(dampingRatio = 0.85f, stiffness = Anim.stiff(Spring.StiffnessMediumLow))
+}
 private fun <T> styled(stiff: Float): androidx.compose.animation.core.FiniteAnimationSpec<T> = when (AnimStyle.style) {
     1 -> androidx.compose.animation.core.tween(AnimStyle.ms, easing = androidx.compose.animation.core.FastOutSlowInEasing)
     2 -> androidx.compose.animation.core.tween(AnimStyle.ms, easing = androidx.compose.animation.core.LinearEasing)

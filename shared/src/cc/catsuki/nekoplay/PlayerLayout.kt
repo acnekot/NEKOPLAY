@@ -3,6 +3,7 @@ package cc.catsuki.nekoplay
 import cc.catsuki.nekoplay.ui.player.SleepBtn
 import cc.catsuki.nekoplay.ui.settings.downloadSheet
 
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -87,13 +88,23 @@ class BtnCtx(val t: Track, val st: PlayState, val showTr: Boolean, val toggleTr:
         "like" -> {
             val liked by Store.likedIds.collectAsState(); val on = t.id in liked
             Box(Modifier.size(44.dp).press(.85f, true) { Store.toggleLike(t) { nav.toast = it } }, contentAlignment = Alignment.Center) {
-                NIcon(if (on) NIcons.heart else NIcons.heartLine, 24.dp, if (on) p.p else p.k)
+                androidx.compose.animation.AnimatedContent(on, transitionSpec = {
+                    (androidx.compose.animation.scaleIn(Motion.quick(), initialScale = 0.72f) + androidx.compose.animation.fadeIn(Motion.quick())) togetherWith
+                        (androidx.compose.animation.scaleOut(Motion.quick(), targetScale = 0.72f) + androidx.compose.animation.fadeOut(Motion.quick()))
+                }, label = "likeIcon") { active ->
+                    NIcon(if (active) NIcons.heart else NIcons.heartLine, 24.dp, if (active) p.p else p.k)
+                }
             }
         }
         "tr" -> TextBtn("译", x.showTr) { x.toggleTr() }
         "desk" -> TextBtn("桌", DeskLyric.on) { DeskLyric.on = !DeskLyric.on; DeskLyric.save(); nav.toast = if (DeskLyric.on) "已打开桌面歌词" else "已关闭桌面歌词" }
         "mode" -> Box(Modifier.size(44.dp).press(haptic = true) { Engine.cycleMode(); nav.toast = listOf("列表循环", "单曲循环", "随机播放")[Engine.state.value.mode.ordinal] }, contentAlignment = Alignment.Center) {
-            NIcon(when (x.st.mode) { Mode.LOOP_ALL -> NIcons.modeSeq; Mode.LOOP_ONE -> NIcons.modeOne; Mode.SHUFFLE -> NIcons.modeShuffle }, 22.dp)
+            androidx.compose.animation.AnimatedContent(x.st.mode, transitionSpec = {
+                (androidx.compose.animation.scaleIn(Motion.quick(), initialScale = 0.8f) + androidx.compose.animation.fadeIn(Motion.quick())) togetherWith
+                    (androidx.compose.animation.scaleOut(Motion.quick(), targetScale = 0.8f) + androidx.compose.animation.fadeOut(Motion.quick()))
+            }, label = "modeIcon") { m ->
+                NIcon(when (m) { Mode.LOOP_ALL -> NIcons.modeSeq; Mode.LOOP_ONE -> NIcons.modeOne; Mode.SHUFFLE -> NIcons.modeShuffle }, 22.dp)
+            }
         }
         "sleep" -> SleepBtn()
         "dl" -> {

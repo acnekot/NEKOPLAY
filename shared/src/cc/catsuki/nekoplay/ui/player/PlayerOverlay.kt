@@ -154,7 +154,9 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                         }, onDragCancel = {
                             scope.launch { drag.animateTo(0f, spring(1f, Anim.stiff(Spring.StiffnessMediumLow))) }
                         }) { ch, dy -> ch.consume(); scope.launch { drag.snapTo((drag.value + dy).coerceAtLeast(0f)) } }
-                    }.then(Modifier.clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { nav.lyrics = !nav.lyrics })) { Cover(t.cover, coverDp, t.title) }
+                    }.then(Modifier.clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { nav.lyrics = !nav.lyrics })) {
+                        androidx.compose.animation.Crossfade(t.cover, animationSpec = tween(Motion.crossfadeMs), label = "pCover") { url -> Cover(url, coverDp, t.title) }
+                    }
                     // 标题：两套各在自己的位置淡入淡出
                     // 信息块：和封面左边对齐，宽度等于封面；爱心在歌名同一行最右，对齐封面右边缘
                     if (lt < .45f) Column(Modifier.width(coverDp).graphicsLayer {
@@ -255,7 +257,9 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             Row(Modifier.padding(start = 56.dp), verticalAlignment = Alignment.Bottom) {
             Column(Modifier.width(cover + 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 // 解码尺寸固定：封面大小在动画时每帧都变，按实际尺寸解码会每帧重新加载图片、闪一下
-                Box(Modifier.onGloballyPositioned { coverY = it.positionInRoot().y }) { Cover(t.cover, cover, t.title, decodeSize = 560.dp) }
+                Box(Modifier.onGloballyPositioned { coverY = it.positionInRoot().y }) {
+                    androidx.compose.animation.Crossfade(t.cover, animationSpec = tween(Motion.crossfadeMs), label = "wCover") { url -> Cover(url, cover, t.title, decodeSize = 560.dp) }
+                }
                 Spacer(Modifier.height(22.dp))
                 Row(Modifier.width(cover), verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f)) {
