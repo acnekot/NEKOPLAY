@@ -1,6 +1,6 @@
 // @id qqmusic
 // @name QQ 音乐
-// @version 1.4.0
+// @version 1.4.1
 // @author NEKOPLAY
 // @desc QQ 音乐完整音源：搜索（单曲/专辑/歌手/歌单/热搜/联想）、播放、歌词、私人 FM、每日推荐、推荐歌单、歌单广场、新碟/新歌、排行榜、MV 精选、歌曲评论、相似推荐与曲库同步
 // @api 1
@@ -30,6 +30,7 @@ const https = (u) => (u || '').replace(/^http:/, 'https:');
 const albumPic = (mid, size) => mid ? `https://y.gtimg.cn/music/photo_new/T002R${size || 500}x${size || 500}M000${mid}.jpg` : null;
 const singerPic = (mid) => mid ? `https://y.gtimg.cn/music/photo_new/T001R500x500M000${mid}.jpg` : null;
 const b64 = (s) => { const t = (s || '').trim(); if (!t) return ''; if (t.startsWith('[')) return t; try { return nk.base64.decode(t); } catch (e) { return ''; } };
+const uniq = (a) => { const s = {}; return a.filter(x => x && x.id && !s[x.id] && (s[x.id] = 1)); };
 
 /** 调网关：返回 req_0.data */
 async function call(module, method, param, extraComm) {
@@ -273,40 +274,49 @@ nk.register({
   },
   async recPlaylists() {
     const d = await call('music.playlist.PlaylistSquare', 'GetRecommendFeed', { From: 0, Size: 30 });
-    return (d.List || []).map(x => {
+    return uniq((d.List || []).map(x => {
       const b = (x.Playlist && x.Playlist.basic) || {};
       const cv = b.cover || {};
       return { id: String(b.tid || ''), name: b.title || '', count: b.song_cnt || 0, cover: https(cv.big_url || cv.medium_url || cv.default_url || ''), desc: b.desc || '' };
-    }).filter(p => p.id);
+    }));
   },
   async categories() {
     const d = await call('music.playlist.PlaylistSquare', 'GetAllTag', {});
     const out = ['全部'];
-    catIds['全部'] = 10000000;
     (d.v_group || []).forEach(g => (g.v_item || []).forEach(it => {
       if (it.name && it.id) { catIds[it.name] = it.id; out.push(it.name); }
     }));
     return [...new Set(out)];
   },
   async square(cat, offset) {
+    const size = 30, off = offset || 0;
+    if (!cat || cat === '全部') {
+      const d = await call('music.playlist.PlaylistSquare', 'GetRecommendFeed', { From: off, Size: size });
+      const items = uniq((d.List || []).map(x => {
+        const b = (x.Playlist && x.Playlist.basic) || {};
+        const cv = b.cover || {};
+        return { id: String(b.tid || ''), name: b.title || '', count: b.song_cnt || 0, cover: https(cv.big_url || cv.medium_url || cv.default_url || ''), desc: b.desc || '' };
+      }));
+      return { items, more: !!d.HasMore && items.length > 0 };
+    }
     if (!Object.keys(catIds).length) try { await this.categories(); } catch (e) {}
-    const cid = catIds[cat] || 10000000;
-    const size = 30, curPage = Math.floor((offset || 0) / size) + 1;
+    const cid = catIds[cat] || 3317;
+    const curPage = Math.floor(off / size) + 1;
     const d = await call('playlist.PlayListPlazaServer', 'get_playlist_by_category', { id: cid, curPage, size, order: 5, titleid: cid });
-    const items = (d.v_playlist || []).map(p => ({
+    const items = uniq((d.v_playlist || []).map(p => ({
       id: String(p.tid || ''), name: p.title || '', count: (p.song_ids && p.song_ids.length) || 0,
       cover: https(p.cover_url_big || p.cover_url_medium || ''), desc: p.desc || '',
-    })).filter(p => p.id);
+    })));
     return { items, more: items.length >= size };
   },
   async newAlbums(area, offset) {
     const map = { ALL: 1, ZH: 1, EA: 2, KR: 3, JP: 4 };
-    const a = typeof area === 'number' ? area : (map[String(area || 'ALL').toUpperCase()] || 1);
+    const a = typeof area === 'number' ? (area > 0 ? area : 1) : (map[String(area || 'ALL').toUpperCase()] || 1);
     const d = await call('newalbum.NewAlbumServer', 'get_new_album_info', { area: a, sin: offset || 0, num: 30 });
-    return (d.albums || []).map(x => {
+    return uniq((d.albums || []).map(x => {
       if (x.id && x.mid) alIds[x.mid] = x.id;
       return { id: 'al' + x.mid, name: x.name || '', cover: albumPic(x.mid), artist: (x.singers || []).map(s => s.name).join(' / '), year: (x.release_time || '').slice(0, 4), count: 0 };
-    });
+    }));
   },
   async newSongs(area) {
     const map = { 0: 5, 7: 1, 96: 2, 16: 3, 8: 4 };
@@ -343,8 +353,8 @@ nk.register({
       : { BizType: 1, BizId: String(ids[mid]), LastCommentSeqNo: '', PageSize: size, PageNum: page, FromCommentId: '', WithAirborne: 1 };
     const d = await call('music.globalComment.CommentRead', hot ? 'GetHotCommentList' : 'GetNewCommentList', param);
     const cl = d.CommentList || {};
-    const items = (cl.Comments || []).map(c => ({
-      id: c.CmId || c.CommentId || 0,
+    const items = uniq((cl.Comments || []).map((c, idx) => ({
+      id: hash33(String(c.CmId || c.CommentId || (page + '_' + idx + '_' + (c.PubTime || 0))), 5381) || (idx + 1),
       user: c.Nick || 'QQ音乐用户',
       uid: String(c.EncryptUin || ''),
       avatar: https(c.Avatar || ''),
@@ -354,30 +364,30 @@ nk.register({
       reply: null,
       replies: (c.SubComments && c.SubComments.length) || 0,
       likedByMe: !!c.IsPraised,
-    }));
+    })));
     return { items, total: cl.CommentTotal || items.length };
   },
   async recMvs() {
     const d = await call('MvService.MvInfoProServer', 'GetAllocMvInfo', { area_id: 15, version_id: 7, start: 0, size: 30, order: 1 });
-    return (d.list || []).map(m => ({
+    return uniq((d.list || []).map(m => ({
       id: String(m.vid || ''), name: m.title || '', cover: https(m.picurl || ''),
       artist: (m.singers || []).map(s => s.name).join(' / '), duration: (m.duration || 0) * 1000, plays: m.playcnt || 0,
-    })).filter(m => m.id);
+    })));
   },
   async topMvs() {
     const d = await call('MvService.MvInfoProServer', 'GetAllocMvInfo', { area_id: 15, version_id: 7, start: 0, size: 50, order: 0 });
-    return (d.list || []).map(m => ({
+    return uniq((d.list || []).map(m => ({
       id: String(m.vid || ''), name: m.title || '', cover: https(m.picurl || ''),
       artist: (m.singers || []).map(s => s.name).join(' / '), duration: (m.duration || 0) * 1000, plays: m.playcnt || 0,
-    })).filter(m => m.id);
+    })));
   },
   async artistMvs(id) {
     const mid = id.replace(/^ar/, '');
     const d = await call('MvService.MvInfoProServer', 'GetSingerMvList', { singermid: mid, start: 0, count: 30, order: 1 });
-    return (d.list || []).map(m => ({
+    return uniq((d.list || []).map(m => ({
       id: String(m.vid || ''), name: m.title || m.name || '', cover: https(m.pic || m.picurl || ''),
       artist: m.singer_name || (m.singers || []).map(s => s.name).join(' / '), duration: (m.duration || 0) * 1000, plays: m.playcnt || m.listenCount || 0,
-    })).filter(m => m.id);
+    })));
   },
   async mvUrl(vid) {
     const d = await call('music.stream.MvUrlProxy', 'GetMvUrls', { vids: [String(vid)], request_type: 10003, addrtype: 3, format: 264 });
