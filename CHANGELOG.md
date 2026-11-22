@@ -5,20 +5,9 @@
 
 ## [未发布]
 
-### 新增
-- 单元测试（歌词解析、版本比较、md5、WebDAV、插件引擎、官方插件），CI 每次推送自动跑
-- 代码风格检查（ktlint）和 `.editorconfig`
-- 贡献指南、架构说明、Issue / PR 模板
-
-### 变更
-- `shared` 代码按职责拆成 `core` / `data` / `player` / `ui` 四个子包
-- 性能浮窗的掉帧改为每秒统计，桌面版按实际刷新率判断
-- macOS：关掉「窗口圆角」时用不透明窗口；JVM 参数改为偏流畅
-
-### 修复
-- QQ 音乐插件 1.2.1：扫码后一直没反应（校验值计算丢精度，QQ 返回 403）
-
 ## [0.5.0] - 2026-11-22
+
+第一个正式发布的版本。
 
 ### 新增
 - 插件系统：在线音源全部做成 JS 插件（QuickJS），本体不带任何音源
@@ -31,12 +20,21 @@
 - 电脑版内嵌网页：Windows 用 WebView2，macOS / Linux 用 JavaFX
 - 首页来源可选单个插件或「混合」，模块按插件能力显示
 - 配置备份带上插件脚本、插件存储、本地歌单
+- 单元测试（歌词解析、版本比较、md5、WebDAV、插件引擎、官方插件），CI 每次推送自动跑
+- 代码风格检查（ktlint）和 `.editorconfig`
+- 贡献指南、架构说明、Issue / PR 模板
 
 ### 变更
 - 插件调用改为自己的事件循环，一个慢调用不再挡住其它调用
 - 播放地址缓存 8 分钟，减少取流请求
 - 安卓允许 http（局域网 WebDAV、自建插件）
 - 版本号统一由 `Version.kt` 提供，三端打包都从这里读
+- `shared` 代码按职责拆成 `core` / `data` / `player` / `ui` 四个子包
+- 性能浮窗的掉帧改为每秒统计，桌面版按实际刷新率判断
+- macOS：关掉「窗口圆角」时用不透明窗口；JVM 参数改为偏流畅
+
+### 修复
+- QQ 音乐插件 1.2.1：扫码后一直没反应（校验值计算丢精度，QQ 返回 403）
 
 ## [0.4.0] - 2026-11-21
 
@@ -59,4 +57,5 @@
 
 - 最早的 Tauri 网页版（`tauri-web` 分支）
 
-[未发布]: https://github.com/acnekot/NEKOPLAY/compare/main...HEAD
+[未发布]: https://github.com/acnekot/NEKOPLAY/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/acnekot/NEKOPLAY/releases/tag/v0.5.0
