@@ -1,6 +1,6 @@
 // @id qqmusic
 // @name QQ 音乐
-// @version 1.6.0
+// @version 1.6.1
 // @author NEKOPLAY
 // @desc QQ 音乐完整音源：搜索（单曲/专辑/歌手/歌单/热搜/联想）、播放、歌词、私人 FM、每日推荐、推荐歌单、歌单广场、新碟/新歌、排行榜、MV 精选、歌曲评论与点赞、相似歌曲/歌手/歌单、歌单增删收藏、关注歌手与曲库同步
 // @api 1
@@ -791,11 +791,42 @@ nk.register({
     return best ? https(best.freeflow_url[0]) : null;
   },
 
-  // ---------- 账号 ----------
+  // ---------- 账号与个人主页 ----------
   async account() {
     let c = cred(); if (!c) return null;
     if (!c.nick || !c.avatar) c = await fetchProfile(c);
-    return { name: c.nick || String(c.id), avatar: c.avatar || null };
+    return { uid: String(c.id), name: c.nick || String(c.id), avatar: c.avatar || null };
+  },
+  async user(id) {
+    const c = cred();
+    const uin = String(id || (c && c.id) || '');
+    if (!uin) throw new Error('未找到用户');
+    const headers = { 'User-Agent': UA, Referer: 'https://y.qq.com/' };
+    if (c) headers.Cookie = `uin=${c.id}; qqmusic_uin=${c.id}; qm_keyst=${c.key}; qqmusic_key=${c.key}; tmeLoginType=${c.type}`;
+    const r = await nk.http({ url: `https://c.y.qq.com/rsc/fcgi-bin/fcg_get_profile_homepage.fcg?cid=205360838&userid=${encodeURIComponent(uin)}&reqfrom=1&format=json`, headers });
+    const data = (r.json() || {}).data || {};
+    const cr = data.creator || {};
+    const nums = cr.nums || {};
+    const isMe = c && String(c.id) === uin;
+    return {
+      uid: uin,
+      name: cr.nick || (isMe && c.nick) || uin,
+      avatar: https(cr.headpic || (isMe && c.avatar) || '') || null,
+      bg: https(cr.backpic || '') || null,
+      signature: cr.encrypt_uin ? 'QQ 音乐用户' : '',
+      level: 0,
+      listened: 0,
+      follows: Number(nums.follownum || 0),
+      fans: Number(nums.fansnum || 0),
+      followed: false,
+    };
+  },
+  async userPlaylists(u) {
+    const c = cred();
+    if (c && String(c.id) === String(u)) return this.myPlaylists();
+    const d = await call('music.musicasset.PlaylistBaseRead', 'GetPlaylistByUin', { uin: String(u) });
+    const pic = (p) => https(['picUrl', 'bigpicUrl', 'bigPicUrl', 'coverUrl', 'logo'].map(k => p[k]).find(x => x && x.startsWith('http')));
+    return (d.v_playlist || []).map(p => ({ id: p.dirId === 201 ? 'liked' : String(p.tid), name: p.dirId === 201 ? '我喜欢' : p.dirName, count: p.songNum || 0, cover: pic(p), liked: p.dirId === 201, mine: false }));
   },
   async subAlbums() {
     const c = cred(); if (!c) return [];
