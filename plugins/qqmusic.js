@@ -1,6 +1,6 @@
 // @id qqmusic
 // @name QQ 音乐
-// @version 1.2.2
+// @version 1.2.3
 // @author NEKOPLAY
 // @desc QQ 音乐音源：搜索、播放、歌词、歌单、专辑、歌手、排行榜，QQ 扫码登录后看自己的歌单
 // @api 1
@@ -56,7 +56,8 @@ function song(s0) {
   if (s.file) files[mid] = s.file;
   if (s.id) ids[mid] = s.id;
   if (s.vs && s.vs[0]) trials[mid] = s.vs[0];
-  vip[mid] = !!(s.pay && s.pay.pay_play === 1);
+  const sw = s.action && typeof s.action.switch === 'number' ? s.action.switch : null;
+  vip[mid] = !!((s.pay && s.pay.pay_play === 1) || (sw !== null && (sw & 2) === 0));
   const singers = s.singer || [];
   const al = s.album || {};
   const alMid = al.mid || s.albummid || '';
