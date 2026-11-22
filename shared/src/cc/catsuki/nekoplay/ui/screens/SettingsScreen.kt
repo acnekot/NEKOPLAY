@@ -97,7 +97,7 @@ import java.util.Calendar
         item { SecRow("功能管理", "开关内置插件：${Features.list.count { Features.on(it.id) }}/${Features.list.size} 已开启") { nav.push(Page.Feats) } }
         item { SecRow("数据", "配置备份 / 导入、WebDAV、听歌统计") { nav.push(Page.SetSub("data")) } }
         item { SecRow("高级", "性能、内存、调试") { nav.push(Page.SetSub("adv")) } }
-        item { SecRow("关于", "0.3.0") { nav.push(Page.SetSub("about")) } }
+        item { SecRow("关于", APP_VERSION) { nav.push(Page.SetSub("about")) } }
        }
        "look" -> {
         item { SwitchRow("跟随系统", "跟随系统的深浅色设置", ThemePref.mode == 0) { ThemePref.set(if (it) 0 else if (sysDark) 2 else 1) } }
