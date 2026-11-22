@@ -1,9 +1,10 @@
 // @id kugou
 // @name 酷狗音乐
-// @version 1.0.0
+// @version 1.1.0
 // @author NEKOPLAY
-// @desc 酷狗音源：搜索、播放、歌词、歌单、专辑、歌手、排行榜，扫码登录后看自己的歌单
+// @desc 酷狗音源：搜索（单曲/专辑/歌单/热搜/联想）、播放、歌词、推荐歌单、新歌速递、每日推荐、排行榜，扫码登录后看自己的歌单
 // @api 1
+// @search track,album,playlist
 //
 // 签名算法、接口路径和参数参考 MakcRe/KuGouMusicApi，按 NEKOPLAY 插件接口用 JS 重写。原项目版权声明：
 //   MIT License, Copyright (c) 2023 MakcRe
@@ -137,6 +138,15 @@ nk.register({
     const j = await req('/v2/search/song', { keyword: q, page: page || 1, pagesize: 30, platform: 'AndroidFilter', iscorrection: 1, privilegefilter: 0, area_code: 1, dopicfull: 1 }, { router: SEARCH });
     return ((j.data && j.data.lists) || []).map(searchSong);
   },
+  async hotSearch() {
+    const j = await getJson('http://mobilecdn.kugou.com/api/v3/search/hot?format=json&plat=0&count=20');
+    return ((j.data && j.data.info) || []).map(x => x.keyword).filter(Boolean);
+  },
+  async suggest(q) {
+    const j = await getJson('https://searchtip.kugou.com/getSearchTip?MusicTipCount=10&MVTipCount=0&albumcount=0&keyword=' + encodeURIComponent(q));
+    const list = (((j.data || [])[0] || {}).RecordDatas) || [];
+    return [...new Set(list.map(x => x.HintInfo).filter(Boolean))].slice(0, 10);
+  },
 
   async stream(id, quality) {
     const [hash, audioId, albumId] = id.split(':');
@@ -170,12 +180,37 @@ nk.register({
     const j = await getJson(`${RANK}/list?version=9108&plat=0&showtype=2&parentid=0&apiver=6&area_code=1&withsong=0`);
     return ((j.data && j.data.info) || []).map(r => ({ id: 'rank' + r.rankid, name: r.rankname, cover: pic(r.img_9 || r.imgurl || r.banner_9, 240) }));
   },
+  async recPlaylists() {
+    const j = await getJson('http://mobilecdnbj.kugou.com/api/v5/special/recommend?recommend_expire=0&sign=52186982747e1404d426fa3f2a1e8ee4&plat=0&uid=0&version=9108&page=1&area_code=1&appid=1005&mid=286974383886022203545511837994020015101&_t=1545746286');
+    return ((j.data && j.data.list) || []).map(p => ({
+      id: p.global_collection_id ? String(p.global_collection_id) : ('sp' + p.specialid),
+      name: p.specialname || '', count: p.songcount || 0, cover: pic(p.imgurl), desc: p.intro || '',
+    }));
+  },
+  async newSongs(area) {
+    const map = { 0: 31308, 7: 31308, 96: 31310, 8: 31312, 16: 31311 };
+    const rid = map[Number(area) || 0] || 31308;
+    const d = (await getJson(`${RANK}/song?rankid=${rid}&page=1&pagesize=50&area_code=1&version=9108&plat=0`)).data;
+    return ((d && d.info) || []).map(rankSong);
+  },
+  async daily() {
+    const d = (await getJson(`${RANK}/song?rankid=6666&page=1&pagesize=30&area_code=1&version=9108&plat=0`)).data;
+    return ((d && d.info) || []).map(rankSong);
+  },
 
   async playlist(id) {
     const out = [];
     if (id.startsWith('rank')) {
       for (let page = 1; page <= 3; page++) {
         const d = (await getJson(`${RANK}/song?rankid=${id.slice(4)}&page=${page}&pagesize=100&area_code=1&version=9108&plat=0`)).data; if (!d) break;
+        const l = (d.info || []).map(rankSong); out.push(...l);
+        if (!l.length || out.length >= (d.total || out.length)) break;
+      }
+      return out;
+    }
+    if (id.startsWith('sp')) {
+      for (let page = 1; page <= 3; page++) {
+        const d = (await getJson(`http://mobilecdnbj.kugou.com/api/v3/special/song?specialid=${id.slice(2)}&page=${page}&pagesize=100&version=9108&plat=0`)).data; if (!d) break;
         const l = (d.info || []).map(rankSong); out.push(...l);
         if (!l.length || out.length >= (d.total || out.length)) break;
       }
@@ -218,7 +253,7 @@ nk.register({
   },
 
   // ---------- 账号 ----------
-  async account() { const c = cred(); return c ? { name: c.nick || String(c.userid), avatar: c.avatar || null } : null; },
+  async account() { const c = cred(); return c ? { uid: String(c.userid), name: c.nick || String(c.userid), avatar: c.avatar || null } : null; },
   async myPlaylists() {
     const c = cred(); if (!c) return [];
     const j = await req('/v7/get_all_list', { plat: 1 }, { router: 'cloudlist.service.kugou.com', body: { userid: c.userid, token: c.token, total_ver: 979, type: 2, page: 1, pagesize: 100 } });
