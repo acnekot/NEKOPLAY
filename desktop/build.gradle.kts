@@ -37,13 +37,13 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     implementation("net.java.dev.jna:jna:5.17.0")
     implementation("io.github.dokar3:quickjs-kt:1.0.18")
-    // 内嵌网页：Windows 用系统 WebView2；macOS / Linux 用 JavaFX WebView（只打进这两个系统的安装包）
+    // 内嵌网页：Windows 用系统 WebView2；Linux 用 JavaFX WebView；macOS 不打包 JavaFX（避开与 Skiko Metal 冲突且省 42MB）
     val os = System.getProperty("os.name").lowercase()
     val arm = System.getProperty("os.arch") in listOf("aarch64", "arm64")
-    val fx = when { "mac" in os -> if (arm) "mac-aarch64" else "mac"; "linux" in os -> if (arm) "linux-aarch64" else "linux"; else -> null }
+    val fx = if ("linux" in os) (if (arm) "linux-aarch64" else "linux") else null
     for (m in listOf("base", "graphics", "controls", "media", "web", "swing")) {
         if (fx != null) implementation("org.openjfx:javafx-$m:21.0.6:$fx")
-        else compileOnly("org.openjfx:javafx-$m:21.0.6:win")   // Windows 只用来编译，运行时不会碰到
+        else compileOnly("org.openjfx:javafx-$m:21.0.6:win")   // Windows / macOS 只用于编译，不打进安装包
     }
 }
 
