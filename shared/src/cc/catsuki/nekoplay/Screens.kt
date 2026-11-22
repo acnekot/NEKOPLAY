@@ -1,5 +1,9 @@
 package cc.catsuki.nekoplay
 
+import cc.catsuki.nekoplay.ui.settings.dirSheet
+import cc.catsuki.nekoplay.ui.settings.downloadSheet
+import cc.catsuki.nekoplay.ui.settings.menu
+
 import kotlin.math.roundToInt
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background

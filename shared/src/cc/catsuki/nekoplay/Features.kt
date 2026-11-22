@@ -1,15 +1,9 @@
 package cc.catsuki.nekoplay
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 /**
  * 内置插件：可选功能都登记在这里，「功能管理」里可以整块关掉。
@@ -42,18 +36,6 @@ object Features {
     fun load() { off = Plat.prefs("ui").getStringSet("featOff", null) ?: emptySet() }
 }
 
-/** 设置 → 功能管理 */
-@Composable fun FeaturesPage() {
-    val p = c
-    LazyColumn(Modifier.widthIn(max = 860.dp).fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp)) {
-        item { T("关掉的功能会隐藏它的按钮、菜单和设置，也不再在后台运行", 13, p.s, lh = 1.4f, modifier = Modifier.padding(bottom = 10.dp)) }
-        Features.list.groupBy { it.group }.forEach { (g, fs) ->
-            if (g.isNotEmpty()) item(key = "g$g") { Box(Modifier.padding(top = 18.dp, bottom = 4.dp)) { Tag(g) } }
-            items(fs, key = { it.id }) { f -> SwitchRow(f.name, f.desc, Features.on(f.id)) { Features.set(f.id, it) } }
-        }
-    }
-}
-
 /**
  * PC 侧拉模式：窗口变成手机宽度贴在屏幕左 / 右边，鼠标离开收进边缘，贴边时滑出。
  * 设置项放在共享代码里，真正摆窗口的是桌面端（enter / exit 由桌面端注册）。
@@ -66,11 +48,4 @@ object SidePref {
     var exit: (() -> Unit)? = null
     fun load() { width = Plat.prefs("ui").getInt("sideW", 400) }
     fun save() { Plat.prefs("ui").edit().putInt("sideW", width).apply() }
-    fun menu(nav: Nav) {
-        nav.sheet = SheetSpec("侧拉模式", "贴在屏幕边上，鼠标离开自动收起，碰到边缘再滑出来", buildList {
-            add(SheetItem((if (active == -1) "✓  " else "    ") + "贴在左边") { enter?.invoke(-1) })
-            add(SheetItem((if (active == 1) "✓  " else "    ") + "贴在右边") { enter?.invoke(1) })
-            if (active != 0) add(SheetItem("退出侧拉模式") { exit?.invoke() })
-        })
-    }
 }

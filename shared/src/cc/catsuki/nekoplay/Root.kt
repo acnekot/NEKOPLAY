@@ -1,5 +1,13 @@
 package cc.catsuki.nekoplay
 
+import cc.catsuki.nekoplay.ui.settings.BackupPage
+import cc.catsuki.nekoplay.ui.settings.DavMusicPage
+import cc.catsuki.nekoplay.ui.settings.DebugPage
+import cc.catsuki.nekoplay.ui.settings.DownloadsPage
+import cc.catsuki.nekoplay.ui.settings.FeaturesPage
+import cc.catsuki.nekoplay.ui.settings.LocalMusicPage
+import cc.catsuki.nekoplay.ui.settings.StatsPage
+
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring

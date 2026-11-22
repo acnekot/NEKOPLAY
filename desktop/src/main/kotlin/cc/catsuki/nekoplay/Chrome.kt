@@ -1,5 +1,7 @@
 package cc.catsuki.nekoplay
 
+import cc.catsuki.nekoplay.ui.settings.menu
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.hoverable
