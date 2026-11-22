@@ -168,10 +168,30 @@ class DesktopPlat : PlatImpl {
     }
     /** 选文件夹：用应用内的选择器（文件夹模式），和选图片同一套界面，也能粘贴路径、收藏位置 */
     override fun pickFolder(start: String?, done: (String?) -> Unit) { FolderPick.req = start to done }
+    private var lastRssAt = 0L
+    private var cachedMacRss = 0L
+    private fun macRssMB(): Long? {
+        if (!System.getProperty("os.name").lowercase().contains("mac")) return null
+        val now = System.currentTimeMillis()
+        if (now - lastRssAt < 3000L && cachedMacRss > 0L) return cachedMacRss
+        val rss = runCatching {
+            val pid = ProcessHandle.current().pid()
+            val out = ProcessBuilder("ps", "-o", "rss=", "-p", pid.toString()).start().inputStream.bufferedReader().readText().trim()
+            out.toLong() / 1024L
+        }.getOrNull() ?: return cachedMacRss.takeIf { it > 0L }
+        cachedMacRss = rss; lastRssAt = now
+        return rss
+    }
+    override fun heapMb(): Long {
+        val rt = Runtime.getRuntime()
+        return (rt.totalMemory() - rt.freeMemory()) / 1048576L
+    }
     override fun cpuMem(): Pair<Float, Long>? = runCatching {
         val os = java.lang.management.ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean
         val cpu = (os.processCpuLoad * 100).toFloat().coerceAtLeast(0f)
-        val rss = runCatching { File("/proc/self/status").readLines().first { it.startsWith("VmRSS") }.split(Regex("\\s+"))[1].toLong() / 1024 }.getOrNull()
+        val rss = WinMem.workingSetMB()
+            ?: runCatching { File("/proc/self/status").readLines().first { it.startsWith("VmRSS") }.split(Regex("\\s+"))[1].toLong() / 1024 }.getOrNull()
+            ?: macRssMB()
         val mem = rss ?: run {
             val heap = java.lang.management.ManagementFactory.getMemoryMXBean()
             (heap.heapMemoryUsage.committed + heap.nonHeapMemoryUsage.committed) / 1048576 + 60 // 加上 Skia / 原生库的大致占用

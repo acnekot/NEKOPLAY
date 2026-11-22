@@ -15,6 +15,7 @@ class MainActivity : ComponentActivity() {
     private var controller: ListenableFuture<MediaController>? = null
 
     override fun onCreate(s: Bundle?) {
+        if (s == null) Perf.markLaunch()
         super.onCreate(s)
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)

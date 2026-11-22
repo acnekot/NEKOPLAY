@@ -135,8 +135,10 @@ interface PlatImpl {
     /** stopOn：地址匹配这个正则的页面打开时先停止加载（电脑版网页看不到跳转前的地址，只能这样拦） */
     @Composable fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean = false, onInfo: (String) -> Unit = {}, stopOn: String? = null, intercept: (String) -> Boolean) {}
     val hasWebView: Boolean get() = false
-    /** 桌面版：本进程 CPU（%）和内存（MB）；安卓返回 null（用 /proc） */
+    /** 桌面版：本进程 CPU（%）和内存 RSS/WorkingSet（MB）；安卓返回 null（用 /proc） */
     fun cpuMem(): Pair<Float, Long>? = null
+    /** 当前已用堆内存（MB）；不支持的平台返回 0 */
+    fun heapMb(): Long = 0L
     fun memInfo(): String
     fun memAnalysis(): String
 }

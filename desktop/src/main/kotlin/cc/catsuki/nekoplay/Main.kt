@@ -35,6 +35,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import okio.Path.Companion.toOkioPath
 
 fun main() {
+    Perf.markLaunch()
     Plat.impl = DesktopPlat()
     // 渲染方式：默认显卡（Direct3D）。软件渲染省约 170MB 内存，但实测 175% 缩放下主页约 30 帧、开了背景模糊的播放页只有约 9 帧，
     // 只适合不在乎流畅度、想省内存的情况；设置里可以切换，重启生效
@@ -42,6 +43,17 @@ fun main() {
     Boot.init()
     Store.refreshAll()
     Perf.start()
+    if (System.getenv("NEKOPLAY_BENCH") == "1") {
+        Thread {
+            val out = java.io.File(System.getProperty("user.home"), ".nekoplay/perf-bench.log")
+            out.writeText("# NEKOPLAY macOS bench start\n")
+            for (sec in 1..20) {
+                Thread.sleep(1000)
+                val s = Perf.stat.value
+                out.appendText("t=${sec}s coldStartMs=${s.coldStartMs} rssMB=${s.pss} heapMB=${s.heapMb} cpu=${"%.2f".format(s.cpu)}% fps=${s.fps} jank=${s.jank}\n")
+            }
+        }.apply { isDaemon = true; name = "perf-bench" }.start()
+    }
     // 图片：网易云图片带浏览器请求头，避免 403
     SingletonImageLoader.setSafe { ctx ->
         val client = Ncm.http.newBuilder().addInterceptor { ch ->

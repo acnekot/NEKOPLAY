@@ -153,6 +153,7 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     // 启动时检查更新（一天一次），有新版本提示一下
     LaunchedEffect(Unit) { delay(4000); Updater.autoCheck()?.let { nav.toast = "有新版本 ${it.title}：设置 → 关于 → 检查更新" } }
     SideEffect { Keys.nav = nav }
+    LaunchedEffect(Unit) { withFrameNanos { Perf.markHomeReady() } }
     val st by Engine.state.collectAsState()
     val err by Engine.error.collectAsState()
     LaunchedEffect(err) { if (err != null) { nav.toast = err; Engine.error.value = null } }

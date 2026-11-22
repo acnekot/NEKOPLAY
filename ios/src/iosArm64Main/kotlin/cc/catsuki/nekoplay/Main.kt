@@ -49,6 +49,7 @@ private var booted = false
 fun MainViewController(): UIViewController {
     if (!booted) {
         booted = true
+        Perf.markLaunch()
         Plat.impl = IosPlat()
         // 老设备第一次启动默认开「省内存模式」（图片缓存小、逐字高亮约 20 帧），设置里可以关
         if (IosPlat.lowEnd) Plat.prefs("ui").let { if (!it.all().containsKey("lowMem")) it.edit().putBoolean("lowMem", true).apply() }
