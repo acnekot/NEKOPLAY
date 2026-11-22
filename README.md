@@ -19,8 +19,10 @@
 
 ## 简介
 
-NEKOPLAY 本体只负责播放、界面和本地功能，**在线音源全部做成 JS 插件**，需要哪个导入哪个。
-没有任何插件时，它就是一个本地音乐 / WebDAV 网盘播放器，喜欢和歌单都存在本机，不需要账号。
+NEKOPLAY 是一个**本地音乐播放器**：播放你自己设备上或自己网盘（WebDAV）里的音乐，喜欢和歌单都存在本机，不需要账号。
+
+软件本身**不提供、不存储、不分发任何音乐内容**，也不内置任何在线音乐服务。
+如需使用在线服务，可以自行导入插件（JS 脚本）；插件以你的身份（未登录，或登录你自己的账号）访问对应服务，能获取的内容以该服务对你开放的权限为准。详见下方[插件说明](#插件)和[免责声明](#免责声明)。
 
 ## 功能
 
@@ -33,22 +35,19 @@ NEKOPLAY 本体只负责播放、界面和本地功能，**在线音源全部做
 - 界面：手机布局和 PC 宽屏三栏布局按窗口宽度自动切换；主题、取色、自定义背景、首页模块自由排序和并排组合
 - 数据：听歌统计、下载、WebDAV / 本地配置备份（包括插件脚本）
 
-**插件**（`plugins/` 目录；在 设置 → 插件 的「订阅」里一键安装 / 更新，也可以导入文件或链接）
+<a id="插件"></a>
+**插件**
 
-| 插件 | 能力 |
-|---|---|
-| `netease.js` 网易云音乐 | 搜索、播放、逐字歌词、日推、私人 FM、歌单广场、排行榜、新碟、评论、MV、电台、云盘、扫码 / Cookie 登录 |
-| `qqmusic.js` QQ 音乐 | 搜索、播放、歌词、歌单、专辑、歌手、排行榜；网页一键登录（拉起手机 QQ）、QQ 扫码、微信扫码 |
-| `kugou.js` 酷狗音乐 | 搜索、播放、歌词、歌单、专辑、歌手、排行榜、扫码登录 |
+插件是运行在软件里的 JS 脚本，可在 设置 → 插件 中从文件、链接或订阅导入；接口见 [docs/plugin-api.md](docs/plugin-api.md)。
 
-- 首页来源可以选一个插件，也可以选「混合」；首页模块按插件实现了哪些功能自动显示
-- 列表里的歌会标出来自哪个插件
-- 插件订阅：默认带官方订阅（`plugins/index.json`），也可以添加别人的订阅地址
-- 自己写插件、做订阅：见 [docs/plugin-api.md](docs/plugin-api.md)
+- 本仓库 `plugins/` 目录下的脚本是**接口示例**，演示插件如何对接第三方服务的公开网页接口；它们不是相关服务的官方客户端，也未获得其授权或认可
+- 插件只按服务对你（未登录或你的账号）开放的权限获取内容：不破解、不绕过付费 / 会员 / 试听限制，也不去除任何版权保护措施
+- 第三方服务的接口可能随时变化，示例插件不保证可用；使用任何插件前，请先阅读并遵守对应服务的用户协议
+- 插件由使用者自行选择导入，第三方插件的行为由其作者负责
 
 ## 下载
 
-在 GitHub Actions 的「打包全部版本」工作流里下载对应平台的产物：
+正式版在 [Releases](https://github.com/acnekot/NEKOPLAY/releases) 下载；测试版在 GitHub Actions 的「打包全部版本」工作流里：
 
 | 平台 | 文件 |
 |---|---|
@@ -56,7 +55,9 @@ NEKOPLAY 本体只负责播放、界面和本地功能，**在线音源全部做
 | Windows | `.msi` / `.exe` 安装包，或免安装 zip |
 | macOS | `.dmg` |
 | Linux | `.deb` |
-| iOS | 未签名 `.ipa`，用 AltStore / Sideloadly / 巨魔自签安装 |
+| iOS | 未签名 `.ipa`，需自行签名安装 |
+
+Windows / macOS 安装包目前**没有代码签名**，系统可能提示「无法验证发布者」或拦截运行（例如 Windows 的智能应用控制）。请只从本仓库的 Releases 下载。
 
 ## 目录
 
@@ -87,15 +88,34 @@ design/    图标源文件
 | 版本 | 分支 | 内容 |
 |---|---|---|
 | 0.5.0 | `main` | 插件系统和插件订阅；本体去掉内置音源（干湿分离）；本机喜欢、本地歌单、WebDAV 音乐 |
-| 0.4.0 | `DEV` | 加入 QQ 音乐、酷狗音源和登录；歌曲来源标签；VIP 标记 |
+| 0.4.0 | `DEV` | 多个在线服务的内置对接（0.5.0 起改为可选插件）；歌曲来源标签 |
 | 0.3.0 | — | Kotlin + Compose 原生版：手机 / PC 双布局、逐字歌词、评论、桌面歌词、效果器 |
 | 0.2.0 | `flutter` / `android-native` | Flutter 和安卓原生的试验版 |
 | 0.1.0 | `tauri-web` | 最早的 Tauri 网页版 |
 
-## 致谢
+## 第三方组件
 
-- 酷狗插件的签名算法和接口参数参考 [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)（MIT License）
-- 插件引擎：[dokar3/quickjs-kt](https://github.com/dokar3/quickjs-kt)
-- 播放内核：[ExoPlayer / Media3](https://developer.android.com/media/media3)、[mpv](https://mpv.io/)
+本软件使用或在安装包中附带了以下开源组件，它们各自遵循自己的许可证：
 
-本项目仅供学习交流，音乐版权归各平台和权利人所有。
+| 组件 | 用途 | 许可证 |
+|---|---|---|
+| [Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform)、Kotlin、kotlinx.coroutines | 界面和运行时 | Apache-2.0 |
+| [AndroidX Media3（ExoPlayer）](https://github.com/androidx/media) | 安卓播放 | Apache-2.0 |
+| [mpv / libmpv](https://mpv.io/) | 桌面播放（随 Windows / macOS / Linux 安装包附带） | GPL-2.0+ 或 LGPL-2.1+（取决于所用构建） |
+| [quickjs-kt](https://github.com/dokar3/quickjs-kt)（内含 [QuickJS](https://bellard.org/quickjs/)） | 插件引擎 | Apache-2.0（QuickJS 为 MIT） |
+| [webview](https://github.com/webview/webview) | Windows 内嵌网页 | MIT |
+| [OpenJFX](https://openjfx.io/) | macOS / Linux 内嵌网页 | GPL-2.0 with Classpath Exception |
+| [OkHttp](https://github.com/square/okhttp)、[Coil](https://github.com/coil-kt/coil)、[ZXing](https://github.com/zxing/zxing) | 网络、图片、二维码 | Apache-2.0 |
+| [JNA](https://github.com/java-native-access/jna) | 调用系统库 | Apache-2.0 / LGPL-2.1 |
+| [JSON-java](https://github.com/stleary/JSON-java) | JSON 解析 | Public Domain |
+| [Inter](https://rsms.me/inter/)、[JetBrains Mono](https://www.jetbrains.com/lp/mono/) | 字体 | SIL OFL 1.1 |
+
+`plugins/kugou.js` 中的签名算法和接口参数参考了 [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)（MIT License），版权声明保留在该文件开头。
+
+## 免责声明
+
+- 本项目为个人学习和技术研究用途的开源项目，不以营利为目的，与网易云音乐、QQ 音乐、酷狗音乐等任何音乐服务及其运营公司**无关联、未获授权、未获认可**
+- 文中提到的产品名称和商标归各自所有者所有，仅用于说明兼容性
+- 软件本身不提供、不存储、不分发任何音乐、歌词、封面等受版权保护的内容；通过插件获取的内容均来自相关服务对用户本人开放的接口，版权归相关权利人所有
+- 请在遵守所在地法律法规和相关服务用户协议的前提下使用；因使用本软件或第三方插件产生的任何后果由使用者自行承担
+- 如果你是相关权利人，认为本仓库的内容侵犯了你的权益，请通过 [Issues](https://github.com/acnekot/NEKOPLAY/issues) 联系，我们会尽快核实并处理（包括删除相关内容）
