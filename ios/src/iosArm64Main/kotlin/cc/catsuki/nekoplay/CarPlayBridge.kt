@@ -7,6 +7,26 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import platform.AVFAudio.*
+import platform.Foundation.NSOperationQueue
+import platform.Foundation.NSURL
+import platform.Foundation.NSURLSession
+import platform.Foundation.dataTaskWithURL
+import platform.MediaPlayer.MPMediaItemArtwork
+import platform.MediaPlayer.MPMediaItemPropertyAlbumTitle
+import platform.MediaPlayer.MPMediaItemPropertyArtist
+import platform.MediaPlayer.MPMediaItemPropertyArtwork
+import platform.MediaPlayer.MPMediaItemPropertyPlaybackDuration
+import platform.MediaPlayer.MPMediaItemPropertyTitle
+import platform.MediaPlayer.MPNowPlayingInfoCenter
+import platform.MediaPlayer.MPNowPlayingInfoMediaTypeAudio
+import platform.MediaPlayer.MPNowPlayingInfoPropertyDefaultPlaybackRate
+import platform.MediaPlayer.MPNowPlayingInfoPropertyElapsedPlaybackTime
+import platform.MediaPlayer.MPNowPlayingInfoPropertyMediaType
+import platform.MediaPlayer.MPNowPlayingInfoPropertyPlaybackRate
+import platform.MediaPlayer.MPNowPlayingPlaybackStatePaused
+import platform.MediaPlayer.MPNowPlayingPlaybackStatePlaying
+import platform.UIKit.UIImage
 
 /** CarPlay 曲目数据传输对象 */
 data class CarPlayTrack(
@@ -34,6 +54,8 @@ object CarPlayBridge {
     private val mainScope: CoroutineScope = MainScope()
     private var observeJob: Job? = null
     private val loadedLists = HashMap<String, List<Track>>()
+    private var cachedArtwork: MPMediaItemArtwork? = null
+    private var cachedArtworkFor: String? = null
 
     private fun Track.toCp() = CarPlayTrack(id, title, artist, cover)
 
@@ -124,13 +146,55 @@ object CarPlayBridge {
         Engine.startFm()
     }
 
-    /** 监听播放状态、喜欢、最近播放与歌单变更，通知 CarPlay 刷新界面 */
+    /** 监听播放状态、喜欢、最近播放与歌单变更，通知 CarPlay 刷新界面并同步 MPNowPlayingInfoCenter */
     fun startObserving(onChange: () -> Unit) {
         observeJob?.cancel()
+        syncNowPlaying(Engine.state.value)
         observeJob = mainScope.launch {
-            combine(Engine.state, Store.recents, Store.playlists, Store.likedIds) { _, _, _, _ -> Unit }
-                .collect { onChange() }
+            combine(Engine.state, Store.recents, Store.playlists, Store.likedIds) { st, _, _, _ -> st }
+                .collect { st ->
+                    syncNowPlaying(st)
+                    onChange()
+                }
         }
+    }
+
+    private fun syncNowPlaying(st: PlayState) {
+        val t = st.current ?: return
+        runCatching { AVAudioSession.sharedInstance().setActive(true, null) }
+        val info = mutableMapOf<Any?, Any?>(
+            MPMediaItemPropertyTitle to t.title,
+            MPMediaItemPropertyArtist to t.artist,
+            MPMediaItemPropertyAlbumTitle to t.album,
+            MPMediaItemPropertyPlaybackDuration to t.durationMs / 1000.0,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime to Engine.position.value / 1000.0,
+            MPNowPlayingInfoPropertyPlaybackRate to if (st.playing) 1.0 else 0.0,
+            MPNowPlayingInfoPropertyDefaultPlaybackRate to 1.0,
+            MPNowPlayingInfoPropertyMediaType to MPNowPlayingInfoMediaTypeAudio,
+        )
+        if (cachedArtworkFor == t.id) {
+            cachedArtwork?.let { info[MPMediaItemPropertyArtwork] = it }
+        } else {
+            loadNowPlayingArtwork(t)
+        }
+        val center = MPNowPlayingInfoCenter.defaultCenter()
+        center.nowPlayingInfo = info
+        center.playbackState = if (st.playing) MPNowPlayingPlaybackStatePlaying else MPNowPlayingPlaybackStatePaused
+    }
+
+    private fun loadNowPlayingArtwork(t: Track) {
+        val cover = t.cover ?: return
+        val sized = if ('?' in cover) cover else "$cover?param=512y512"
+        val url = NSURL.URLWithString(sized) ?: return
+        NSURLSession.sharedSession.dataTaskWithURL(url) { data, _, _ ->
+            val img = data?.let { UIImage.imageWithData(it) } ?: return@dataTaskWithURL
+            NSOperationQueue.mainQueue.addOperationWithBlock {
+                if (Engine.state.value.current?.id != t.id) return@addOperationWithBlock
+                cachedArtwork = MPMediaItemArtwork(boundsSize = img.size) { _ -> img }
+                cachedArtworkFor = t.id
+                syncNowPlaying(Engine.state.value)
+            }
+        }.resume()
     }
 
     fun stopObserving() {

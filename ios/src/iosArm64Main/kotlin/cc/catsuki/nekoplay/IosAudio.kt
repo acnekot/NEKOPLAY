@@ -141,7 +141,12 @@ class IosAudio(cacheRoot: File) : Audio {
         if (item == null) { listener?.onError("没有可播放的地址"); return }
         player.insertItem(item, null)
         if (startMs > 0) item.seekToTime(CMTimeMakeWithSeconds(startMs / 1000.0, 1000), CMTimeMake(0, 1), CMTimeMake(0, 1), null)
-        if (autoplay) player.play() else player.pause()
+        if (autoplay) {
+            runCatching { AVAudioSession.sharedInstance().setActive(true, null) }
+            player.play()
+        } else {
+            player.pause()
+        }
         updateNowPlaying()
     }
 
@@ -153,8 +158,8 @@ class IosAudio(cacheRoot: File) : Audio {
     }
 
     override fun clearNext() { next?.let { player.removeItem(it) }; next = null; nextMeta = null; nextKey = null }
-    override fun play() { runCatching { AVAudioSession.sharedInstance().setActive(true, null) }; player.play() }
-    override fun pause() = player.pause()
+    override fun play() { runCatching { AVAudioSession.sharedInstance().setActive(true, null) }; player.play(); updateNowPlaying() }
+    override fun pause() { player.pause(); updateNowPlaying() }
     override fun seek(ms: Long) {
         player.seekToTime(CMTimeMakeWithSeconds(ms / 1000.0, 1000), CMTimeMake(0, 1), CMTimeMake(0, 1)) { _ -> updateNowPlaying() }
     }
@@ -194,21 +199,27 @@ class IosAudio(cacheRoot: File) : Audio {
 
     private fun updateNowPlaying() {
         val t = curMeta ?: return
+        val playing = player.timeControlStatus == AVPlayerTimeControlStatusPlaying
         val info = mutableMapOf<Any?, Any?>(
             MPMediaItemPropertyTitle to t.title,
             MPMediaItemPropertyArtist to t.artist,
             MPMediaItemPropertyAlbumTitle to t.album,
             MPMediaItemPropertyPlaybackDuration to t.durationMs / 1000.0,
             MPNowPlayingInfoPropertyElapsedPlaybackTime to position / 1000.0,
-            MPNowPlayingInfoPropertyPlaybackRate to if (player.timeControlStatus == AVPlayerTimeControlStatusPlaying) 1.0 else 0.0,
+            MPNowPlayingInfoPropertyPlaybackRate to if (playing) 1.0 else 0.0,
+            MPNowPlayingInfoPropertyDefaultPlaybackRate to 1.0,
+            MPNowPlayingInfoPropertyMediaType to MPNowPlayingInfoMediaTypeAudio,
         )
         if (artworkFor == t.id) artwork?.let { info[MPMediaItemPropertyArtwork] = it } else loadArtwork(t)
-        MPNowPlayingInfoCenter.defaultCenter().nowPlayingInfo = info
+        val center = MPNowPlayingInfoCenter.defaultCenter()
+        center.nowPlayingInfo = info
+        center.playbackState = if (playing) MPNowPlayingPlaybackStatePlaying else MPNowPlayingPlaybackStatePaused
     }
 
     private fun loadArtwork(t: Track) {
         val cover = t.cover ?: return
-        val u = NSURL.URLWithString("$cover?param=512y512") ?: return
+        val sized = if ('?' in cover) cover else "$cover?param=512y512"
+        val u = NSURL.URLWithString(sized) ?: return
         NSURLSession.sharedSession.dataTaskWithURL(u) { data, _, _ ->
             val img = data?.let { UIImage.imageWithData(it) } ?: return@dataTaskWithURL
             NSOperationQueue.mainQueue.addOperationWithBlock {
