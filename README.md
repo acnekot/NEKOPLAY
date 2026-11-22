@@ -61,17 +61,20 @@ NEKOPLAY 本体只负责播放、界面和本地功能，**在线音源全部做
 ## 目录
 
 ```
-shared/    共用代码：全部界面、播放队列、歌词、插件引擎（QuickJS）、本地 / WebDAV
+shared/    共用代码：core（平台接口）/ data（数据和插件）/ player（播放）/ ui（界面）
 app/       安卓壳：ExoPlayer 播放、通知栏、播放缓存、内嵌网页登录
-desktop/   桌面壳：Compose Desktop + libmpv 播放
+desktop/   桌面壳：Compose Desktop + libmpv 播放、内嵌网页；单元测试也在这里
 ios/       iOS 壳：AVPlayer 播放
-plugins/   音源插件脚本
-docs/      插件接口文档
+plugins/   音源插件脚本和订阅列表
+docs/      插件接口、架构说明
 design/    图标源文件
 ```
 
+开发流程、分支和提交规范见 [CONTRIBUTING.md](CONTRIBUTING.md)，模块关系见 [docs/architecture.md](docs/architecture.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 构建
 
+- 检查：`cd desktop && ./gradlew compileKotlin test ktlintCheck`（编译 + 单元测试 + 代码风格），推送后 CI 也会自动跑
 - 安卓：`./gradlew assembleRelease`（需要 Android SDK，compileSdk 37）
 - 桌面：`cd desktop && ./gradlew run`；打包 `./gradlew packageDistributionForCurrentOS`
   - 播放需要 libmpv：macOS `brew install mpv`，Linux 装 `libmpv2`，Windows 把 `libmpv-2.dll` 放到程序目录
