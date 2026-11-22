@@ -95,7 +95,7 @@ tasks.register("archCheck") {
             if (lines.size > 400) errors += "${f.relativeTo(sharedRoot)}: ${lines.size} lines (> 400)"
         }
         val nonUiFiles = setOf(
-            "Version.kt", "Perf.kt", "Hash.kt", "Debug.kt", "Features.kt",
+            "Version.kt", "Perf.kt", "Hash.kt", "Debug.kt", "Features.kt", "AppGraph.kt",
             "Plugin.kt", "PluginSubs.kt", "Sources.kt", "Ncm.kt", "Store.kt", "LocalLib.kt", "LocalMusic.kt",
             "Dav.kt", "Download.kt", "Backup.kt", "Updater.kt", "Stats.kt",
             "Engine.kt", "Fx.kt", "Lrc.kt", "Sleep.kt",
