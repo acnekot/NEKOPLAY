@@ -9,6 +9,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
         if connectingSceneSession.role == .carTemplateApplication {
             let cfg = UISceneConfiguration(name: "CarPlay Configuration", sessionRole: connectingSceneSession.role)
+            cfg.sceneClass = CPTemplateApplicationScene.self
             cfg.delegateClass = CarPlaySceneDelegate.self
             return cfg
         }
@@ -23,7 +24,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        guard let ws = scene as? UIWindowScene else { return }
+        guard session.role == .windowApplication, let ws = scene as? UIWindowScene else { return }
         let w = UIWindow(windowScene: ws)
         w.rootViewController = MainKt.MainViewController()
         w.makeKeyAndVisible()
