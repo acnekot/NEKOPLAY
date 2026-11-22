@@ -5,6 +5,26 @@
 
 ## [未发布]
 
+## [0.6.0] - 2026-11-22
+
+架构解耦、资源优化与 Apple CarPlay 车载支持。
+
+### 新增
+- iOS 支持 Apple CarPlay 车载音频：提供「推荐 / 歌单 / 队列」三标签页、私人 FM、原生「播放中」页面（含喜欢按钮与 Up Next 队列）及 `MPNowPlayingInfoCenter` 实时同步
+- 新增 `Motion` 动效令牌系统，接入播放页 400ms 换歌封面交叉淡化与喜欢/循环模式微动效
+- 新增架构守门任务 `archCheck` 与自动化暴力压测套件 `StressTest`
+- 新增 `AppGraph` 轻量服务容器与 `docs/perf-baseline.md` 性能基准记录
+
+### 变更
+- 完成共享层单向分层解耦，拆分全部超 400 行 UI 大文件至 `ui/` 子目录，清零 `core/data/player` 反向 UI 依赖
+- 桌面端性能优化：冷启动耗时 `-35.4%`、稳态内存 RSS `-30%`、空载堆内存降至 `26 MB`（插件按需启动 + 5 分钟空闲回收 QuickJS、启动任务延后、暂停挂起轮询、三端桌面统一 SerialGC + 256MB 堆上限）
+- macOS 移除进程内 JavaFX 依赖（保留手机端网页登录与 Linux/Windows 桌面端），`.app` 体积从 `195 MB` 降至 `155 MB`（`-40 MB`）
+
+### 修复
+- 彻底修复 macOS QQ 网页登录窗口卡死与白屏问题，桌面端默认优先原生扫码登录
+- 修复 5 处边界/竞态潜在崩溃（`PlayerOverlay` / `Main` / `PlayerLayout` / `HomeLayout`）
+- 修复 iOS 锁屏与 CarPlay 远程控制事件注册及播放状态同步
+
 ## [0.5.0] - 2026-11-22
 
 第一个正式发布的版本。

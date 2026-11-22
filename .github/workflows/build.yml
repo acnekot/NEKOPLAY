@@ -135,7 +135,7 @@ jobs:
         id: ver
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"
-          else v=$(sed -n 's/.*APP_VERSION = "\([^"]*\)".*/\1/p' shared/src/cc/catsuki/nekoplay/core/Version.kt); fi
+          else v=$(sed -n 's/.*APP_VERSION = "\([^"]*\)".*/\1/p' shared/src/cc/catsuki/nekoplay/Version.kt); fi
           echo "v=$v" >> "$GITHUB_OUTPUT"
           awk -v v="$v" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "见 CHANGELOG.md" > notes.md
