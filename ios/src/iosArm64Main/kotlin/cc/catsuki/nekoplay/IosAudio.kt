@@ -8,7 +8,7 @@ import platform.AVFAudio.*
 import platform.CoreMedia.*
 import platform.Foundation.*
 import platform.MediaPlayer.*
-import platform.UIKit.UIImage
+import platform.UIKit.*
 import platform.darwin.NSObject
 
 /**
@@ -185,7 +185,16 @@ class IosAudio(cacheRoot: File) : Audio {
 
     // ---------- 锁屏 / 控制中心 ----------
     private fun remote() {
+        NSOperationQueue.mainQueue.addOperationWithBlock {
+            UIApplication.sharedApplication.beginReceivingRemoteControlEvents()
+        }
         val c = MPRemoteCommandCenter.sharedCommandCenter()
+        c.playCommand.enabled = true
+        c.pauseCommand.enabled = true
+        c.togglePlayPauseCommand.enabled = true
+        c.nextTrackCommand.enabled = true
+        c.previousTrackCommand.enabled = true
+        c.changePlaybackPositionCommand.enabled = true
         c.playCommand.addTargetWithHandler { if (!Engine.isPlaying) Engine.toggle(); MPRemoteCommandHandlerStatusSuccess }
         c.pauseCommand.addTargetWithHandler { Engine.pause(); MPRemoteCommandHandlerStatusSuccess }
         c.togglePlayPauseCommand.addTargetWithHandler { Engine.toggle(); MPRemoteCommandHandlerStatusSuccess }
