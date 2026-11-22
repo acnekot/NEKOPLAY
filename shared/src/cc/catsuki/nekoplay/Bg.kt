@@ -208,7 +208,7 @@ class BgDraft {
         val y = size.height / 2; val h = hh.dp.toPx(); val t = 14.dp.toPx() * th
         drawRect(p.l3, Offset(0f, y - h / 2), Size(size.width, h))
         drawRect(p.p, Offset(0f, y - h / 2), Size(size.width * fill, h))
-        drawRect(p.p, Offset((size.width * fill - t / 2).coerceIn(0f, size.width - t), y - t / 2), Size(t, t))
+        drawRect(p.p, Offset((size.width * fill - t / 2).coerceIn(0f, (size.width - t).coerceAtLeast(0f)), y - t / 2), Size(t, t))
     })
 }
 

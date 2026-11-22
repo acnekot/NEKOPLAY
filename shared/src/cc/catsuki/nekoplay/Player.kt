@@ -1,5 +1,8 @@
 package cc.catsuki.nekoplay
 
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+
 import androidx.compose.foundation.clickable
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
@@ -85,7 +88,9 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     val drag = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val copy = rememberCopy()
-    AnimatedVisibility(nav.player, enter = slideInVertically(sp) { it }, exit = slideOutVertically(sp) { it }) {
+    AnimatedVisibility(nav.player,
+        enter = if (AnimStyle.osu) slideInVertically(tween(AnimStyle.osuMs, easing = OsuOut)) { it / 4 } + fadeIn(tween(AnimStyle.osuMs, easing = OsuOut)) + scaleIn(tween(AnimStyle.osuMs, easing = OsuOut), initialScale = .96f) else slideInVertically(sp) { it },
+        exit = if (AnimStyle.osu) slideOutVertically(tween((AnimStyle.osuMs * .85f).toInt(), easing = OsuOut)) { it / 4 } + fadeOut(tween((AnimStyle.osuMs * .65f).toInt(), easing = OsuOut)) + scaleOut(tween((AnimStyle.osuMs * .85f).toInt(), easing = OsuOut), targetScale = .97f) else slideOutVertically(sp) { it }) {
         LaunchedEffect(Unit) { drag.snapTo(0f) }
         val st by Engine.state.collectAsState()
         val t = st.current
@@ -251,23 +256,25 @@ val LocalLyricsActive = compositionLocalOf { true }
     LaunchedEffect(t.id) { if (lines == null) lines = try { LyricCache.get(t.id) } catch (e: Exception) { emptyList() } }
     // 看得见时进度刷新加快（逐字高亮更顺），藏在封面后面时不加快
     DisposableEffect(active) { if (active) Engine.fastPos++; onDispose { if (active) Engine.fastPos-- } }
-    val raw by Engine.position.collectAsState()
-    val pos = raw + LyricOffset.of(t.id)
     val l = lines
     val p = c
     if (l == null || l.isEmpty()) {
         Box(Modifier.fillMaxSize().then(if (onBlank == null) Modifier else Modifier.pointerInput(onBlank) { detectTapGestures { onBlank() } }), contentAlignment = Alignment.Center) { T(if (l == null) "LOADING" else "NO LYRICS", 12, p.s, mono = true, ls = .08f) }
         return
     }
-    val cur = Lrc.indexAt(l, pos)
-    LyricsFlow(l, cur, showTr, pos, onBlank)
+    val offset = LyricOffset.of(t.id)
+    // 只在当前句索引变化时才重组整份歌词列表，避免每 50ms 重组上百行
+    val cur by remember(l, offset) {
+        Engine.position.map { Lrc.indexAt(l, it + offset) }.distinctUntilChanged()
+    }.collectAsState(Lrc.indexAt(l, Engine.position.value + offset))
+    LyricsFlow(l, cur, showTr, offset, onBlank)
 }
 
 /**
  * 方案 B「大字流动」：大号粗体左对齐，当前句全亮、其它按距离渐淡（远处轻微模糊）；
  * 换句时每一行各自用弹簧滚到新位置，从上往下错开约 35ms，形成「流动」感。
  */
-@Composable private fun LyricsFlow(l: List<LyricLine>, cur: Int, showTr: Boolean, pos: Long, onBlank: (() -> Unit)? = null) {
+@Composable private fun LyricsFlow(l: List<LyricLine>, cur: Int, showTr: Boolean, offset: Long, onBlank: (() -> Unit)? = null) {
     val p = c
     val copy = rememberCopy()
     val tops = remember(l) { FloatArray(l.size) { -1f } }
@@ -325,27 +332,23 @@ val LocalLyricsActive = compositionLocalOf { true }
         Column(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).padding(start = 22.dp, end = 30.dp, top = 8.dp)) {
             l.forEachIndexed { i, line ->
                 val dist = kotlin.math.abs(i - cur)
-                val a by animateFloatAsState(if (browsing) (if (dist == 0) 1f else .7f) else when (dist) { 0 -> 1f; 1 -> .5f; 2 -> .36f; else -> .26f }, spring(1f, Anim.stiff(Spring.StiffnessLow)), label = "la")
+                val a = animateFloatAsState(if (browsing) (if (dist == 0) 1f else .7f) else when (dist) { 0 -> 1f; 1 -> .5f; 2 -> .36f; else -> .26f }, spring(1f, Anim.stiff(Spring.StiffnessLow)), label = "la")
                 Box(Modifier.fillMaxWidth()
                     .onPlaced { val y = it.positionInParent().y; if (tops[i] != y) { tops[i] = y; measured++ } }
-                    .graphicsLayer { translationY = offs[i].value + manual.value; alpha = if (ready) a else 0f }
-                    .then(if (UiPref.lyricBlur && !browsing && dist in 2..8 && Plat.impl.liveBlur) Modifier.blur(1.2.dp) else Modifier)
+                    .graphicsLayer { translationY = offs[i].value + manual.value; alpha = if (ready) a.value else 0f }
+                    .then(if (UiPref.lyricBlur && !browsing && dist in 2..5 && Plat.impl.liveBlur) Modifier.blur(1.2.dp) else Modifier)
                     .padding(bottom = with(LocalDensity.current) { gap.toDp() })) {
                   // 当前句放大两个字号（用缩放做，换句时有过渡）；点击区域只包住文字，旁边的空白点了回到封面
-                  val big by animateFloatAsState(if (i == cur && !browsing) (LyricPref.size + 2f) / LyricPref.size else 1f, spring(.8f, Anim.stiff(Spring.StiffnessLow)), label = "lz")
+                  val big = animateFloatAsState(if (i == cur && !browsing) (LyricPref.size + 2f) / LyricPref.size else 1f, spring(.8f, Anim.stiff(Spring.StiffnessLow)), label = "lz")
                   // 所有行都按「放大后刚好不超宽」的宽度排版：当前句放大后不会被右边裁掉，换句时也不会重新折行
                   val sMax = (LyricPref.size + 2f) / LyricPref.size
                   Box(Modifier.layout { m, cs -> val pl = m.measure(cs.copy(minWidth = 0, maxWidth = (cs.maxWidth / sMax).toInt())); layout(pl.width, pl.height) { pl.place(0, 0) } }
-                    .graphicsLayer { scaleX = big; scaleY = big; transformOrigin = TransformOrigin(0f, .5f) }
+                    .graphicsLayer { scaleX = big.value; scaleY = big.value; transformOrigin = TransformOrigin(0f, .5f) }
                     .press(onLong = { if (line.text.isNotEmpty()) copy(if (showTr && line.tr != null) line.text + "\n" + line.tr else line.text, "歌词") }) { Engine.seek(line.t); backJob?.cancel(); browsing = false; scope.launch { manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessMediumLow))) } }) {
                     if (line.text.isEmpty()) {
-                        val next = l.getOrNull(i + 1)?.t ?: (line.t + 5000)
-                        val prog = if (i == cur) ((pos - line.t).toFloat() / (next - line.t).coerceAtLeast(300)).coerceIn(0f, 1f) else 0f
-                        Row(Modifier.height(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            repeat(3) { k -> Box(Modifier.size(8.dp).background(if (i == cur && prog > k / 3f) p.k else p.k.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape)) }
-                        }
+                        InterludeDots(i == cur, line.t, l.getOrNull(i + 1)?.t ?: (line.t + 5000), offset)
                     } else Column {
-                        if (UiPref.karaoke && i == cur && line.words != null && !browsing) KaraokeLine(line, pos) else T(line.text, LyricPref.size.toFloat(), p.k, 800, lines = 6, lh = 1.25f)
+                        if (UiPref.karaoke && i == cur && line.words != null && !browsing) KaraokeLine(line, offset) else T(line.text, LyricPref.size.toFloat(), p.k, 800, lines = 6, lh = 1.25f)
                         if (showTr && line.tr != null) T(line.tr, Fs.SUB, p.s, lines = 4, lh = 1.45f, modifier = Modifier.padding(top = 4.dp))
                     }
                   }
@@ -393,10 +396,24 @@ val LocalLyricsActive = compositionLocalOf { true }
 }
 
 
+/** 间奏三点进度：只在当前句才订阅进度，不连累整份歌词 */
+@Composable private fun InterludeDots(active: Boolean, start: Long, next: Long, offset: Long) {
+    val p = c
+    val prog = if (active) {
+        val raw by Engine.position.collectAsState()
+        ((raw + offset - start).toFloat() / (next - start).coerceAtLeast(300)).coerceIn(0f, 1f)
+    } else 0f
+    Row(Modifier.height(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        repeat(3) { k -> Box(Modifier.size(8.dp).background(if (active && prog > k / 3f) p.k else p.k.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape)) }
+    }
+}
+
 /** 逐字高亮：底下一层半透明文字，上面一层实色文字按字的进度裁出来；进度用帧时钟在两次位置更新之间插值，扫过去是连续的 */
-@Composable private fun KaraokeLine(line: LyricLine, pos: Long) {
+@Composable private fun KaraokeLine(line: LyricLine, offset: Long) {
     val p = c
     val words = line.words ?: return
+    val raw by Engine.position.collectAsState()
+    val pos = raw + offset
     // 歌词藏在封面后面时不逐帧推进（老设备上这是播放页卡顿的主要来源）
     val playing = Engine.state.collectAsState().value.playing && LocalLyricsActive.current
     var now by remember { mutableLongStateOf(pos) }
@@ -405,13 +422,15 @@ val LocalLyricsActive = compositionLocalOf { true }
         if (playing) { val start = withFrameMillis { it }; while (true) { withFrameMillis { f -> now = base + (f - start) }; if (UiPref.lowMem) kotlinx.coroutines.delay(40) } }
     }
     var lay by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+    // 复用 Path，避免 120Hz 下每秒分配 120 个 Native Skia Path 对象
+    val path = remember { androidx.compose.ui.graphics.Path() }
     val st = androidx.compose.ui.text.TextStyle(fontSize = LyricPref.size.sp, fontWeight = androidx.compose.ui.text.font.FontWeight(800), fontFamily = Typo.family, lineHeight = (LyricPref.size * 1.25f).sp)
     Box {
         androidx.compose.foundation.text.BasicText(line.text, style = st.copy(color = p.k.copy(alpha = .32f)), maxLines = 6, onTextLayout = { lay = it })
         androidx.compose.foundation.text.BasicText(line.text, style = st.copy(color = p.k), maxLines = 6, modifier = Modifier.drawWithContent {
             val l = lay ?: return@drawWithContent
             val n = l.layoutInput.text.length
-            val path = androidx.compose.ui.graphics.Path()
+            path.reset()
             var ci = 0
             for (w in words) {
                 val len = w.s.length
@@ -711,7 +730,8 @@ fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString
             }, label = "right") { ct ->
                 if (ct != null) CommentsBody(ct) { nav.comments = null }
                 // 歌词栏按目标宽度排版：队列展开 / 收起的动画过程中不重新换行，不会跳动
-                else Box(Modifier.fillMaxHeight().wrapContentWidth(Alignment.Start, unbounded = true).width(rightTarget).padding(top = if (coverY < 0) 24.dp else with(dens) { (coverY - rightY).coerceAtLeast(0f).toDp() - 12.dp }.coerceAtLeast(0.dp), end = 24.dp)) { Lyrics(t, showTr) }
+                else Box(Modifier.fillMaxHeight().wrapContentWidth(Alignment.Start, unbounded = true).width(rightTarget)
+                    .padding(top = if (coverY < 0) 24.dp else with(dens) { (coverY - rightY).coerceAtLeast(0f).toDp() - 12.dp }.coerceAtLeast(0.dp), end = 24.dp)) { Lyrics(t, showTr) }
             }
         }
         // 第三栏：播放队列（看歌词的同时打开），从右边展开

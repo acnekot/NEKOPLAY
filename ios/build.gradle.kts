@@ -16,7 +16,7 @@ fun genBuildMeta(dir: File, repoRoot: File): File {
 val buildMetaDir = genBuildMeta(layout.buildDirectory.dir("generated/buildmeta").get().asFile, rootDir.parentFile)
 
 kotlin {
-    // 只出真机（arm64），最低 iOS 14；直接链接成可执行文件，不需要 Xcode 工程 / Swift
+    // 真机（arm64）与 Apple Silicon 模拟器（simulatorArm64），最低 iOS 14
     iosArm64 {
         // 官方工具链默认最低 iOS 15，这里压到 14
         compilerOptions { freeCompilerArgs.add("-Xoverride-konan-properties=minVersion.ios=14.0") }
@@ -32,11 +32,19 @@ kotlin {
             freeCompilerArgs += listOf("-Xbinary=bundleId=cc.catsuki.nekoplay.kit", "-Xoverride-konan-properties=minVersion.ios=14.0")
         }
     }
+    iosSimulatorArm64 {
+        binaries.framework {
+            baseName = "NekoApp"
+            isStatic = true
+            freeCompilerArgs += listOf("-Xbinary=bundleId=cc.catsuki.nekoplay.kit")
+        }
+    }
     sourceSets {
-        val iosArm64Main by getting {
+        val commonMain by getting {
             // 和安卓 / 桌面共用同一份界面与逻辑代码
             kotlin.srcDir("../shared/src")
             kotlin.srcDir(buildMetaDir)
+            kotlin.srcDir("src/iosArm64Main/kotlin")
             dependencies {
                 implementation("org.jetbrains.compose.runtime:runtime:1.12.2")
                 implementation("org.jetbrains.compose.foundation:foundation:1.12.2")
@@ -47,6 +55,9 @@ kotlin {
                 implementation("io.ktor:ktor-client-darwin:3.3.1")
                 implementation("io.github.dokar3:quickjs-kt:1.0.18")
             }
+        }
+        val iosArm64Main by getting {
+            kotlin.setSrcDirs(emptyList<File>())
         }
         all { languageSettings.optIn("kotlinx.cinterop.ExperimentalForeignApi"); languageSettings.optIn("kotlinx.cinterop.BetaInteropApi") }
     }

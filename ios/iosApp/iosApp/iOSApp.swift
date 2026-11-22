@@ -4,17 +4,30 @@ import NekoApp
 // Xcode 工程入口：界面和逻辑都在 Kotlin 编译出的 NekoApp 框架里
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool { true }
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let cfg = UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
+        cfg.delegateClass = SceneDelegate.self
+        return cfg
+    }
+    func applicationWillTerminate(_ application: UIApplication) { MainKt.onBackground() }
+}
+
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        let w = UIWindow(frame: UIScreen.main.bounds)
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        guard let ws = scene as? UIWindowScene else { return }
+        let w = UIWindow(windowScene: ws)
         w.rootViewController = MainKt.MainViewController()
         w.makeKeyAndVisible()
         window = w
-        return true
+        if let u = connectionOptions.urlContexts.first?.url { MainKt.onOpenUrl(u: u.absoluteString) }
     }
 
-    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool { MainKt.onOpenUrl(u: url.absoluteString); return true }
-    func applicationDidEnterBackground(_ application: UIApplication) { MainKt.onBackground() }
-    func applicationWillTerminate(_ application: UIApplication) { MainKt.onBackground() }
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        if let u = URLContexts.first?.url { MainKt.onOpenUrl(u: u.absoluteString) }
+    }
+
+    func sceneDidEnterBackground(_ scene: UIScene) { MainKt.onBackground() }
 }

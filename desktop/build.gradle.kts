@@ -55,10 +55,14 @@ compose.desktop {
     application {
         mainClass = "cc.catsuki.nekoplay.MainKt"
         // Windows / Linux 省内存：小堆 + Serial GC + 空闲时把堆还给系统 + 只用 C1 编译 + 小代码缓存 / 线程栈
-        // macOS 保流畅：Retina 屏 + 120Hz 下每帧要画的像素多，小堆会频繁 GC 掉帧，只用 C1 编译出来的代码也慢；
-        // 所以 macOS 堆给大一些、不频繁缩堆，并打开 C2 优化编译（多占几十 MB 内存）
+        // macOS 保流畅（120fps 基准）：分代 ZGC（亚毫秒停顿）+ C2 编译 + Metal 三缓冲 + 128MB GPU 纹理缓存 + 取消立即重绘 VSync 阻塞
         val mac = System.getProperty("os.name").lowercase().contains("mac")
-        jvmArgs += if (mac) listOf("-Xms96m", "-Xmx384m", "-XX:+UseSerialGC", "-XX:ReservedCodeCacheSize=96m", "-XX:MaxMetaspaceSize=128m", "-Dskiko.vsync.enabled=true")
+        jvmArgs += if (mac) listOf("-Xms96m", "-Xmx384m", "-XX:+UseZGC", "-XX:+ZGenerational",
+            "-XX:ReservedCodeCacheSize=96m", "-XX:MaxMetaspaceSize=128m",
+            "-Dsun.awt.noerasebackground=true",
+            "-Dskiko.vsync.enabled=true", "-Dskiko.buffering=TRIPLE",
+            "-Dskiko.rendering.macos.waitForPreviousFrameVsyncOnRedrawImmediately=false",
+            "-Dskiko.gpu.resourceCacheLimit=134217728")
         else listOf("-Xms24m", "-Xmx180m", "-XX:+UseSerialGC", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=25",
             "-XX:TieredStopAtLevel=1", "-XX:ReservedCodeCacheSize=40m", "-XX:MaxMetaspaceSize=96m", "-Xss512k", "-XX:CICompilerCount=2",
             "-Dskiko.vsync.enabled=true")

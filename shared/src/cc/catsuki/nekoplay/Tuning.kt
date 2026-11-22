@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.dp
 @Composable fun TuningPage() {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 28.dp)) {
         item { Column { Tag("MOTION"); Spacer(Modifier.height(4.dp)); T("动效", Fs.HERO, w = 800, lh = 1.3f); Spacer(Modifier.height(12.dp)); Rule() } }
-        item { SetLine("动效形式", "弹簧有一点物理回弹，缓动先快后慢，线性匀速，关闭则瞬间切换") { ChipRow(AnimStyle.labels, AnimStyle.style) { AnimStyle.set(it) } } }
+        item { SetLine("动效形式", "弹簧带物理回弹，缓动先快后慢，线性匀速，osu! 极速起手丝滑无回弹并带微缩放，关闭则瞬间切换") { ChipRow(AnimStyle.labels, AnimStyle.style) { AnimStyle.set(it) } } }
         item { SetLine("动效速度", "页面切换、播放页、队列、弹窗的动画快慢") { ChipRow(Anim.labels, Anim.level) { Anim.level = it; Plat.prefs("ui").edit().putInt("anim", it).apply() } } }
     }
 }

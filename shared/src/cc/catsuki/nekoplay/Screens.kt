@@ -657,7 +657,8 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
        "look" -> {
         item { SwitchRow("跟随系统", "跟随系统的深浅色设置", ThemePref.mode == 0) { ThemePref.set(if (it) 0 else if (sysDark) 2 else 1) } }
         item { SwitchRow("深色模式", "切换为暗色界面", if (ThemePref.mode == 0) sysDark else ThemePref.mode == 2, ThemePref.mode != 0) { ThemePref.set(if (it) 2 else 1) } }
-        item { NavRow("主题", "界面风格：BenchLab 粗线框 / 无边框", Look.NAMES[Look.style]) { nav.sheet = SheetSpec("选择主题", null, Look.NAMES.mapIndexed { i, n -> SheetItem((if (i == Look.style) "✓  " else "    ") + n) { Look.set(i) } }) } }
+        item { NavRow("主题", "界面风格：BenchLab 粗线框 / 无边框（默认）", Look.NAMES[Look.style]) { nav.sheet = SheetSpec("选择主题", null, Look.NAMES.mapIndexed { i, n -> SheetItem((if (i == Look.style) "✓  " else "    ") + n) { Look.set(i) } }) } }
+        if (Plat.isDesktop) item { SwitchRow("自适应大小", "按窗口宽度自动微调界面比例（以 1280 宽为基准），拖大窗口更饱满、缩窄更紧凑", UiPref.autoScale) { UiPref.autoScale = it; UiPref.save() } }
         item {
             // 拖动时只改数字，松手才应用（边拖边缩放会让滑条跑出手指下面）
             var draft by remember { mutableIntStateOf(UiPref.scale) }
@@ -741,7 +742,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
         }
        }
        "desktop" -> {
-        if (UiPref.isMac) item { SwitchRow("窗口圆角", "窗口四角做成圆角（最大化和全屏时自动变回直角）。圆角要用透明窗口，会多占一些性能；关掉后动画更顺，重启后生效", UiPref.round) { UiPref.round = it; UiPref.save(); nav.toast = "重启后生效" } }
+        if (UiPref.isMac) item { SwitchRow("窗口圆角", "使用 macOS 原生不透明圆角窗口与系统阴影（关掉后为直角无边框窗口，重启后生效）", UiPref.round) { UiPref.round = it; UiPref.save(); nav.toast = "重启后生效" } }
         item { SwitchRow("后台留存", "关闭窗口时缩到系统托盘继续播放；托盘图标可以播放 / 暂停、切歌、退出", UiPref.tray) { UiPref.tray = it; UiPref.save() } }
         item { NavRow("侧拉模式", "窗口变成手机宽度贴在屏幕边上，鼠标离开就收起；也可以右键左上角 NEKOPLAY 进入", if (SidePref.active != 0) "使用中" else null) { SidePref.menu(nav) } }
         item {

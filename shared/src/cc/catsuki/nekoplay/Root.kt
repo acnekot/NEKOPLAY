@@ -14,6 +14,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -122,18 +124,23 @@ object Anim {
     val f get() = factors[level]
     fun stiff(base: Float) = base * f * f
 }
-/** 动效形式：0 弹簧（带一点回弹感的物理动画）/ 1 缓动（先快后慢）/ 2 线性 / 3 关闭（瞬间切换） */
+/** 动效形式：0 弹簧（带一点回弹感的物理动画）/ 1 缓动（先快后慢）/ 2 线性 / 3 关闭（瞬间切换）/ 4 osu!（极速起手 + 丝滑指数缓出，带微缩放） */
 object AnimStyle {
-    val labels = listOf("弹簧", "缓动", "线性", "关闭")
+    val labels = listOf("弹簧", "缓动", "线性", "关闭", "osu!")
     var style by mutableIntStateOf(0)
-    fun load() { style = Plat.prefs("ui").getInt("animStyle", 0) }
-    fun set(v: Int) { style = v; Plat.prefs("ui").edit().putInt("animStyle", v).apply() }
+    val osu get() = style == 4
+    fun load() { style = Plat.prefs("ui").getInt("animStyle", 0).coerceIn(0, labels.lastIndex) }
+    fun set(v: Int) { style = v.coerceIn(0, labels.lastIndex); Plat.prefs("ui").edit().putInt("animStyle", style).apply() }
     val ms get() = (320 / Anim.f).toInt()
+    val osuMs get() = (360 / Anim.f).toInt()
 }
+/** osu! stable 招牌 OutExpo/OutQuint 缓出曲线：瞬间冲出、长尾丝滑刹停、零回弹 */
+val OsuOut = androidx.compose.animation.core.CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
 private fun <T> styled(stiff: Float): androidx.compose.animation.core.FiniteAnimationSpec<T> = when (AnimStyle.style) {
     1 -> androidx.compose.animation.core.tween(AnimStyle.ms, easing = androidx.compose.animation.core.FastOutSlowInEasing)
     2 -> androidx.compose.animation.core.tween(AnimStyle.ms, easing = androidx.compose.animation.core.LinearEasing)
     3 -> androidx.compose.animation.core.snap()
+    4 -> androidx.compose.animation.core.tween(AnimStyle.osuMs, easing = OsuOut)
     else -> spring(dampingRatio = .92f, stiffness = Anim.stiff(stiff))
 }
 val sp: androidx.compose.animation.core.FiniteAnimationSpec<IntOffset> get() = styled(Spring.StiffnessMediumLow)
@@ -154,15 +161,26 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     val hasTrack = st.current != null
 
     CompositionLocalProvider(LocalNav provides nav) {
-        BoxWithConstraints(Modifier.fillMaxSize().backdrop()) {
-            // 窗口宽度 ≥ 900dp：PC 三栏布局；否则就是手机布局（拖动窗口大小会实时切换）
-            val wide = maxWidth >= 900.dp
-            SideEffect { Screen.wide = wide; Screen.short = maxHeight < 720.dp; Screen.narrow = maxWidth < 360.dp }
+        val dens = LocalDensity.current
+        // 用普通 Box + onSizeChanged 代替顶层 BoxWithConstraints（SubcomposeLayout），
+        // 拖动缩放窗口时只要没跨过 900dp 宽窄阈值，整个 Root 树 0 重组、0 Subcompose，原生丝滑
+        Box(Modifier.fillMaxSize().backdrop().onSizeChanged { sz ->
+            val wDp = sz.width / dens.density
+            val hDp = sz.height / dens.density
+            val w = wDp >= 900f; val sh = hDp < 720f; val nr = wDp < 360f
+            if (Screen.wide != w) Screen.wide = w
+            if (Screen.short != sh) Screen.short = sh
+            if (Screen.narrow != nr) Screen.narrow = nr
+        }) {
+            val wide = Screen.wide
             BgLayer()
             Column(Modifier.fillMaxSize()) {
             chrome?.invoke()
             Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (wide) WideLayout() else Column(Modifier.fillMaxSize()) {
+            AnimatedContent(wide, Modifier.fillMaxSize(), transitionSpec = {
+                fadeIn(tween(200, easing = OsuOut)) togetherWith fadeOut(tween(140))
+            }, label = "layoutMode") { isWide ->
+            if (isWide) WideLayout() else Column(Modifier.fillMaxSize()) {
                 if (chrome == null) androidx.compose.animation.AnimatedVisibility(!(Screen.short && nav.player),
                     enter = androidx.compose.animation.expandVertically(spring(1f, Anim.stiff(Spring.StiffnessMediumLow))),
                     exit = androidx.compose.animation.shrinkVertically(spring(1f, Anim.stiff(Spring.StiffnessMediumLow)))) { TopBar() }
@@ -184,43 +202,51 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
             }
             }
             }
-            if (nav.menu) {
-                Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { nav.menu = false } })
-                AccountMenu(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = if (chrome != null) 54.dp else 59.dp, end = 12.dp))
+            }
+            if (nav.menu) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { nav.menu = false } })
+            AnimatedVisibility(nav.menu, Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = if (chrome != null) 54.dp else 59.dp, end = 12.dp),
+                enter = fadeIn(tween(180, easing = OsuOut)) + scaleIn(tween(220, easing = OsuOut), initialScale = .92f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)),
+                exit = fadeOut(tween(130)) + scaleOut(tween(130), targetScale = .95f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f))) {
+                AccountMenu(Modifier)
             }
             if (!wide) QueueSheet()
             if (!wide) CommentSheet() // PC 宽屏：评论放在右栏
             ActionSheet(wide)
             InputDialog()
             AnimatedVisibility(nav.toast != null, Modifier.align(Alignment.BottomCenter).padding(bottom = if (hasTrack) 150.dp else 90.dp, start = 24.dp, end = 24.dp).navigationBarsPadding(),
-                enter = fadeIn(tween(180)), exit = fadeOut(tween(180))) {
+                enter = fadeIn(tween(200, easing = OsuOut)) + slideInVertically(tween(240, easing = OsuOut)) { it / 2 } + scaleIn(tween(220, easing = OsuOut), initialScale = .95f),
+                exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { it / 3 }) {
                 Box(Modifier.background(c.k).padding(horizontal = 16.dp, vertical = 11.dp)) { T(nav.toast ?: "", 14, c.tagFg, lines = 3, lh = 1.4f, align = TextAlign.Center) }
             }
-            val po by Perf.overlay.collectAsState()
-            // 桌面版没有系统帧统计：浮窗开着时自己数帧。
-            // 刷新周期取最近 120 帧里最短的间隔（60Hz / 120Hz 屏都对），间隔超过 1.5 倍算掉帧；
-            // 超过 0.5 秒的空档是窗口在后台 / 被系统节流，不算
-            if (po && Plat.isDesktop) LaunchedEffect(Unit) {
-                var last = 0L
-                val win = ArrayDeque<Long>()
-                while (true) androidx.compose.runtime.withFrameNanos { t ->
-                    val d = t - last
-                    if (last != 0L && d < 500_000_000L) {
-                        win.addLast(d); if (win.size > 120) win.removeFirst()
-                        val period = win.min().coerceAtLeast(4_000_000L)
-                        Perf.frame(d, 0, d > period * 3 / 2)
-                    }
-                    last = t
-                }
-            }
-            if (po) {
-                val ps by Perf.stat.collectAsState()
-                Box(Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 6.dp, bottom = 140.dp).background(Color(0xCC000000)).padding(horizontal = 6.dp, vertical = 4.dp)) {
-                    T(if (Plat.isDesktop) "CPU %.0f%%  %dfps\n帧 %.1fms 掉帧%d/s\n内存 %dM".format(ps.cpu, ps.fps, ps.frameMs, ps.jank, ps.pss)
-                      else "CPU %.0f%%  %dfps\n帧 %.1f GPU %.1fms 掉帧%d/s\nGPU %s  PSS %dM".format(ps.cpu, ps.fps, ps.frameMs, ps.gpuMs, ps.jank, ps.gpu ?: "-", ps.pss), 10, Color.White, mono = true, lines = 3, lh = 1.3f)
-                }
-            }
+            PerfOverlay(Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 6.dp, bottom = 140.dp))
         }
+    }
+}
+
+/** 独立作用域：每秒刷新性能数据只重组这个小浮窗，不牵连整个 Root */
+@Composable private fun PerfOverlay(modifier: Modifier) {
+    val po by Perf.overlay.collectAsState()
+    if (!po) return
+    // 桌面版没有系统帧统计：浮窗开着时自己数帧。
+    // 刷新周期取最近 120 帧的中位数（60Hz 稳在 16.7ms，120Hz 稳在 8.3ms，不会被单次提前提交的短帧带偏误报掉帧），
+    // 间隔超过 1.5 倍算掉帧；超过 0.5 秒的空档是窗口在后台 / 被系统节流，不算
+    if (Plat.isDesktop) LaunchedEffect(Unit) {
+        var last = 0L
+        val win = ArrayDeque<Long>()
+        while (true) androidx.compose.runtime.withFrameNanos { t ->
+            val d = t - last
+            if (last != 0L && d < 500_000_000L) {
+                win.addLast(d); if (win.size > 120) win.removeFirst()
+                val period = if (win.size >= 10) win.sorted()[win.size / 2].coerceIn(7_000_000L, 18_000_000L) else 16_666_667L
+                Perf.frame(d, 0, win.size >= 10 && d > period * 3 / 2)
+            }
+            last = t
+        }
+    }
+    val ps by Perf.stat.collectAsState()
+    Box(modifier.background(Color(0xCC000000)).padding(horizontal = 6.dp, vertical = 4.dp)) {
+        T(if (Plat.isDesktop) "CPU %.0f%%  %dfps\n帧 %.1fms 掉帧%d/s\n内存 %dM".format(ps.cpu, ps.fps, ps.frameMs, ps.jank, ps.pss)
+          else "CPU %.0f%%  %dfps\n帧 %.1f GPU %.1fms 掉帧%d/s\nGPU %s  PSS %dM".format(ps.cpu, ps.fps, ps.frameMs, ps.gpuMs, ps.jank, ps.gpu ?: "-", ps.pss), 10, Color.White, mono = true, lines = 3, lh = 1.3f)
     }
 }
 
@@ -255,11 +281,11 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
     val nav = LocalNav.current
     var libBuilt by remember { mutableStateOf(false) }
     if (nav.tab == 1) libBuilt = true
-    val x by animateFloatAsState(nav.tab.toFloat(), spF, label = "tab")
+    val x = animateFloatAsState(nav.tab.toFloat(), spF, label = "tab")
     BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
         val w = constraints.maxWidth.toFloat()
-        if (x < 1f) Box(Modifier.fillMaxSize().graphicsLayer { translationX = -w * x }) { HomePage() }
-        if (libBuilt && x > 0f) Box(Modifier.fillMaxSize().graphicsLayer { translationX = w * (1 - x) }) { LibraryPage() }
+        Box(Modifier.fillMaxSize().graphicsLayer { translationX = -w * x.value }) { HomePage() }
+        if (libBuilt) Box(Modifier.fillMaxSize().graphicsLayer { translationX = w * (1 - x.value) }) { LibraryPage() }
     }
 }
 
@@ -325,7 +351,7 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
         .press { nav.back() }.padding(start = 6.dp, end = 18.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { NIcon(NIcons.back, 20.dp) }
-        T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; Page.Local -> "LOCAL"; Page.Dav -> "WEBDAV"; Page.Backup -> "BACKUP"; Page.DebugLog -> "DEBUG"; is Page.ArtistAlbums -> "ALBUMS"; Page.Stats -> "STATS"; is Page.SetSub -> "SETTINGS / " + page.sec.uppercase(); Page.Feats -> "FEATURES"; Page.PluginMgr -> "PLUGINS"; is Page.PluginLogin -> "LOGIN"; Page.BtnLayout -> "PLAYER LAYOUT"; is Page.LyricCard -> "CARD"; else -> "" }, 12, p.s, mono = true, ls = .1f)
+        T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; Page.Local -> "LOCAL"; Page.Dav -> "WEBDAV"; Page.Backup -> "BACKUP"; Page.DebugLog -> "DEBUG"; is Page.ArtistAlbums -> "ALBUMS"; Page.Stats -> "STATS"; is Page.SetSub -> "SETTINGS / " + page.sec.uppercase(); Page.Feats -> "FEATURES"; Page.PluginMgr -> "PLUGINS"; is Page.PluginLogin -> "LOGIN"; Page.BtnLayout -> "PLAYER LAYOUT"; is Page.LyricCard -> "CARD" }, 12, p.s, mono = true, ls = .1f)
     }
     Box(Modifier.weight(1f)) {
         when (page) {

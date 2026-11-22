@@ -135,6 +135,6 @@ object FxStore {
         drawRect(p.l3, Offset(x - w / 2, 0f), Size(w, size.height))
         drawRect(p.p, Offset(x - w / 2, minOf(mid, y)), Size(w, kotlin.math.abs(mid - y)))
         drawRect(p.k, Offset(x - 6.dp.toPx(), mid - .5.dp.toPx()), Size(12.dp.toPx(), 1.dp.toPx()))
-        drawRect(p.p, Offset(x - t / 2, (y - t / 2).coerceIn(0f, size.height - t)), Size(t, t))
+        drawRect(p.p, Offset(x - t / 2, (y - t / 2).coerceIn(0f, (size.height - t).coerceAtLeast(0f))), Size(t, t))
     })
 }

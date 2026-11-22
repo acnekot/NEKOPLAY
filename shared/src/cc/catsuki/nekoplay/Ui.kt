@@ -1,5 +1,8 @@
 package cc.catsuki.nekoplay
 
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -10,7 +13,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -20,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -66,12 +72,12 @@ val LocalPal = staticCompositionLocalOf { Light }
 val c: Pal @Composable get() = LocalPal.current
 
 /** 深浅色：0 跟随系统 / 1 浅色 / 2 深色 */
-/** 主题（界面风格）：0 BenchLab 粗线框（默认）/ 1 无边框（去掉所有框线和分隔线，控件改用浅色底块区分） */
+/** 主题（界面风格）：0 BenchLab 粗线框 / 1 无边框（默认，去掉所有框线和分隔线，控件改用浅色底块区分） */
 object Look {
     val NAMES = listOf("BenchLab", "无边框")
-    var style by mutableIntStateOf(0)
+    var style by mutableIntStateOf(1)
     val flat get() = style == 1
-    fun load() { style = Plat.prefs("ui").getInt("look", 0) }
+    fun load() { style = Plat.prefs("ui").getInt("look", 1) }
     fun set(v: Int) { style = v; Plat.prefs("ui").edit().putInt("look", v).apply() }
 }
 
@@ -88,16 +94,36 @@ object ThemePref {
     fun set(m: Int) { mode = m; Plat.prefs("ui").edit().putInt("theme", m).apply() }
 }
 
+@Composable private fun MonetCoverWatcher() {
+    val cover = if (Monet.mode == 3) Engine.state.collectAsState().value.current?.cover else null
+    LaunchedEffect(Monet.mode, Monet.hue, cover, Bg.on, Bg.source) { Monet.refresh(cover) }
+}
+
 @Composable fun NekoTheme(content: @Composable () -> Unit) {
     val dark = when (ThemePref.mode) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
-    // 莫奈取色：模式 / 色相 / 封面 / 背景图变了就重新取种子色
-    val st by Engine.state.collectAsState()
-    val cover = st.current?.cover
-    LaunchedEffect(Monet.mode, Monet.hue, if (Monet.mode == 3) cover else null, Bg.on, Bg.source) { Monet.refresh(cover) }
+    // 莫奈取色抽到独立节点，避免播放状态变化触发整个 NekoTheme 顶层重组
+    MonetCoverWatcher()
     val base = if (dark) Dark else Light
-    // 全局缩放：整个界面（含文字）按比例放大缩小
+    // 全局缩放：严禁在 NekoTheme 顶层直接读取 LocalWindowInfo.containerSize（拖窗每动 1px 都会触发整棵 App 重组导致掉帧！）
+    // 改在 LaunchedEffect 里用 snapshotFlow 采样 + 250ms 防抖，拖窗全程 NekoTheme 0 重组
     val d = androidx.compose.ui.platform.LocalDensity.current
-    val dens = remember(d, UiPref.scale) { androidx.compose.ui.unit.Density(d.density * UiPref.scale / 100f, d.fontScale) }
+    val winInfo = androidx.compose.ui.platform.LocalWindowInfo.current
+    var settledAuto by remember { mutableFloatStateOf(1f) }
+    LaunchedEffect(UiPref.autoScale, d.density) {
+        if (!UiPref.autoScale || !Plat.isDesktop) { settledAuto = 1f; return@LaunchedEffect }
+        var job: kotlinx.coroutines.Job? = null
+        snapshotFlow { winInfo.containerSize.width }.collect { winPx ->
+            if (winPx <= 0) return@collect
+            val logicalW = winPx / d.density
+            val target = if (logicalW < 760f) 1f else ((((logicalW / 1280f).coerceIn(.85f, 1.25f) * 20f).roundToInt()) / 20f)
+            if (target != settledAuto) {
+                job?.cancel()
+                job = launch { kotlinx.coroutines.delay(250); settledAuto = target }
+            }
+        }
+    }
+    val finalScale = (UiPref.scale / 100f * settledAuto).coerceIn(.6f, 1.6f)
+    val dens = remember(d, finalScale) { androidx.compose.ui.unit.Density(d.density * finalScale, d.fontScale) }
     CompositionLocalProvider(LocalPal provides animPal(if (Monet.on) Monet.apply(base) else base), androidx.compose.ui.platform.LocalDensity provides dens, content = content)
 }
 
@@ -108,16 +134,24 @@ object ThemePref {
     return t.copy(p = a(t.p, "p"), page = a(t.page, "pg"), bar = a(t.bar, "bar"), sheet = a(t.sheet, "sh"), pop = a(t.pop, "pop"), ph = a(t.ph, "ph"), lyBg = a(t.lyBg, "ly"), tagFg = a(t.tagFg, "tf"))
 }
 
-/** 背景：深色纯平 #2D333B，浅色 165° 渐变 + 两个淡光斑 */
+/** 背景：深色纯平 #2D333B，浅色 165° 渐变 + 两个淡光斑（drawWithCache 缓存 Brush，避免每帧重算渐变） */
 @Composable fun Modifier.backdrop(): Modifier {
     val p = c
-    if (Monet.on) return if (p.dark) background(p.page) else drawBehind {
-        drawRect(Brush.linearGradient(listOf(p.bar, p.page, p.sheet), Offset(size.width * .37f, 0f), Offset(size.width * .63f, size.height)))
+    if (Monet.on) return if (p.dark) background(p.page) else drawWithCache {
+        val bg = Brush.linearGradient(listOf(p.bar, p.page, p.sheet), Offset(size.width * .37f, 0f), Offset(size.width * .63f, size.height))
+        onDrawBehind { drawRect(bg) }
     }
-    return if (p.dark) background(Color(0xFF2D333B)) else drawBehind {
-        drawRect(Brush.linearGradient(listOf(Color(0xFFC6DCE4), Color(0xFFD3E5EA), Color(0xFFE2EDEE)), Offset(size.width * .37f, 0f), Offset(size.width * .63f, size.height)))
-        val r1 = 130.dp.toPx(); drawCircle(Brush.radialGradient(listOf(Color(0x33FFD9B0), Color(0x00FFD9B0)), Offset(size.width + 80.dp.toPx() - r1, 120.dp.toPx() + r1), r1), r1, Offset(size.width + 80.dp.toPx() - r1, 120.dp.toPx() + r1))
-        val r2 = 140.dp.toPx(); drawCircle(Brush.radialGradient(listOf(Color(0x33A8C8FF), Color(0x00A8C8FF)), Offset(-90.dp.toPx() + r2, size.height - 160.dp.toPx() - r2), r2), r2, Offset(-90.dp.toPx() + r2, size.height - 160.dp.toPx() - r2))
+    return if (p.dark) background(Color(0xFF2D333B)) else drawWithCache {
+        val bg = Brush.linearGradient(listOf(Color(0xFFC6DCE4), Color(0xFFD3E5EA), Color(0xFFE2EDEE)), Offset(size.width * .37f, 0f), Offset(size.width * .63f, size.height))
+        val r1 = 130.dp.toPx(); val c1 = Offset(size.width + 80.dp.toPx() - r1, 120.dp.toPx() + r1)
+        val b1 = Brush.radialGradient(listOf(Color(0x33FFD9B0), Color(0x00FFD9B0)), c1, r1)
+        val r2 = 140.dp.toPx(); val c2 = Offset(-90.dp.toPx() + r2, size.height - 160.dp.toPx() - r2)
+        val b2 = Brush.radialGradient(listOf(Color(0x33A8C8FF), Color(0x00A8C8FF)), c2, r2)
+        onDrawBehind {
+            drawRect(bg)
+            drawCircle(b1, r1, c1)
+            drawCircle(b2, r2, c2)
+        }
     }
 }
 
@@ -167,10 +201,14 @@ object Typo {
 @Composable fun Modifier.press(scale: Float = 1f, haptic: Boolean = false, onLong: (() -> Unit)? = null, onClick: () -> Unit): Modifier {
     val src = remember { MutableInteractionSource() }
     val down by src.collectIsPressedAsState()
-    val a by animateFloatAsState(if (down) .7f else 1f, tween(if (down) 60 else 220), label = "a")
-    val sc by animateFloatAsState(if (down) scale else 1f, spring(1f, Anim.stiff(if (down) Spring.StiffnessHigh else Spring.StiffnessMediumLow)), label = "s")
+    val osu = AnimStyle.osu
+    val a = animateFloatAsState(if (down) .72f else 1f, if (osu) tween(if (down) 35 else 240, easing = OsuOut) else tween(if (down) 60 else 200), label = "a")
+    val effScale = if (scale != 1f) scale else if (osu) .985f else 1f
+    val sc = if (effScale != 1f) animateFloatAsState(if (down) effScale else 1f,
+        if (osu) tween(if (down) 45 else 280, easing = OsuOut)
+        else spring(.9f, Anim.stiff(if (down) Spring.StiffnessHigh else Spring.StiffnessMediumLow)), label = "s") else null
     val h = LocalHapticFeedback.current
-    return this.graphicsLayer { alpha = a; scaleX = sc; scaleY = sc }.combinedClickable(src, null,
+    return this.graphicsLayer { alpha = a.value; if (sc != null) { scaleX = sc.value; scaleY = sc.value } }.combinedClickable(src, null,
         onLongClick = onLong?.let { { h.performHapticFeedback(HapticFeedbackType.LongPress); it() } }) {
         if (haptic) h.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick()
     }
@@ -271,9 +309,10 @@ val LocalCompactAction = compositionLocalOf { false }
     }
 
 @Composable fun NSwitch(on: Boolean, onChange: (Boolean) -> Unit) {
-    val x by animateDpAsState(if (on) 23.dp else 3.dp, spring(1f, Anim.stiff(Spring.StiffnessMedium)), label = "sw")
+    val x by animateDpAsState(if (on) 23.dp else 3.dp, if (AnimStyle.osu) tween(220, easing = OsuOut) else spring(1f, Anim.stiff(Spring.StiffnessMedium)), label = "sw")
+    val bg by androidx.compose.animation.animateColorAsState(if (on) c.p else Color.Transparent, tween(180), label = "swb")
     Box(Modifier.size(52.dp, 44.dp).pointerInput(on) { detectTapGestures { onChange(!on) } }, contentAlignment = Alignment.Center) {
-        Box(Modifier.size(44.dp, 24.dp).background(if (on) c.p else Color.Transparent).nbf(1.dp, c.k)) {
+        Box(Modifier.size(44.dp, 24.dp).background(bg).nbf(1.dp, c.k)) {
             Box(Modifier.offset(x = x, y = 3.dp).size(16.dp).background(if (on) Color.White else c.k))
         }
     }
@@ -281,9 +320,13 @@ val LocalCompactAction = compositionLocalOf { false }
 
 @Composable fun Cover(url: String?, size: Dp, title: String = "", border: Boolean = true, decodeSize: Dp = size) {
     val px = with(LocalDensity.current) { decodeSize.roundToPx() }
+    val ctx = coil3.compose.LocalPlatformContext.current
     Box(Modifier.size(size).background(c.ph).then(if (border) Modifier.nb(1.dp, c.k) else Modifier), contentAlignment = Alignment.Center) {
         if (url == null) T(title.take(1).uppercase().ifEmpty { "♪" }, size.value * .42f, c.s, 800)
-        else AsyncImage(img(url, px), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+        else {
+            val req = remember(url, px) { coil3.request.ImageRequest.Builder(ctx).data(img(url, px)).build() }
+            AsyncImage(req, null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+        }
     }
 }
 
@@ -304,13 +347,21 @@ val LocalCompactAction = compositionLocalOf { false }
 @Composable fun TrackRow(t: Track, current: Boolean, label: String? = null, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
     val p = c
     val fg = if (current) p.p else p.k
-    Row(Modifier.fillMaxWidth().height(64.dp).press(onLong = onLong, onClick = onClick).drawBehind {
-        if (current) {
-            val ext = 10.dp.toPx()
-            drawRect(p.hl, Offset(-ext, 0f), Size(size.width + ext * 2, size.height))
-            drawRect(p.p, Offset(-ext, 0f), Size(3.dp.toPx(), size.height))
+    val hSrc = remember { MutableInteractionSource() }
+    val hovered by hSrc.collectIsHoveredAsState()
+    val curAnim = animateFloatAsState(if (current) 1f else 0f, if (AnimStyle.osu) tween(240, easing = OsuOut) else tween(180), label = "trc")
+    val hovAnim = animateFloatAsState(if (hovered && !current) 1f else 0f, tween(if (hovered) 100 else 180), label = "trh")
+    Row(Modifier.fillMaxWidth().height(64.dp).hoverable(hSrc).press(onLong = onLong, onClick = onClick).drawBehind {
+        val ext = 10.dp.toPx()
+        val ca = curAnim.value
+        val ha = hovAnim.value
+        if (ha > 0.01f) drawRect(p.k.copy(alpha = .045f * ha), Offset(-ext, 0f), Size(size.width + ext * 2, size.height))
+        if (ca > 0.01f) {
+            drawRect(p.hl.copy(alpha = p.hl.alpha * ca), Offset(-ext, 0f), Size(size.width + ext * 2, size.height))
+            val barH = size.height * ca
+            drawRect(p.p.copy(alpha = ca), Offset(-ext, (size.height - barH) / 2f), Size(3.dp.toPx(), barH))
         }
-        if (!Look.flat) drawRect(p.l1, Offset(if (current) -10.dp.toPx() else 0f, size.height - 1.dp.toPx()), Size(size.width + if (current) 20.dp.toPx() else 0f, 1.dp.toPx()))
+        if (!Look.flat) drawRect(p.l1, Offset(if (current) -ext else 0f, size.height - 1.dp.toPx()), Size(size.width + if (current) ext * 2 else 0f, 1.dp.toPx()))
     }, verticalAlignment = Alignment.CenterVertically) {
         Cover(t.cover, 44.dp, t.title)
         Spacer(Modifier.width(12.dp))
@@ -327,12 +378,18 @@ val LocalCompactAction = compositionLocalOf { false }
         Spacer(Modifier.width(12.dp))
         Column(horizontalAlignment = Alignment.End) {
             T(if (t.durationMs > 0) fmt(t.durationMs) else "--:--", 12, fg, mono = true)
-            val dls by Downloads.items.collectAsState()
-            val act by Downloads.active.collectAsState()
-            val lab = label ?: act[t.id]?.let { if (it < 0) "等待下载" else "%.0f%%".format(it * 100) } ?: if (dls.any { it.track.id == t.id }) "已下载" else null
-            if (lab != null) T(lab, 11, p.s, mono = true, ls = .06f)
+            TrackDownloadLabel(t.id, label)
         }
     }
+}
+
+@Composable private fun TrackDownloadLabel(id: String, label: String?) {
+    val lab = if (label != null) label else {
+        val act by Downloads.active.collectAsState()
+        val dls by Downloads.items.collectAsState()
+        act[id]?.let { if (it < 0) "等待下载" else "%.0f%%".format(it * 100) } ?: if (dls.any { it.track.id == id }) "已下载" else null
+    }
+    if (lab != null) T(lab, 11, c.s, mono = true, ls = .06f)
 }
 
 /** 进度条：热区 16，线 4（拖动时 6），拖动时出现方形滑块 */
@@ -345,11 +402,11 @@ val LocalCompactAction = compositionLocalOf { false }
     // 进度线宽度永远用 150ms 匀速动画追到新位置（拖动、播放、跳转都一样，这就是拖尾）；
     // 方块滑块直接在手指位置，只做 150ms 的缩放（0.4→1）和淡入淡出
     val frac = drag ?: (pos.toFloat() / dur).coerceIn(0f, 1f)
-    val fill by animateFloatAsState(frac, tween(150, easing = androidx.compose.animation.core.LinearEasing), label = "fill")
+    val fill = animateFloatAsState(frac, tween(150, easing = androidx.compose.animation.core.LinearEasing), label = "fill")
     val thumbAt = frac
-    val h by animateDpAsState(if (drag != null) 6.dp else 4.dp, tween(150, easing = androidx.compose.animation.core.LinearEasing), label = "h")
-    val th by animateFloatAsState(if (drag != null) 1f else 0f, tween(150, easing = androidx.compose.animation.core.LinearEasing), label = "t")
-    val ts by animateFloatAsState(if (drag != null) 1f else .4f, tween(150, easing = androidx.compose.animation.core.LinearEasing), label = "ts")
+    val h = animateDpAsState(if (drag != null) 6.dp else 4.dp, tween(150, easing = androidx.compose.animation.core.LinearEasing), label = "h")
+    val th = animateFloatAsState(if (drag != null) 1f else 0f, tween(150, easing = androidx.compose.animation.core.LinearEasing), label = "t")
+    val ts = animateFloatAsState(if (drag != null) 1f else .4f, tween(150, easing = androidx.compose.animation.core.LinearEasing), label = "ts")
     val p = c
     Box(Modifier.fillMaxWidth().height(hit).then(if (!interactive) Modifier else Modifier.pointerInput(dur) {
         awaitPointerEventScope {
@@ -362,19 +419,20 @@ val LocalCompactAction = compositionLocalOf { false }
             }
         }
     }).drawBehind {
-        val y = size.height / 2; val hp = h.toPx()
+        val y = size.height / 2; val hp = h.value.toPx()
         drawRect(p.l3, Offset(0f, y - hp / 2), Size(size.width, hp))
         // 已缓存的部分：比底色深一点
         if (UiPref.showBuffer && interactive) drawRect(p.k.copy(alpha = .22f), Offset(0f, y - hp / 2), Size(size.width * (buf.toFloat() / dur).coerceIn(0f, 1f), hp))
-        drawRect(p.p, Offset(0f, y - hp / 2), Size(size.width * fill, hp))
-        if (th > 0) { val s = 12.dp.toPx() * ts; drawRect(p.p.copy(alpha = th), Offset(size.width * thumbAt - s / 2, y - s / 2), Size(s, s)) }
+        drawRect(p.p, Offset(0f, y - hp / 2), Size(size.width * fill.value, hp))
+        val thv = th.value
+        if (thv > 0f) { val s = 12.dp.toPx() * ts.value; drawRect(p.p.copy(alpha = thv), Offset(size.width * thumbAt - s / 2, y - s / 2), Size(s, s)) }
     })
 }
 
 @Composable fun TimeRow(durMs: Long, scrub: Float? = null, size: Int = 12) {
-    val pos by Engine.position.collectAsState()
+    val sec by remember { Engine.position.map { it / 1000L }.distinctUntilChanged() }.collectAsState(Engine.position.value / 1000L)
     Row(Modifier.fillMaxWidth()) {
-        T(fmt(if (scrub != null) (scrub * durMs).toLong() else pos), size, c.p, mono = true, modifier = Modifier.weight(1f))
+        T(fmt(if (scrub != null) (scrub * durMs).toLong() else sec * 1000L), size, c.p, mono = true, modifier = Modifier.weight(1f))
         T(fmt(durMs), size, c.s, mono = true)
     }
 }
@@ -424,6 +482,7 @@ object UiPref {
     var barAlpha by mutableFloatStateOf(.5f)    // 有背景时栏位的不透明度
     var lowMem by mutableStateOf(false)         // 省内存模式
     var scale by mutableIntStateOf(100)        // 全局缩放（%）
+    var autoScale by mutableStateOf(false)      // 桌面：按窗口宽度自适应缩放（默认关，避免拖窗松手后界面跳变）
     var round by mutableStateOf(true)          // macOS：窗口圆角
     var tray by mutableStateOf(true)            // 桌面：关闭窗口时留在托盘继续播放
     var autoHideSide by mutableStateOf(true)    // PC 播放页按钮竖栏：鼠标靠近才显示
@@ -435,8 +494,8 @@ object UiPref {
     var btns by mutableStateOf(setOf("mode", "sleep", "more", "comment", "queue"))
     fun toggleBtn(key: String) { btns = if (key in btns) btns - key else btns + key; k.edit().putStringSet("btns", btns).apply() }
     private val k get() = Plat.prefs("ui")
-    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true); coverPct = k.getInt("coverPct", 80); autoHideSide = k.getBoolean("sideAuto", true); scale = k.getInt("scale", 100).coerceIn(60, 150); round = k.getBoolean("round", true); homePlugin = k.getString("homePlugin", null) ?: listOf("netease", "qqmusic", "kugou", "mix").getOrElse(k.getInt("homeSrc", 0)) { "netease" } }
-    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).putInt("coverPct", coverPct).putBoolean("sideAuto", autoHideSide).putInt("scale", scale).putBoolean("round", round).putString("homePlugin", homePlugin).apply() }
+    fun load() { k.getStringSet("btns", null)?.let { btns = it }; showBuffer = k.getBoolean("buf", true); lyricBlur = k.getBoolean("lblur", true); karaoke = k.getBoolean("kara", true); barAlpha = k.getFloat("barA", .5f); lowMem = k.getBoolean("lowMem", false); tray = k.getBoolean("tray", true); coverPct = k.getInt("coverPct", 80); autoHideSide = k.getBoolean("sideAuto", true); scale = k.getInt("scale", 100).coerceIn(60, 150); autoScale = k.getBoolean("autoScale", false); round = k.getBoolean("round", true); homePlugin = k.getString("homePlugin", null) ?: listOf("netease", "qqmusic", "kugou", "mix").getOrElse(k.getInt("homeSrc", 0)) { "netease" } }
+    fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).putInt("coverPct", coverPct).putBoolean("sideAuto", autoHideSide).putInt("scale", scale).putBoolean("autoScale", autoScale).putBoolean("round", round).putString("homePlugin", homePlugin).apply() }
 }
 
 /** 歌词字号（设置里可调，歌词页 / 右栏 / 播放页都用它） */

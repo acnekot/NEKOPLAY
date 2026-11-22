@@ -25,8 +25,7 @@ import androidx.compose.ui.unit.dp
     val p = c
     val st by Engine.state.collectAsState()
     val liked by Store.likedIds.collectAsState()
-    // 进来时还没在放 FM 就开始；队列快到底就提前要下一批，保证右边总有「下一首」可看
-    LaunchedEffect(Unit) { if (!st.fm) Engine.startFm { nav.toast = it } }
+    // 不自动开播，由用户点播放按钮启动；已在放 FM 时提前预取下一批，保证右边总有「下一首」可看
     LaunchedEffect(st.index, st.fm) { if (st.fm) Engine.fmEnsureNext() }
     val cur = if (st.fm) st.current else null
     val prev = if (st.fm) st.queue.getOrNull(st.index - 1) else null
@@ -60,8 +59,8 @@ import androidx.compose.ui.unit.dp
             }
             Spacer(Modifier.height(22.dp))
             Column(Modifier.width(big + small + 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                T(cur?.title ?: "正在获取…", Fs.PAGE, w = 800, lines = 1)
-                T(cur?.artist ?: "", 14, p.s, modifier = Modifier.press { if (cur != null) openArtists(nav, cur) })
+                T(cur?.title ?: "私人 FM", Fs.PAGE, w = 800, lines = 1)
+                T(cur?.artist ?: "点击下方播放按钮开始连播", 14, p.s, modifier = Modifier.press { if (cur != null) openArtists(nav, cur) })
                 Spacer(Modifier.height(14.dp))
                 if (cur != null) { ScrubBar(cur.durationMs); TimeRow(cur.durationMs) }
                 Spacer(Modifier.height(14.dp))

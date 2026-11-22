@@ -1,10 +1,18 @@
 package cc.catsuki.nekoplay
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -22,7 +30,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /**
  * PC 宽屏布局（窗口 ≥ 900dp）：
@@ -42,11 +54,14 @@ import androidx.compose.ui.unit.dp
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 Sidebar()
-                Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) { WideContent() }
-                // 右栏（歌词 / 队列 / 评论）：从右边展开、收起
-                androidx.compose.animation.AnimatedVisibility((nav.side != 0 || nav.comments != null) && st.current != null,
-                    enter = androidx.compose.animation.expandHorizontally(spring(1f, Anim.stiff(androidx.compose.animation.core.Spring.StiffnessMediumLow)), expandFrom = Alignment.Start) + fadeIn(tween(200)),
-                    exit = androidx.compose.animation.shrinkHorizontally(tween(220), shrinkTowards = Alignment.Start) + fadeOut(tween(160))) { SidePanel(st) }
+                Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
+                    WideContent()
+                    // 右栏（歌词 / 队列 / 评论）：纯 GPU 位移滑入滑出，不改变主内容区宽度，避免每帧全页重排掉帧
+                    androidx.compose.animation.AnimatedVisibility((nav.side != 0 || nav.comments != null) && st.current != null,
+                        Modifier.align(Alignment.CenterEnd),
+                        enter = androidx.compose.animation.slideInHorizontally(sp) { it } + fadeIn(if (AnimStyle.osu) tween(AnimStyle.osuMs, easing = OsuOut) else tween(150)),
+                        exit = androidx.compose.animation.slideOutHorizontally(if (AnimStyle.osu) tween((220 / Anim.f).toInt(), easing = OsuOut) else tween(180)) { it } + fadeOut(tween(130))) { SidePanel(st) }
+                }
             }
             PlayerBar()
         }
@@ -69,11 +84,33 @@ import androidx.compose.ui.unit.dp
         if (!Plat.isDesktop) Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             T("NEKOPLAY", Fs.HEAD, w = 900, ls = .02f, modifier = Modifier.press { nav.player = false; nav.stack.clear(); nav.tab = 0 })
         } else Spacer(Modifier.height(10.dp))
-        SideItem(NIcons.home, "主页", nav.stack.isEmpty() && nav.tab == 0) { nav.player = false; nav.stack.clear(); nav.tab = 0 }
-        SideItem(NIcons.library, "曲库", nav.stack.isEmpty() && nav.tab == 1) { nav.player = false; nav.stack.clear(); nav.tab = 1 }
-        SideItem(NIcons.search, "搜索", top is Page.Search) { nav.player = false; nav.stack.clear(); nav.push(Page.Search) }
-        SideItem(NIcons.radio, "私人 FM", top is Page.Fm) { nav.player = false; nav.stack.clear(); nav.push(Page.Fm) }
-        SideItem(NIcons.chart, "发现 · 排行榜", top is Page.Playlists && top.kind == "top") { nav.player = false; nav.stack.clear(); nav.push(Page.Playlists("top", "", "排行榜")) }
+        val navIdx = when {
+            nav.stack.isEmpty() && nav.tab == 0 -> 0
+            nav.stack.isEmpty() && nav.tab == 1 -> 1
+            top is Page.Search -> 2
+            top is Page.Fm -> 3
+            top is Page.Playlists && top.kind == "top" -> 4
+            else -> -1
+        }
+        val osu = AnimStyle.osu
+        val indY = animateFloatAsState(if (navIdx >= 0) navIdx.toFloat() else 0f,
+            if (osu) tween(AnimStyle.osuMs, easing = OsuOut) else spF, label = "sby")
+        val indA = animateFloatAsState(if (navIdx >= 0) 1f else 0f,
+            if (osu) tween((200 / Anim.f).toInt(), easing = OsuOut) else tween(140), label = "sba")
+        Box(Modifier.fillMaxWidth()) {
+            // 连贯滑动的选中高亮块：切菜单时蓝色底块顺滑滑到新位置，不再瞬间硬跳
+            if (osu) Box(Modifier.fillMaxWidth().height(44.dp).graphicsLayer {
+                translationY = indY.value * 44.dp.toPx()
+                alpha = indA.value
+            }.background(p.p))
+            Column(Modifier.fillMaxWidth()) {
+                SideItem(NIcons.home, "主页", navIdx == 0, osu) { nav.player = false; nav.stack.clear(); nav.tab = 0 }
+                SideItem(NIcons.library, "曲库", navIdx == 1, osu) { nav.player = false; nav.stack.clear(); nav.tab = 1 }
+                SideItem(NIcons.search, "搜索", navIdx == 2, osu) { nav.player = false; nav.stack.clear(); nav.push(Page.Search) }
+                SideItem(NIcons.radio, "私人 FM", navIdx == 3, osu) { nav.player = false; nav.stack.clear(); nav.push(Page.Fm) }
+                SideItem(NIcons.chart, "发现 · 排行榜", navIdx == 4, osu) { nav.player = false; nav.stack.clear(); nav.push(Page.Playlists("top", "", "排行榜")) }
+            }
+        }
         Spacer(Modifier.height(14.dp))
         // 歌单列表一直显示（不再和曲库联动）
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -101,33 +138,101 @@ import androidx.compose.ui.unit.dp
     }
 }
 
-@Composable private fun SideItem(icon: String, label: String, on: Boolean, onClick: () -> Unit) {
+@Composable private fun SideItem(icon: String, label: String, on: Boolean, slidingBg: Boolean = false, onClick: () -> Unit) {
     val p = c
-    Row(Modifier.fillMaxWidth().height(44.dp).press(onClick = onClick).background(if (on) p.p else Color.Transparent).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-        NIcon(icon, 18.dp, if (on) Color.White else p.k); Spacer(Modifier.width(12.dp)); T(label, 15, if (on) Color.White else p.k, 700)
+    val src = remember { MutableInteractionSource() }
+    val hover by src.collectIsHoveredAsState()
+    val shift = if (AnimStyle.osu) animateFloatAsState(if (hover && !on) 6f else 0f, tween(220, easing = OsuOut), label = "sh") else null
+    Row(Modifier.fillMaxWidth().height(44.dp).hoverable(src).press(onClick = onClick)
+        .background(if (on && !slidingBg) p.p else if (hover && !on && AnimStyle.osu) p.k.copy(alpha = .06f) else Color.Transparent)
+        .padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.graphicsLayer { if (shift != null) translationX = shift.value.dp.toPx() }, verticalAlignment = Alignment.CenterVertically) {
+            NIcon(icon, 18.dp, if (on) Color.White else p.k); Spacer(Modifier.width(12.dp)); T(label, 15, if (on) Color.White else p.k, 700)
+        }
     }
 }
 
 @Composable private fun SideList(label: String, on: Boolean, cover: @Composable () -> Unit, onClick: () -> Unit) {
     val p = c
-    Row(Modifier.fillMaxWidth().height(44.dp).press(onClick = onClick).background(if (on) p.hl else Color.Transparent).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        cover(); Spacer(Modifier.width(10.dp)); T(label, 14, if (on) p.p else p.k, if (on) 700 else 500)
+    val src = remember { MutableInteractionSource() }
+    val hover by src.collectIsHoveredAsState()
+    val shift = if (AnimStyle.osu) animateFloatAsState(if (hover) 5f else 0f, tween(220, easing = OsuOut), label = "sl") else null
+    Row(Modifier.fillMaxWidth().height(44.dp).hoverable(src).press(onClick = onClick)
+        .background(if (on) p.hl else if (hover && AnimStyle.osu) p.k.copy(alpha = .05f) else Color.Transparent)
+        .padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.graphicsLayer { if (shift != null) translationX = shift.value.dp.toPx() }, verticalAlignment = Alignment.CenterVertically) {
+            cover(); Spacer(Modifier.width(10.dp)); T(label, 14, if (on) p.p else p.k, if (on) 700 else 500)
+        }
     }
 }
 
-/** 内容区：没有子页面时是主页 / 曲库，有就显示最上面那个子页面（淡入淡出切换） */
+/** 内容区：主页 / 曲库常驻保活；osu! 模式下采用强连贯的空间视差推拉（前进右进左退、返回左回右出、Tab 双画板横滑） */
 @Composable private fun WideContent() {
     val nav = LocalNav.current
-    val key: Any = nav.stack.lastOrNull() ?: "tab${nav.tab}"
-    AnimatedContent(key, Modifier.fillMaxSize(), transitionSpec = {
-        fadeIn(tween(160)) togetherWith fadeOut(tween(110))
-    }, label = "wide") { k ->
-        Box(Modifier.fillMaxSize()) {
-            when (k) {
-                is Page -> Box(Modifier.fillMaxSize().background(c.page)) { BgLayer(); PageContent(k) }
-                "tab1" -> Centered { LibraryPage() }
-                else -> Centered { HomePage() }
+    val top = nav.stack.lastOrNull()
+    val showHome = top == null && nav.tab == 0
+    val showLib = top == null && nav.tab == 1
+    var libBuilt by remember { mutableStateOf(false) }
+    if (showLib) libBuilt = true
+    val osu = AnimStyle.osu
+    // 跟踪前进 / 后退方向，用于 osu! 模式下子页面之间的连贯左右推拉
+    var lastDepth by remember { mutableIntStateOf(0) }
+    val forward = nav.stack.size >= lastDepth
+    SideEffect { lastDepth = nav.stack.size }
+
+    val spec: androidx.compose.animation.core.FiniteAnimationSpec<Float> = when (AnimStyle.style) {
+        3 -> androidx.compose.animation.core.snap()
+        4 -> tween(AnimStyle.osuMs, easing = OsuOut)
+        else -> tween(140)
+    }
+    val homeAlpha = animateFloatAsState(if (showHome) 1f else 0f, spec, label = "wh")
+    val libAlpha = animateFloatAsState(if (showLib) 1f else 0f, spec, label = "wl")
+    val tabSlide = if (osu) animateFloatAsState(if (nav.tab == 1) 1f else 0f, spec, label = "wts") else null
+    val subDepth = if (osu) animateFloatAsState(if (top != null) 1f else 0f, spec, label = "wsd") else null
+
+    var wPx by remember { mutableFloatStateOf(1f) }
+    Box(Modifier.fillMaxSize().onSizeChanged { wPx = it.width.toFloat().coerceAtLeast(1f) }) {
+        // 主页常驻：osu! 模式下切曲库时向左顺滑推开，进子页面时向左退 14% 并微缩形成视差衔接
+        Box(Modifier.fillMaxSize().layout { m, cs -> val pl = m.measure(cs); layout(pl.width, pl.height) { if (homeAlpha.value > 0.01f) pl.place(0, 0) } }.graphicsLayer {
+            alpha = homeAlpha.value
+            if (tabSlide != null && subDepth != null) {
+                translationX = -wPx * .22f * tabSlide.value - wPx * .14f * subDepth.value
+                val s = 1f - .025f * subDepth.value
+                scaleX = s; scaleY = s
             }
+        }) {
+            Centered { HomePage() }
+        }
+        if (libBuilt) {
+            Box(Modifier.fillMaxSize().layout { m, cs -> val pl = m.measure(cs); layout(pl.width, pl.height) { if (libAlpha.value > 0.01f) pl.place(0, 0) } }.graphicsLayer {
+                alpha = libAlpha.value
+                if (tabSlide != null && subDepth != null) {
+                    translationX = wPx * .22f * (1f - tabSlide.value) - wPx * .14f * subDepth.value
+                    val s = 1f - .025f * subDepth.value
+                    scaleX = s; scaleY = s
+                }
+            }) {
+                Centered { LibraryPage() }
+            }
+        }
+        AnimatedContent(top, Modifier.fillMaxSize(), transitionSpec = {
+            if (AnimStyle.style == 3) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
+            else if (AnimStyle.osu) {
+                val ms = AnimStyle.osuMs
+                val enterT = tween<androidx.compose.ui.unit.IntOffset>(ms, easing = OsuOut)
+                val enterF = tween<Float>(ms, easing = OsuOut)
+                val exitT = tween<androidx.compose.ui.unit.IntOffset>((ms * .85f).toInt(), easing = OsuOut)
+                val exitF = tween<Float>((ms * .65f).toInt(), easing = OsuOut)
+                if (forward) {
+                    (slideInHorizontally(enterT) { (it * .24f).toInt() } + fadeIn(enterF)) togetherWith
+                        (slideOutHorizontally(exitT) { -(it * .14f).toInt() } + fadeOut(exitF))
+                } else {
+                    (slideInHorizontally(enterT) { -(it * .14f).toInt() } + fadeIn(enterF)) togetherWith
+                        (slideOutHorizontally(exitT) { (it * .24f).toInt() } + fadeOut(exitF))
+                }
+            } else fadeIn(tween(110)) togetherWith fadeOut(tween(80))
+        }, label = "widePage") { k ->
+            if (k != null) Box(Modifier.fillMaxSize()) { PageContent(k) }
         }
     }
 }
@@ -141,7 +246,7 @@ import androidx.compose.ui.unit.dp
     val nav = LocalNav.current
     val p = c
     val t = st.current ?: return
-    Column(Modifier.width(380.dp).fillMaxHeight().background(p.page.copy(alpha = .6f)).drawBehind {
+    Column(Modifier.width(380.dp).fillMaxHeight().background(p.page.copy(alpha = .94f)).drawBehind {
         if (!Look.flat) drawRect(p.k, Offset.Zero, Size(3.dp.toPx(), size.height))
     }.padding(start = 3.dp)) {
         // 打开评论时，右栏换成评论；关掉回到歌词 / 队列
@@ -156,8 +261,16 @@ import androidx.compose.ui.unit.dp
             Spacer(Modifier.weight(1f))
             Box(Modifier.size(40.dp).press { nav.side = 0 }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp) }
         }
-        if (nav.side == 1) Box(Modifier.weight(1f).fillMaxWidth()) { Lyrics(t, true) }
-        else Box(Modifier.weight(1f).fillMaxWidth()) { QueueList(st) }
+        AnimatedContent(nav.side, Modifier.weight(1f).fillMaxWidth(), transitionSpec = {
+            val dir = if (targetState > initialState) 1 else -1
+            val ms = if (AnimStyle.osu) AnimStyle.osuMs else 200
+            val ease = if (AnimStyle.osu) OsuOut else androidx.compose.animation.core.FastOutSlowInEasing
+            (slideInHorizontally(tween(ms, easing = ease)) { (it * .18f * dir).toInt() } + fadeIn(tween(ms, easing = ease))) togetherWith
+                (slideOutHorizontally(tween(ms, easing = ease)) { (-it * .14f * dir).toInt() } + fadeOut(tween((ms * .7f).toInt())))
+        }, label = "sideTab") { tab ->
+            if (tab == 1) Box(Modifier.fillMaxSize()) { Lyrics(t, true) }
+            else Box(Modifier.fillMaxSize()) { QueueList(st) }
+        }
     }
 }
 
@@ -188,16 +301,24 @@ import androidx.compose.ui.unit.dp
     val st by Engine.state.collectAsState()
     val liked by Store.likedIds.collectAsState()
     val t = st.current
-    Row(Modifier.fillMaxWidth().height(84.dp).background(barBg()).drawBehind {
+    Box(Modifier.fillMaxWidth().height(84.dp).background(barBg()).drawBehind {
         if (!Look.flat) drawRect(p.k, Offset.Zero, Size(size.width, 3.dp.toPx()))
-    }.padding(top = 3.dp, start = 14.dp, end = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        // 左：封面 + 歌名
-        Row(Modifier.width(300.dp).press { if (t != null) { nav.lyrics = false; nav.player = true } }, verticalAlignment = Alignment.CenterVertically) {
-            Cover(t?.cover, 56.dp, t?.title ?: "")
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                T(t?.title ?: "还没有曲目", 15, w = 800, lh = 1.3f)
-                T(t?.artist ?: "选一首歌开始播放", 12, p.s, lh = 1.3f, modifier = Modifier.press { if (t != null) openArtists(nav, t) })
+    }) {
+    Row(Modifier.fillMaxSize().padding(top = 3.dp, start = 14.dp, end = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        // 左：封面 + 歌名（切歌时丝滑上下滑入淡入淡出）
+        AnimatedContent(t, Modifier.width(300.dp), contentKey = { it?.id ?: "" }, transitionSpec = {
+            val ms = if (AnimStyle.osu) AnimStyle.osuMs else 220
+            val ease = if (AnimStyle.osu) OsuOut else androidx.compose.animation.core.FastOutSlowInEasing
+            (androidx.compose.animation.slideInVertically(tween(ms, easing = ease)) { it / 3 } + fadeIn(tween(ms, easing = ease))) togetherWith
+                (androidx.compose.animation.slideOutVertically(tween((ms * .7f).toInt(), easing = ease)) { -it / 3 } + fadeOut(tween((ms * .6f).toInt())))
+        }, label = "barTrack") { cur ->
+            Row(Modifier.fillMaxWidth().press { if (cur != null) { nav.lyrics = false; nav.player = true } }, verticalAlignment = Alignment.CenterVertically) {
+                Cover(cur?.cover, 56.dp, cur?.title ?: "")
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    T(cur?.title ?: "还没有曲目", 15, w = 800, lh = 1.3f)
+                    T(cur?.artist ?: "选一首歌开始播放", 12, p.s, lh = 1.3f, modifier = Modifier.press { if (cur != null) openArtists(nav, cur) })
+                }
             }
         }
         // 中：控制 + 进度
@@ -209,15 +330,21 @@ import androidx.compose.ui.unit.dp
                 Spacer(Modifier.width(14.dp))
                 Box(Modifier.size(36.dp).press { if (st.fm) Engine.fmTrash() else Engine.prev() }, contentAlignment = Alignment.Center) { NIcon(if (st.fm) NIcons.trash else NIcons.prev, 18.dp) }
                 Spacer(Modifier.width(14.dp))
-                Box(Modifier.size(40.dp).press(.94f) { Engine.toggle() }.background(p.p), contentAlignment = Alignment.Center) { NIcon(if (st.playing) NIcons.pause else NIcons.play, 18.dp, Color.White) }
+                Box(Modifier.size(40.dp).press(.94f) { Engine.toggle() }.background(p.p), contentAlignment = Alignment.Center) {
+                    AnimatedContent(st.playing, transitionSpec = {
+                        (fadeIn(tween(140)) + scaleIn(tween(180, easing = OsuOut), initialScale = .75f)) togetherWith
+                            (fadeOut(tween(100)) + scaleOut(tween(100), targetScale = .75f))
+                    }, label = "playIcon") { playing ->
+                        NIcon(if (playing) NIcons.pause else NIcons.play, 18.dp, Color.White)
+                    }
+                }
                 Spacer(Modifier.width(14.dp))
                 Box(Modifier.size(36.dp).press { Engine.next() }, contentAlignment = Alignment.Center) { NIcon(NIcons.next, 18.dp) }
                 Spacer(Modifier.width(14.dp))
                 Box(Modifier.size(36.dp).press { if (t != null) trackActions(nav, t) }, contentAlignment = Alignment.Center) { NIcon(NIcons.more, 18.dp, p.s) }
             }
             Row(Modifier.widthIn(max = 620.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                val pos by Engine.position.collectAsState()
-                T(fmt(pos), 11, p.p, mono = true, modifier = Modifier.width(44.dp))
+                PosText(p.p, Modifier.width(44.dp))
                 Box(Modifier.weight(1f)) { ScrubBar(t?.durationMs ?: 0, 14.dp, interactive = t != null) }
                 T(fmt(t?.durationMs ?: 0), 11, p.s, mono = true, modifier = Modifier.width(44.dp).padding(start = 8.dp))
             }
@@ -234,6 +361,13 @@ import androidx.compose.ui.unit.dp
             VolumeBar()
         }
     }
+    }
+}
+
+/** 独立作用域 + 按秒去重：避免进度条每 50ms/250ms 触发整个底部播放条重组 */
+@Composable private fun PosText(color: Color, modifier: Modifier = Modifier) {
+    val sec by remember { Engine.position.map { it / 1000L }.distinctUntilChanged() }.collectAsState(Engine.position.value / 1000L)
+    T(fmt(sec * 1000L), 11, color, mono = true, modifier = modifier)
 }
 
 @Composable private fun BarBtn(icon: String, on: Boolean, onClick: () -> Unit) =
@@ -267,6 +401,6 @@ object Vol {
         val y = size.height / 2; val h = 4.dp.toPx()
         drawRect(p.l3, Offset(0f, y - h / 2), Size(size.width, h))
         drawRect(p.k, Offset(0f, y - h / 2), Size(size.width * v, h))
-        val s = 10.dp.toPx(); drawRect(p.k, Offset((size.width * v - s / 2).coerceIn(0f, size.width - s), y - s / 2), Size(s, s))
+        val s = 10.dp.toPx(); drawRect(p.k, Offset((size.width * v - s / 2).coerceIn(0f, (size.width - s).coerceAtLeast(0f)), y - s / 2), Size(s, s))
     })
 }

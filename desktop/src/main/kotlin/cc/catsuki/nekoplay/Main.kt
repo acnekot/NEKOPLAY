@@ -51,7 +51,7 @@ fun main() {
                 .header("Referer", "https://music.163.com/").build() else r)
         }.build()
         ImageLoader.Builder(ctx)
-            .memoryCache { MemoryCache.Builder().maxSizeBytes((if (UiPref.lowMem) 12L else 24L) * 1024 * 1024).build() }
+            .memoryCache { MemoryCache.Builder().maxSizeBytes((when { UiPref.lowMem -> 12L; UiPref.isMac -> 64L; else -> 24L }) * 1024 * 1024).build() }
             .diskCache { DiskCache.Builder().directory(Plat.impl.cacheDir.resolve("img").toOkioPath()).maxSizeBytes(300L * 1024 * 1024).build() }
             .components { add(OkHttpNetworkFetcherFactory(callFactory = { client })) }
             .build()
@@ -68,21 +68,19 @@ fun main() {
             val bytes = Thread.currentThread().contextClassLoader.getResourceAsStream("icon.png")!!.readBytes()
             androidx.compose.ui.graphics.painter.BitmapPainter(org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap())
         }
-        val trayIcon = appIcon
-        val st by Engine.state.collectAsState()
         // 系统不支持托盘（部分 Linux 桌面）时就不藏窗口，直接退出
         val trayOk = remember { runCatching { java.awt.SystemTray.isSupported() }.getOrDefault(false) }
         // 托盘：自己用 AWT 建（Compose 的 Tray 菜单在 Windows 上中文会显示成方块，这里给菜单指定中文字体）
         val winRef = remember { arrayOfNulls<java.awt.Window>(1) }
         val show = { visible = true; state.isMinimized = false; winRef[0]?.toFront(); Unit }
-        if (UiPref.tray && trayOk) NekoTray(st.playing, st.current?.let { "${it.title} - ${it.artist}" } ?: "NEKOPLAY", show, quit)
+        if (UiPref.tray && trayOk) NekoTrayHost(show, quit)
         val close = { if (UiPref.tray && trayOk) { visible = false; Thread { Thread.sleep(1500); System.gc(); WinMem.trim() }.start() } else quit() }
         if (DeskLyric.on && Features.on("desk")) DeskLyricWindow()
         // 无边框窗口：标题栏、最小化 / 最大化 / 关闭按钮和拖边改大小都自己画
-        // macOS：开了圆角时窗口透明，内容自己裁成圆角；透明窗口每帧都要和桌面合成，比不透明的慢，所以关掉圆角就用不透明窗口
-        // 透明只能在建窗口时定，改圆角开关后重启生效。Windows / Linux 一直不透明
-        val macTransparent = androidx.compose.runtime.remember { UiPref.isMac && UiPref.round }
-        Window(onCloseRequest = close, state = state, visible = visible, title = "NEKOPLAY", icon = appIcon, undecorated = true, transparent = macTransparent,
+        // macOS 120fps 优化：永远使用不透明窗口（transparent = false），彻底避开透明合成与 WindowServer 每帧重算动态阴影；
+        // 开了「窗口圆角」时用 macOS 原生全内容无标题栏窗口（apple.awt.fullWindowContent）+ 隐藏原生红黄绿三键，零开销获得系统硬件圆角和阴影
+        val macNativeRound = androidx.compose.runtime.remember { UiPref.isMac && UiPref.round }
+        Window(onCloseRequest = close, state = state, visible = visible, title = "NEKOPLAY", icon = appIcon, undecorated = !macNativeRound, transparent = false,
             onPreviewKeyEvent = { e ->
                 if (e.type != KeyEventType.KeyDown) false
                 else if (e.key == Key.Escape) DesktopPlat.back()   // Esc = 返回
@@ -96,8 +94,16 @@ fun main() {
             onKeyEvent = { e -> e.type == KeyEventType.KeyDown && !e.isCtrlPressed && !e.isAltPressed && Keys.handlePlain(e.key) }) {
             window.minimumSize = java.awt.Dimension(360, 560)
             winRef[0] = window
-            // 透明窗口在 macOS 上默认没有阴影：按内容的形状（圆角）补上系统阴影
-            if (UiPref.isMac) androidx.compose.runtime.LaunchedEffect(Unit) { window.rootPane.putClientProperty("Window.shadow", true) }
+            if (macNativeRound) androidx.compose.runtime.LaunchedEffect(Unit) {
+                window.rootPane.putClientProperty("apple.awt.fullWindowContent", true)
+                window.rootPane.putClientProperty("apple.awt.transparentTitleBar", true)
+                window.rootPane.putClientProperty("apple.awt.windowTitleVisible", false)
+                // 等 AWT/AppKit 重建完原生标题栏再在 AppKit 主线程移除红黄绿三键，保留我们自己的自绘三键
+                kotlinx.coroutines.delay(120)
+                MacWindow.hideTrafficLights()
+                kotlinx.coroutines.delay(400)
+                MacWindow.hideTrafficLights()
+            }
             // 最小化时释放图片内存缓存并回收一次，把内存还给系统
             androidx.compose.runtime.LaunchedEffect(state.isMinimized) {
                 if (state.isMinimized && UiPref.lowMem) { SingletonImageLoader.get(coil3.PlatformContext.INSTANCE).memoryCache?.clear(); System.gc() }
@@ -105,11 +111,9 @@ fun main() {
                 if (state.isMinimized) { kotlinx.coroutines.delay(1500); WinMem.trim() }
             }
             NekoTheme {
-                val rounded = macTransparent && UiPref.round && state.placement == androidx.compose.ui.window.WindowPlacement.Floating && SidePref.active == 0
-                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()
-                    .then(if (rounded) androidx.compose.ui.Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) else androidx.compose.ui.Modifier)) {
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
                     Root(chrome = { TitleBar(state, close) })
-                    ResizeEdges(state)
+                    if (!macNativeRound) ResizeEdges(state)
                     SideTracker()
                     FolderPickHost()
                 }
@@ -150,6 +154,46 @@ private fun androidx.compose.ui.window.ApplicationScope.DeskLyricWindow() {
     }
 }
 
+/** macOS：在 AppKit 主线程上移除原生红黄绿三键（保留我们自己的 TitleBar + 零开销硬件圆角与阴影） */
+object MacWindow {
+    private interface ObjC : com.sun.jna.Library {
+        fun objc_getClass(name: String): com.sun.jna.Pointer?
+        fun sel_registerName(name: String): com.sun.jna.Pointer?
+        fun objc_msgSend(receiver: com.sun.jna.Pointer?, sel: com.sun.jna.Pointer?): com.sun.jna.Pointer?
+    }
+    private interface ObjCLong : com.sun.jna.Library {
+        fun objc_msgSend(receiver: com.sun.jna.Pointer?, sel: com.sun.jna.Pointer?, arg: Long): com.sun.jna.Pointer?
+    }
+    private interface ObjCCount : com.sun.jna.Library {
+        fun objc_msgSend(receiver: com.sun.jna.Pointer?, sel: com.sun.jna.Pointer?): Long
+    }
+    private interface ObjCMain : com.sun.jna.Library {
+        fun objc_msgSend(receiver: com.sun.jna.Pointer?, sel: com.sun.jna.Pointer?, action: com.sun.jna.Pointer?, obj: com.sun.jna.Pointer?, wait: Boolean)
+    }
+    fun hideTrafficLights() {
+        if (!UiPref.isMac) return
+        runCatching {
+            val o0 = com.sun.jna.Native.load("objc", ObjC::class.java)
+            val oL = com.sun.jna.Native.load("objc", ObjCLong::class.java)
+            val oC = com.sun.jna.Native.load("objc", ObjCCount::class.java)
+            val oM = com.sun.jna.Native.load("objc", ObjCMain::class.java)
+            val app = o0.objc_msgSend(o0.objc_getClass("NSApplication"), o0.sel_registerName("sharedApplication")) ?: return@runCatching
+            val wins = o0.objc_msgSend(app, o0.sel_registerName("windows")) ?: return@runCatching
+            val n = oC.objc_msgSend(wins, o0.sel_registerName("count"))
+            val selAt = o0.sel_registerName("objectAtIndex:")
+            val selBtn = o0.sel_registerName("standardWindowButton:")
+            val selMain = o0.sel_registerName("performSelectorOnMainThread:withObject:waitUntilDone:")
+            val selRemove = o0.sel_registerName("removeFromSuperview")
+            for (i in 0 until n) {
+                val w = oL.objc_msgSend(wins, selAt, i) ?: continue
+                for (btn in 0L..2L) {
+                    oL.objc_msgSend(w, selBtn, btn)?.let { oM.objc_msgSend(it, selMain, selRemove, null, false) }
+                }
+            }
+        }
+    }
+}
+
 /** Windows：给窗口加 / 去掉 WS_EX_TRANSPARENT，让鼠标点击穿过歌词落到下面的窗口 */
 object ClickThrough {
     private interface U32 : com.sun.jna.Library {
@@ -168,6 +212,13 @@ object ClickThrough {
     }
 }
 
+
+/** 把 Engine.state 订阅隔离开，避免播放状态变化触发整个 application 顶层重组 */
+@Composable
+private fun NekoTrayHost(show: () -> Unit, quit: () -> Unit) {
+    val st by Engine.state.collectAsState()
+    NekoTray(st.playing, st.current?.let { "${it.title} - ${it.artist}" } ?: "NEKOPLAY", show, quit)
+}
 
 /** 系统托盘：图标 + 右键菜单（中文字体），双击 / 单击图标打开窗口 */
 @Composable
