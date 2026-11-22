@@ -157,9 +157,27 @@ val LocalLyricsActive = compositionLocalOf { true }
         backJob = scope.launch { kotlinx.coroutines.delay(3000); browsing = false; manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessLow))) }
     }
     val drag = androidx.compose.foundation.gestures.rememberDraggableState { dy -> scope.launch { manual.snapTo(manual.value + dy) } }
-    Box(Modifier.fillMaxSize().clipToBounds().onSizeChanged { vh = it.height.toFloat() }.then(if (onBlank == null) Modifier else Modifier.pointerInput(onBlank) { detectTapGestures { onBlank() } }).draggable(drag, androidx.compose.foundation.gestures.Orientation.Vertical,
-        onDragStarted = { backJob?.cancel(); browsing = true; bounds(); manual.stop() },
-        onDragStopped = { v -> scope.launch { manual.animateDecay(v, androidx.compose.animation.core.exponentialDecay(.6f)) }; scheduleBack() })) {
+    Box(Modifier.fillMaxSize().clipToBounds().onSizeChanged { vh = it.height.toFloat() }
+        .then(if (onBlank == null) Modifier else Modifier.pointerInput(onBlank) { detectTapGestures { onBlank() } })
+        .pointerInput(l, cur) {
+            awaitPointerEventScope {
+                while (true) {
+                    val ev = awaitPointerEvent()
+                    if (ev.type == androidx.compose.ui.input.pointer.PointerEventType.Scroll) {
+                        val dy = ev.changes.fold(0f) { acc, ch -> acc + ch.scrollDelta.y }
+                        if (dy != 0f) {
+                            ev.changes.forEach { it.consume() }
+                            backJob?.cancel(); browsing = true; bounds()
+                            scope.launch { manual.snapTo(manual.value - dy * 48f * density) }
+                            scheduleBack()
+                        }
+                    }
+                }
+            }
+        }
+        .draggable(drag, androidx.compose.foundation.gestures.Orientation.Vertical,
+            onDragStarted = { backJob?.cancel(); browsing = true; bounds(); manual.stop() },
+            onDragStopped = { v -> scope.launch { manual.animateDecay(v, androidx.compose.animation.core.exponentialDecay(.6f)) }; scheduleBack() })) {
         Column(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).padding(start = 22.dp, end = 30.dp, top = 8.dp)) {
             l.forEachIndexed { i, line ->
                 val dist = kotlin.math.abs(i - cur)
