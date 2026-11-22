@@ -1,5 +1,10 @@
 package cc.catsuki.nekoplay
 
+
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
+import cc.catsuki.nekoplay.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.hoverable

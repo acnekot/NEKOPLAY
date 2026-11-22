@@ -1,5 +1,10 @@
 package cc.catsuki.nekoplay
 
+
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
+import cc.catsuki.nekoplay.ui.*
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager

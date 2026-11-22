@@ -76,7 +76,7 @@ design/    图标源文件
 - 桌面：`cd desktop && ./gradlew run`；打包 `./gradlew packageDistributionForCurrentOS`
   - 播放需要 libmpv：macOS `brew install mpv`，Linux 装 `libmpv2`，Windows 把 `libmpv-2.dll` 放到程序目录
 - iOS：在 macOS 上 `cd ios && ./gradlew linkReleaseExecutableIosArm64 && ./package.sh`
-- 版本号只在 `shared/src/cc/catsuki/nekoplay/Version.kt` 改，三端打包都从这里读
+- 版本号只在 `shared/src/cc/catsuki/nekoplay/core/Version.kt` 改，三端打包都从这里读
   - Windows / macOS 安装包要求主版本号 ≥ 1，安装包元数据用 `1.次版本.修订`（0.5.0 → 1.5.0），程序里显示真实版本号
 
 ## 版本历史

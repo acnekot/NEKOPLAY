@@ -1,5 +1,10 @@
 package cc.catsuki.nekoplay
 
+
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
+import cc.catsuki.nekoplay.ui.*
 import android.app.Application
 import android.content.Intent
 import androidx.media3.session.MediaSession

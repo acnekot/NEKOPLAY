@@ -1,5 +1,10 @@
 package cc.catsuki.nekoplay
 
+
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
+import cc.catsuki.nekoplay.ui.*
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO as KIO

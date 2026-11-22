@@ -13,7 +13,7 @@ fun genBuildMeta(dir: File, repoRoot: File): File {
 }
 val buildMetaDir = genBuildMeta(layout.buildDirectory.dir("generated/buildmeta").get().asFile, rootDir)
 // 版本号统一写在 shared/…/Version.kt
-val appVersion = Regex("APP_VERSION = \"([^\"]+)\"").find(rootProject.file("shared/src/cc/catsuki/nekoplay/Version.kt").readText())!!.groupValues[1]
+val appVersion = Regex("APP_VERSION = \"([^\"]+)\"").find(rootProject.file("shared/src/cc/catsuki/nekoplay/core/Version.kt").readText())!!.groupValues[1]
 android {
     namespace = "cc.catsuki.nekoplay"
     compileSdk = 37

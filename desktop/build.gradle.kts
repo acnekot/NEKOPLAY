@@ -48,7 +48,7 @@ dependencies {
 }
 
 // 版本号统一写在 shared/…/Version.kt
-val appVersion = Regex("APP_VERSION = \"([^\"]+)\"").find(file("../shared/src/cc/catsuki/nekoplay/Version.kt").readText())!!.groupValues[1]
+val appVersion = Regex("APP_VERSION = \"([^\"]+)\"").find(file("../shared/src/cc/catsuki/nekoplay/core/Version.kt").readText())!!.groupValues[1]
 // Windows 安装包和 macOS 要求主版本号 ≥ 1：这两个平台用 1.次版本.修订（0.5.0 → 1.5.0），程序里显示的仍是真实版本号
 val installerVersion = appVersion.split('.').let { (_, b, c) -> "1.$b.$c" }
 compose.desktop {
