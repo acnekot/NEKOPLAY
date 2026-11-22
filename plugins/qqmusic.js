@@ -1,6 +1,6 @@
 // @id qqmusic
 // @name QQ 音乐
-// @version 1.2.1
+// @version 1.2.2
 // @author NEKOPLAY
 // @desc QQ 音乐音源：搜索、播放、歌词、歌单、专辑、歌手、排行榜，QQ 扫码登录后看自己的歌单
 // @api 1
@@ -77,6 +77,7 @@ async function searchRaw(q, type, page) {
 
 // ---------- 播放 ----------
 const FMTS = [
+  { p: 'C400', ext: 'm4a', size: 'size_96aac', kbps: 96, level: 'standard' },
   { p: 'M500', ext: 'mp3', size: 'size_128mp3', kbps: 128, level: 'standard' },
   { p: 'C600', ext: 'm4a', size: 'size_192aac', kbps: 192, level: 'higher' },
   { p: 'M800', ext: 'mp3', size: 'size_320mp3', kbps: 320, level: 'exhigh' },
@@ -89,7 +90,16 @@ async function details(mids) {
 }
 async function vkey(mid, filename) {
   const c = cred();
-  const d = await call('music.vkey.GetVkey', 'UrlGetVkey', { uin: c ? String(c.id) : '0', filename: [filename], guid: guid(), songmid: [mid], songtype: [0], ctx: 0 });
+  const d = await call('music.vkey.GetVkey', 'UrlGetVkey', {
+    uin: c ? String(c.id) : '0',
+    filename: [filename],
+    guid: guid().toUpperCase(),
+    songmid: [mid],
+    songtype: [0],
+    ctx: 0,
+    loginflag: c ? 1 : 0,
+    platform: '20',
+  });
   return ((d.midurlinfo || [])[0]) || {};
 }
 
@@ -150,7 +160,7 @@ nk.register({
     if (!files[mid]) await details([mid]);
     const f = files[mid] || {};
     const media = f.media_mid || mid + mid;
-    for (let i = Math.min(Math.max(quality, 0), FMTS.length - 1); i >= 0; i--) {
+    for (let i = Math.min(Math.max(quality + 1, 1), FMTS.length - 1); i >= 0; i--) {
       const m = FMTS[i];
       if (m.size in f && !(f[m.size] > 0) && i > 0) continue;
       const info = await vkey(mid, `${m.p}${media}.${m.ext}`);
@@ -158,7 +168,7 @@ nk.register({
     }
     if (trials[mid]) {
       const info = await vkey(mid, `RS02${trials[mid]}.mp3`);
-      if (info.purl) return { url: CDN + info.purl, ext: 'mp3', kbps: 128, level: 'standard', trial: vip[mid], message: '这首是会员歌曲，当前账号只能放试听片段' };
+      if (info.purl) return { url: CDN + info.purl, ext: 'mp3', kbps: 128, level: 'standard', trial: true, message: '这首是会员歌曲，当前账号只能放 1 分钟试听片段' };
     }
     return { error: cred() ? '没有可用的播放地址（这首歌需要 QQ 音乐会员或单独购买）' : '这首歌需要登录 QQ 音乐才能播放' };
   },
