@@ -1,8 +1,8 @@
 // @id qqmusic
 // @name QQ 音乐
-// @version 1.4.1
+// @version 1.5.0
 // @author NEKOPLAY
-// @desc QQ 音乐完整音源：搜索（单曲/专辑/歌手/歌单/热搜/联想）、播放、歌词、私人 FM、每日推荐、推荐歌单、歌单广场、新碟/新歌、排行榜、MV 精选、歌曲评论、相似推荐与曲库同步
+// @desc QQ 音乐完整音源：搜索（单曲/专辑/歌手/歌单/热搜/联想）、播放、歌词、私人 FM、每日推荐、推荐歌单、歌单广场、新碟/新歌、排行榜、MV 精选、歌曲评论与点赞、相似歌曲/歌手/歌单、歌单增删收藏、关注歌手与曲库同步
 // @api 1
 // @search track,album,artist,playlist
 //
@@ -50,8 +50,8 @@ async function call(module, method, param, extraComm) {
   return r0.data || {};
 }
 
-// 歌曲 mid → 文件信息 / 试听 mid / 是否会员歌 / 数字 id；歌单分类与自建歌单 dirId 缓存
-const files = {}, trials = {}, vip = {}, ids = {}, alIds = {}, myDirIds = {}, catIds = {};
+// 歌曲 mid → 文件信息 / 试听 mid / 是否会员歌 / 数字 id；歌单分类、评论 CmId 与自建歌单 dirId 缓存
+const files = {}, trials = {}, vip = {}, ids = {}, alIds = {}, myDirIds = {}, catIds = {}, cmIds = {};
 function song(s0) {
   const s = s0.songInfo || s0;
   const mid = s.mid || s.songmid;
@@ -344,6 +344,18 @@ nk.register({
     const d = await call('music.recommend.TrackRelationServer', 'GetSimilarSongs', { songid: Number(ids[mid]), songtype: 0 });
     return (d.vecSong || []).map(song);
   },
+  async simiArtists(id) {
+    const mid = id.replace(/^ar/, '');
+    const r = await nk.http({ url: `https://c.y.qq.com/v8/fcg-bin/fcg_v8_simsinger.fcg?singer_mid=${encodeURIComponent(mid)}&start=0&num=20&utf8=1&format=json`, headers: { 'User-Agent': UA, Referer: 'https://y.qq.com/' } });
+    const items = (((r.json() || {}).singers || {}).items) || [];
+    return uniq(items.map(a => ({ id: 'ar' + a.mid, name: a.name || '', cover: singerPic(a.mid) || https(a.pic || '') })));
+  },
+  async simiPlaylists(mid) {
+    if (!ids[mid]) await details([mid]);
+    if (!ids[mid]) return [];
+    const d = await call('music.recommend.TrackRelationServer', 'GetRelatedPlaylist', { songid: Number(ids[mid]) });
+    return uniq((d.vecPlaylist || []).map(p => ({ id: String(p.tid || ''), name: p.title || '', count: p.song_cnt || 0, cover: https(p.cover || '') })));
+  },
   async comments(mid, hot, offset) {
     if (!ids[mid]) await details([mid]);
     if (!ids[mid]) return { items: [], total: 0 };
@@ -353,19 +365,30 @@ nk.register({
       : { BizType: 1, BizId: String(ids[mid]), LastCommentSeqNo: '', PageSize: size, PageNum: page, FromCommentId: '', WithAirborne: 1 };
     const d = await call('music.globalComment.CommentRead', hot ? 'GetHotCommentList' : 'GetNewCommentList', param);
     const cl = d.CommentList || {};
-    const items = uniq((cl.Comments || []).map((c, idx) => ({
-      id: hash33(String(c.CmId || c.CommentId || (page + '_' + idx + '_' + (c.PubTime || 0))), 5381) || (idx + 1),
-      user: c.Nick || 'QQ音乐用户',
-      uid: String(c.EncryptUin || ''),
-      avatar: https(c.Avatar || ''),
-      content: c.Content || '',
-      liked: c.PraiseNum || 0,
-      time: (c.PubTime || 0) * 1000,
-      reply: null,
-      replies: (c.SubComments && c.SubComments.length) || 0,
-      likedByMe: !!c.IsPraised,
-    })));
+    const items = uniq((cl.Comments || []).map((c, idx) => {
+      const rawId = String(c.CmId || c.CommentId || (page + '_' + idx + '_' + (c.PubTime || 0)));
+      const numId = hash33(rawId, 5381) || (idx + 1);
+      cmIds[numId] = rawId;
+      return {
+        id: numId,
+        user: c.Nick || 'QQ音乐用户',
+        uid: String(c.EncryptUin || ''),
+        avatar: https(c.Avatar || ''),
+        content: c.Content || '',
+        liked: c.PraiseNum || 0,
+        time: (c.PubTime || 0) * 1000,
+        reply: null,
+        replies: (c.SubComments && c.SubComments.length) || 0,
+        likedByMe: !!c.IsPraised,
+      };
+    }));
     return { items, total: cl.CommentTotal || items.length };
+  },
+  async commentLike(mid, cid, on) {
+    if (!cred()) throw new Error('请先登录 QQ 音乐');
+    const cmId = cmIds[cid];
+    if (!cmId) return;
+    await call('music.globalComment.CommentWrite', 'DoLikeComment', { CmId: cmId, Praise: on ? 1 : 2 });
   },
   async recMvs() {
     const d = await call('MvService.MvInfoProServer', 'GetAllocMvInfo', { area_id: 15, version_id: 7, start: 0, size: 30, order: 1 });
@@ -437,6 +460,27 @@ nk.register({
     if (!ids[mid]) await details([mid]);
     const d = await call('music.musicasset.PlaylistDetailWrite', on ? 'AddSonglist' : 'DelSonglist', { dirId: 201, tid: 0, bFmtUtf8: true, v_songInfo: [{ songId: ids[mid], songType: 0 }] });
     if (d.retCode && d.retCode !== 80092) throw new Error('QQ 音乐收藏失败（' + d.retCode + '）');
+  },
+  async createPlaylist(name, priv) {
+    if (!cred()) throw new Error('请先登录 QQ 音乐');
+    const d = await call('music.musicasset.PlaylistBaseWrite', 'AddPlaylist', { dirName: String(name || '新建歌单'), private: priv ? 1 : 0 });
+    const tid = String(d.tid || d.dirId || '');
+    if (tid && d.dirId) myDirIds[tid] = d.dirId;
+    return tid;
+  },
+  async deletePlaylist(id) {
+    if (!cred()) throw new Error('请先登录 QQ 音乐');
+    const dirId = myDirIds[String(id)] || 0;
+    await call('music.musicasset.PlaylistBaseWrite', 'DelPlaylist', { dirId, tid: Number(id) || 0 });
+  },
+  async subscribePlaylist(id, on) {
+    if (!cred()) throw new Error('请先登录 QQ 音乐');
+    await call('music.musicasset.PlaylistFavWrite', on ? 'FavPlaylist' : 'CancelFavPlaylist', { v_tid: [Number(id)] });
+  },
+  async followArtist(id, on) {
+    if (!cred()) throw new Error('请先登录 QQ 音乐');
+    const mid = id.replace(/^ar/, '');
+    await call('music.concern.RelationWrite', on ? 'FollowSinger' : 'UnFollowSinger', { SingerMid: mid });
   },
   async editPlaylist(pid, op, mids) {
     if (!cred()) throw new Error('请先登录 QQ 音乐');
