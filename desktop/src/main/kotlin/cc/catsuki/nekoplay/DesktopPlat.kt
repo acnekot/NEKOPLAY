@@ -1,10 +1,5 @@
 package cc.catsuki.nekoplay
 
-
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
-import cc.catsuki.nekoplay.ui.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -14,6 +9,10 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.platform.Font
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
+import cc.catsuki.nekoplay.ui.*
 import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.Pointer
@@ -235,7 +234,8 @@ private class FileKV(val f: File) : KV {
     }
 }
 
-/** libmpv 的最小绑定 */
+/** libmpv 的最小绑定（函数名要和 C 导出的一致） */
+@Suppress("FunctionName")
 private interface Mpv : Library {
     fun mpv_create(): Pointer?
     fun mpv_initialize(h: Pointer): Int
@@ -391,7 +391,6 @@ private class MpvAudio : Audio {
     }
 }
 
-
 /** Windows：用 psapi 读当前进程的工作集 / 私有内存（和任务管理器的数字对得上） */
 object WinMem {
     @com.sun.jna.Structure.FieldOrder("cb", "PageFaultCount", "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage", "QuotaPagedPoolUsage",
@@ -403,7 +402,9 @@ object WinMem {
         @JvmField var QuotaPeakNonPagedPoolUsage = 0L; @JvmField var QuotaNonPagedPoolUsage = 0L
         @JvmField var PagefileUsage = 0L; @JvmField var PeakPagefileUsage = 0L; @JvmField var PrivateUsage = 0L
     }
+    @Suppress("FunctionName")
     private interface Psapi : Library { fun GetProcessMemoryInfo(p: Pointer, c: Counters, cb: Int): Boolean }
+    @Suppress("FunctionName")
     private interface K32 : Library { fun GetCurrentProcess(): Pointer; fun SetProcessWorkingSetSize(p: Pointer, min: Long, max: Long): Boolean }
     private val win = System.getProperty("os.name").startsWith("Windows")
     private val ps by lazy { runCatching { Native.load("psapi", Psapi::class.java) }.getOrNull() }

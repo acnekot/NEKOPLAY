@@ -1,12 +1,12 @@
 package cc.catsuki.nekoplay.data
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import cc.catsuki.nekoplay.*
 import cc.catsuki.nekoplay.core.*
 import cc.catsuki.nekoplay.player.*
 import cc.catsuki.nekoplay.ui.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import com.dokar.quickjs.QuickJs
 import com.dokar.quickjs.binding.define
 import com.dokar.quickjs.binding.function
@@ -116,8 +116,7 @@ class JsSource(val file: File) {
                 q.evaluate<Any?>("__call($cid, ${q(fn)}, ${q(argJson)})", filename = "call.js")
             }
             d.await()
-        } catch (e: kotlinx.coroutines.CancellationException) { lock.withLock { waiting.remove(cid) }; throw e }
-        catch (e: Throwable) { lock.withLock { waiting.remove(cid) }; false to (e.message ?: e.toString()) }
+        } catch (e: kotlinx.coroutines.CancellationException) { lock.withLock { waiting.remove(cid) }; throw e } catch (e: Throwable) { lock.withLock { waiting.remove(cid) }; false to (e.message ?: e.toString()) }
         if (!ok) {
             val msg = (out ?: "").substringBefore("\n").removePrefix("Error: ")
             Debug.log("js:$id.$fn", 0, System.currentTimeMillis() - t0, "error", msg)

@@ -1,9 +1,5 @@
 package cc.catsuki.nekoplay.player
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +9,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.ui.*
 
 /**
  * 播放页按钮布局：每个按钮放在哪个槽位、什么顺序，手机（也用于 PC 侧拉模式）和 PC 宽屏各一套。

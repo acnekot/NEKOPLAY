@@ -1,9 +1,5 @@
 package cc.catsuki.nekoplay.core
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
-import cc.catsuki.nekoplay.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,6 +8,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
+import cc.catsuki.nekoplay.ui.*
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /** 调试模式：记下最近的接口请求，出错时把真实返回（状态码、类型、内容开头）显示出来 */

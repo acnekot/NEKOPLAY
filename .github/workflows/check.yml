@@ -1,0 +1,48 @@
+name: 检查（编译 / 测试 / 代码风格）
+# 每次推送和 PR 都跑，只用 Linux 机器（便宜）；打包另见 build.yml
+on:
+  push:
+    branches: ["main", "PLUGIN", "DEV"]
+    paths-ignore: ["**.md", "design/**", "docs/**"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+
+      - name: 插件脚本语法
+        run: for f in plugins/*.js; do node --check "$f" || exit 1; done
+
+      - name: 订阅列表和脚本一致
+        run: |
+          python3 plugins/gen-index.py
+          git diff --exit-code plugins/index.json || { echo "::error::plugins/index.json 过期了：运行 python3 plugins/gen-index.py 后提交"; exit 1; }
+
+      - name: 桌面编译 + 单元测试 + 代码风格（shared 跟着桌面模块一起编译）
+        working-directory: desktop
+        run: chmod +x gradlew && ./gradlew compileKotlin test ktlintCheck --no-daemon
+
+      - name: 安卓编译
+        run: chmod +x gradlew && ./gradlew :app:compileReleaseKotlin --no-daemon
+
+      - name: 失败时上传测试和检查报告
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: check-reports
+          path: |
+            desktop/build/reports/
+            desktop/build/test-results/

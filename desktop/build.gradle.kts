@@ -4,6 +4,7 @@ plugins {
     kotlin("jvm") version "2.4.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.20"
     id("org.jetbrains.compose") version "1.12.2"
+    id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
 }
 
 // 构建信息（提交号、Actions 运行号）：检查更新时和 Actions 上最新的构建比较
@@ -90,4 +91,11 @@ tasks.test {
     systemProperty("user.home", home.absolutePath)
     systemProperty("nekoplay.repo", rootDir.parentFile.absolutePath)
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+}
+
+// 代码风格检查：./gradlew ktlintCheck（规则在仓库根目录的 .editorconfig）。
+// 共用代码跟着桌面模块编译，所以这里一起检查 shared/src；打包时生成的 BuildMeta 不查
+ktlint {
+    version.set("1.8.0")
+    filter { exclude { it.file.path.contains("generated") } }
 }

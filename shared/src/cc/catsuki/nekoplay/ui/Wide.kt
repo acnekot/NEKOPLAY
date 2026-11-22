@@ -1,15 +1,11 @@
 package cc.catsuki.nekoplay.ui
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,6 +23,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
 
 /**
  * PC 宽屏布局（窗口 ≥ 900dp）：
@@ -263,8 +263,7 @@ object Vol {
         awaitPointerEventScope {
             while (true) {
                 val e = awaitPointerEvent(); val ch = e.changes.firstOrNull() ?: continue
-                if (ch.pressed) { Vol.set((ch.position.x / size.width).coerceIn(0f, 1f), save = false); ch.consume() }
-                else if (ch.previousPressed) Vol.set(Vol.v)
+                if (ch.pressed) { Vol.set((ch.position.x / size.width).coerceIn(0f, 1f), save = false); ch.consume() } else if (ch.previousPressed) Vol.set(Vol.v)
             }
         }
     }.drawBehind {

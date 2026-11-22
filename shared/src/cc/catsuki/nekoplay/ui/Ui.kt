@@ -1,9 +1,5 @@
 package cc.catsuki.nekoplay.ui
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -14,11 +10,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -50,9 +46,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
 import coil3.compose.AsyncImage
-import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 // ---------------- 配色：和 Flutter 版 tokens 完全一致 ----------------
 data class Pal(
@@ -163,7 +163,8 @@ object Typo {
 /** 按下：变淡到 0.7，按钮再缩到 0.96；松手弹回（和 Flutter 版 Tap 一致） */
 /** 长按复制：返回一个函数，传要复制的文字和提示里的名字 */
 @Composable fun rememberCopy(): (String, String) -> Unit {
-    @Suppress("DEPRECATION") val cb = androidx.compose.ui.platform.LocalClipboardManager.current
+    @Suppress("DEPRECATION")
+    val cb = androidx.compose.ui.platform.LocalClipboardManager.current
     val nav = LocalNav.current
     return remember(cb, nav) { { text, what -> cb.setText(androidx.compose.ui.text.AnnotatedString(text)); nav.toast = "已复制$what" } }
 }
@@ -255,9 +256,7 @@ private fun vector(spec: String): ImageVector = iconCache.getOrPut(spec) {
     val compact = LocalCompactAction.current
     Row(modifier.then(if (compact) Modifier.width(ACTION_W) else Modifier).press(.96f, true, onClick = onClick).height(48.dp).background(c.p).padding(horizontal = if (compact) 14.dp else if (Screen.narrow) 8.dp else 18.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (compact) Arrangement.Center else Arrangement.Start) {
-        if (compact) { NIcon(icon, 16.dp, Color.White); Spacer(Modifier.width(6.dp)); T(label, 15, Color.White, 700) }
-        else if (Screen.narrow) { Spacer(Modifier.weight(1f)); NIcon(icon, 15.dp, Color.White); Spacer(Modifier.width(5.dp)); T(label, 14, Color.White, 700, lines = 1); Spacer(Modifier.weight(1f)) }
-        else { T(label, 16, Color.White, 700, modifier = Modifier.weight(1f)); NIcon(icon, 22.dp, Color.White) }
+        if (compact) { NIcon(icon, 16.dp, Color.White); Spacer(Modifier.width(6.dp)); T(label, 15, Color.White, 700) } else if (Screen.narrow) { Spacer(Modifier.weight(1f)); NIcon(icon, 15.dp, Color.White); Spacer(Modifier.width(5.dp)); T(label, 14, Color.White, 700, lines = 1); Spacer(Modifier.weight(1f)) } else { T(label, 16, Color.White, 700, modifier = Modifier.weight(1f)); NIcon(icon, 22.dp, Color.White) }
     }
 }
 
@@ -361,8 +360,7 @@ val LocalCompactAction = compositionLocalOf { false }
                 val e = awaitPointerEvent()
                 val ch = e.changes.firstOrNull() ?: continue
                 val f = (ch.position.x / size.width).coerceIn(0f, 1f)
-                if (ch.pressed) { drag = f; onScrub(f); ch.consume() }
-                else if (drag != null) { Engine.seek((drag!! * dur).toLong()); drag = null; onScrub(null) }
+                if (ch.pressed) { drag = f; onScrub(f); ch.consume() } else if (drag != null) { Engine.seek((drag!! * dur).toLong()); drag = null; onScrub(null) }
             }
         }
     }).drawBehind {
@@ -395,7 +393,8 @@ fun listMeta(l: List<Track>) = "${two(l.size)} 首 · ${fmt(l.sumOf { it.duratio
     }
 }
 
-@Suppress("unused") private fun Float.r() = roundToInt()
+@Suppress("unused")
+private fun Float.r() = roundToInt()
 
 /** 当前是不是宽屏（PC）布局，由 Root 按窗口宽度更新 */
 object Screen {
@@ -484,8 +483,6 @@ fun img(url: String?, px: Int): String? {
     if (!base.contains("music.126.net")) return url   // QQ（qpic）/ 酷狗等其它站：参数是它们自己的，不能乱加
     return if (base.contains("/obj/")) "$base?imageView=1&thumbnail=${b}x$b&type=webp" else "$base?param=${b}y$b"
 }
-
-
 
 /**
  * 定位到正在播放：当前歌在列表里、但不在屏幕上时，右下角出现一个方块按钮，点一下滚过去（停在偏上的位置）。

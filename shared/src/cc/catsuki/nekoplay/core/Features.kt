@@ -1,9 +1,5 @@
 package cc.catsuki.nekoplay.core
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
-import cc.catsuki.nekoplay.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,6 +10,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
+import cc.catsuki.nekoplay.ui.*
 
 /**
  * 内置插件：可选功能都登记在这里，「功能管理」里可以整块关掉。

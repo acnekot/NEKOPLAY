@@ -1,15 +1,9 @@
 package cc.catsuki.nekoplay.ui
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
 import androidx.compose.animation.*
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -18,18 +12,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.focus.focusRequester
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.lazy.rememberLazyListState
 
 // ======================= 操作菜单（底部弹出） =======================
 data class SheetItem(val label: String, val danger: Boolean = false, val run: () -> Unit)
@@ -80,8 +80,7 @@ fun addToPlaylist(nav: Nav, t: Track) {
     val sameSrc = Ncm.loggedIn && Plugins.isPlugin(t.id) && Plugins.pidOf(t.id) == Plugins.main()?.id && Plugins.main()?.has("editPlaylist") == true
     val mine = if (sameSrc) Store.playlists.value.filter { it.mine } else emptyList()
     fun add(pl: Playlist) = Store.run {
-        try { Ncm.playlistTracks(pl.id, "add", listOf(t.id)); nav.toast = "已加入「${if (pl.liked) "我喜欢" else pl.name}」"; Store.refreshPlaylists(pl.id) }
-        catch (e: Exception) { nav.toast = "添加失败：${e.message}" }
+        try { Ncm.playlistTracks(pl.id, "add", listOf(t.id)); nav.toast = "已加入「${if (pl.liked) "我喜欢" else pl.name}」"; Store.refreshPlaylists(pl.id) } catch (e: Exception) { nav.toast = "添加失败：${e.message}" }
     }
     fun addLocal(id: String, name: String) { nav.toast = if (LocalLib.add(id, listOf(t)) > 0) "已加入「$name」" else "「$name」里已经有这首" }
     nav.sheet = SheetSpec("添加到歌单", t.title, buildList {
@@ -426,7 +425,6 @@ fun qualitySheet(nav: Nav) {
     }.reversed())
 }
 
-
 // ======================= 歌单列表页（相关歌单 / 以后的歌单广场共用） =======================
 @Composable fun PlaylistsPage(pg: Page.Playlists) {
     val nav = LocalNav.current
@@ -578,7 +576,6 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
     "top" -> Ncm.toplists(); "rec" -> Ncm.recPlaylists(); else -> throw NcmError("暂不支持")
 }
 
-
 /** 关注 / 收藏 按钮：先改界面，失败再改回来 */
 /** 收藏 / 关注按钮：状态还没查到时先显示「+ 收藏」（不能点），查到是已收藏再渐变过去，不会突然冒出来 */
 @Composable fun FollowBtn(initial: Boolean, off: String, on: String, ready: Boolean = true, act: suspend (Boolean) -> Unit) {
@@ -653,7 +650,6 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
         }
     }
 }
-
 
 // ======================= MV =======================
 @Composable fun MvCard(mv: Mv, width: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
@@ -754,7 +750,6 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
     }
 }
 
-
 /** 歌手的全部专辑：网格，滚到底自动加载下一页 */
 @Composable fun ArtistAlbumsPage(pg: Page.ArtistAlbums) {
     val nav = LocalNav.current
@@ -767,8 +762,7 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
     fun load() {
         if (busy || !more) return; busy = true
         scope.launch {
-            try { val (l, m) = Ncm.artistAlbumsPage(pg.id, list.size, 60); list = list + l.filter { a -> list.none { it.id == a.id } }; more = m && l.isNotEmpty(); err = null }
-            catch (e: Exception) { err = e.message }
+            try { val (l, m) = Ncm.artistAlbumsPage(pg.id, list.size, 60); list = list + l.filter { a -> list.none { it.id == a.id } }; more = m && l.isNotEmpty(); err = null } catch (e: Exception) { err = e.message }
             busy = false
         }
     }

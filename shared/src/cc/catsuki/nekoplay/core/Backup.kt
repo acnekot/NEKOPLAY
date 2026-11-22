@@ -1,9 +1,5 @@
 package cc.catsuki.nekoplay.core
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
-import cc.catsuki.nekoplay.ui.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.BasicTextField
@@ -16,6 +12,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
+import cc.catsuki.nekoplay.ui.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -162,7 +162,6 @@ object Backup {
     }
 }
 
-
 /** 本地配置备份：导出成文件 / 复制成文字，换设备或重装后导入 */
 @Composable private fun LocalBackup() {
     val nav = LocalNav.current
@@ -172,8 +171,7 @@ object Backup {
     var login by remember { mutableStateOf(false) }
     fun importText(text: String) {
         val root = runCatching { JSONObject(text.trim()) }.getOrNull() ?: run { nav.toast = "不是有效的配置"; return }
-        nav.sheet = SheetSpec("导入配置？", "会覆盖本机现在的设置" + (if (Backup.hasLogin(root)) "，包括里面带的账号登录" else ""), listOf(
-            SheetItem("导入并覆盖", danger = true) {
+        nav.sheet = SheetSpec("导入配置？", "会覆盖本机现在的设置" + (if (Backup.hasLogin(root)) "，包括里面带的账号登录" else ""), listOf(SheetItem("导入并覆盖", danger = true) {
                 scope.launch {
                     runCatching { Backup.apply(root) }.onSuccess { Boot.reloadPrefs(); nav.toast = "已导入，部分设置和登录重启后生效" }.onFailure { nav.toast = "导入失败：${it.message}" }
                 }

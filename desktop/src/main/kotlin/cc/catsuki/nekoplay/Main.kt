@@ -1,37 +1,35 @@
 package cc.catsuki.nekoplay
 
-
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
-import cc.catsuki.nekoplay.ui.*
-import androidx.compose.ui.graphics.toComposeImageBitmap
-
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.key.isCtrlPressed
-import androidx.compose.ui.input.key.isMetaPressed
-import androidx.compose.ui.input.key.isAltPressed
-import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.background
-import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.window.WindowDraggableArea
+import androidx.compose.runtime.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
-import androidx.compose.ui.window.Tray
-import androidx.compose.runtime.*
 import androidx.compose.ui.window.rememberWindowState
-import androidx.compose.ui.input.pointer.onPointerEvent
-import androidx.compose.foundation.window.WindowDraggableArea
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
+import cc.catsuki.nekoplay.ui.*
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
@@ -93,9 +91,7 @@ fun main() {
                 else if (e.key == Key.Escape) DesktopPlat.back()   // Esc = 返回
                 // 调试模式下 Ctrl+Shift+T 在鼠标位置打开托盘菜单（测试用，不用去点任务栏）
                 // Ctrl+Q：直接退出（不缩到托盘）
-                else if (e.key == Key.Q && (e.isCtrlPressed || e.isMetaPressed)) { quit(); true }
-                else if (Debug.on && e.key == Key.T && e.isCtrlPressed && e.isShiftPressed) { TrayState.menuAt = java.awt.MouseInfo.getPointerInfo().location; true }
-                else Keys.handleCtrl(e.key, e.isCtrlPressed || e.isMetaPressed)
+                else if (e.key == Key.Q && (e.isCtrlPressed || e.isMetaPressed)) { quit(); true } else if (Debug.on && e.key == Key.T && e.isCtrlPressed && e.isShiftPressed) { TrayState.menuAt = java.awt.MouseInfo.getPointerInfo().location; true } else Keys.handleCtrl(e.key, e.isCtrlPressed || e.isMetaPressed)
             },
             // 空格、方向键：先让输入框处理，没人用才当快捷键
             onKeyEvent = { e -> e.type == KeyEventType.KeyDown && !e.isCtrlPressed && !e.isAltPressed && Keys.handlePlain(e.key) }) {
@@ -122,7 +118,6 @@ fun main() {
         }
     }
 }
-
 
 /** 桌面歌词悬浮窗：透明、置顶、不抢焦点；没锁时可以拖动，锁定后鼠标点击穿透（Windows） */
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
@@ -157,6 +152,7 @@ private fun androidx.compose.ui.window.ApplicationScope.DeskLyricWindow() {
 
 /** Windows：给窗口加 / 去掉 WS_EX_TRANSPARENT，让鼠标点击穿过歌词落到下面的窗口 */
 object ClickThrough {
+    @Suppress("FunctionName")
     private interface U32 : com.sun.jna.Library {
         fun GetWindowLongW(h: com.sun.jna.Pointer, i: Int): Int
         fun SetWindowLongW(h: com.sun.jna.Pointer, i: Int, v: Int): Int
@@ -172,7 +168,6 @@ object ClickThrough {
         }
     }
 }
-
 
 /** 系统托盘：图标 + 右键菜单（中文字体），双击 / 单击图标打开窗口 */
 @Composable

@@ -1,13 +1,12 @@
 package cc.catsuki.nekoplay
 
-
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.awt.SwingPanel
 import cc.catsuki.nekoplay.core.*
 import cc.catsuki.nekoplay.data.*
 import cc.catsuki.nekoplay.player.*
 import cc.catsuki.nekoplay.ui.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.awt.SwingPanel
 
 /**
  * macOS / Linux 的内嵌网页：JavaFX WebView 放进 JFXPanel（轻量 Swing 组件，和 Compose 界面叠放没有问题）。

@@ -1,14 +1,13 @@
 package cc.catsuki.nekoplay
 
-
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
-import cc.catsuki.nekoplay.ui.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.window.FrameWindowScope
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
+import cc.catsuki.nekoplay.ui.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import java.awt.MouseInfo
@@ -89,8 +88,7 @@ object SideMode {
             val inside = m != null && Rectangle(b.x - 6, b.y - 6, b.width + 12, b.height + 12).contains(m)
             val atEdge = m != null && m.y in u.y..(u.y + u.height) && (if (side < 0) m.x <= u.x + 1 else m.x >= u.x + u.width - 2)
             val now = System.currentTimeMillis()
-            if (inside || atEdge) { outSince = 0; if (!show) SideMode.log("show m=$m b=$b"); show = true }
-            else if (show) { if (outSince == 0L) outSince = now; if (now - outSince > 450 && now > grace) { show = false; SideMode.log("hide m=$m b=$b") } }
+            if (inside || atEdge) { outSince = 0; if (!show) SideMode.log("show m=$m b=$b"); show = true } else if (show) { if (outSince == 0L) outSince = now; if (now - outSince > 450 && now > grace) { show = false; SideMode.log("hide m=$m b=$b") } }
             val target = if (show) 1f else 0f
             val moving = f != target
             if (moving) {

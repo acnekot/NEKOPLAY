@@ -1,14 +1,14 @@
 package cc.catsuki.nekoplay.player
 
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.*
+import androidx.compose.ui.unit.dp
 import cc.catsuki.nekoplay.*
 import cc.catsuki.nekoplay.core.*
 import cc.catsuki.nekoplay.data.*
 import cc.catsuki.nekoplay.ui.*
-import androidx.compose.runtime.*
 import kotlinx.coroutines.*
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.ui.unit.dp
 
 /** 定时关闭：N 分钟后停，或者播完当前这首停；可选「到点后等这首播完再停」 */
 object Sleep {

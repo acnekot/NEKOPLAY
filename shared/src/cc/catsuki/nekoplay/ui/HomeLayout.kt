@@ -1,22 +1,22 @@
 package cc.catsuki.nekoplay.ui
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.unit.dp
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
 
 /** 首页布局：模块的顺序和开关，存成 "id:1,id:0,…" */
 object HomeLayout {
@@ -98,8 +98,7 @@ object HomeLayout {
                         ch.consume(); dragDy += d.y
                         val rowH = 64.dp.toPx()
                         val idx = HomeLayout.items.indexOfFirst { it.first == id }
-                        if (dragDy > rowH / 2 && idx < HomeLayout.items.lastIndex) { HomeLayout.moveTo(idx, idx + 1); dragDy -= rowH }
-                        else if (dragDy < -rowH / 2 && idx > 0) { HomeLayout.moveTo(idx, idx - 1); dragDy += rowH }
+                        if (dragDy > rowH / 2 && idx < HomeLayout.items.lastIndex) { HomeLayout.moveTo(idx, idx + 1); dragDy -= rowH } else if (dragDy < -rowH / 2 && idx > 0) { HomeLayout.moveTo(idx, idx - 1); dragDy += rowH }
                     }
                 }, contentAlignment = Alignment.Center) { NIcon(NIcons.queue, 18.dp, p.s) }
                 T(two(i + 1), 13, if (on) p.p else p.s, 700, mono = true, modifier = Modifier.width(32.dp))

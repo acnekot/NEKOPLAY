@@ -1,33 +1,33 @@
 package cc.catsuki.nekoplay.data
 
+// 不通配导入 kotlinx.coroutines：iOS 上 Dispatchers.IO 是根包里补的，通配导入会和它撞名
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import cc.catsuki.nekoplay.*
 import cc.catsuki.nekoplay.core.*
 import cc.catsuki.nekoplay.player.*
 import cc.catsuki.nekoplay.ui.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.background
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-// 不用 kotlinx.coroutines.*：iOS 上 Dispatchers.IO 是根包里补的，通配导入会和它撞名
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.MutableStateFlow
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
@@ -253,7 +253,6 @@ fun downloadSheet(nav: Nav, list: List<Track>) {
     }
 }
 
-
 /** 自定义下载位置（空 = 平台默认）；已经下载的歌留在原来的位置 */
 object DlPref {
     var custom by mutableStateOf("")
@@ -267,8 +266,7 @@ fun dirSheet(nav: Nav) {
     fun mark(path: String) = if ((DlPref.custom.ifBlank { def }) == path) "✓  " else "    "
     fun pick(path: String) {
         val f = java.io.File(path)
-        if ((f.isDirectory || f.mkdirs()) && f.canWrite()) { DlPref.set(if (path == def) "" else path); nav.toast = "下载位置：$path" }
-        else nav.toast = "这个文件夹写不进去，换一个吧"
+        if ((f.isDirectory || f.mkdirs()) && f.canWrite()) { DlPref.set(if (path == def) "" else path); nav.toast = "下载位置：$path" } else nav.toast = "这个文件夹写不进去，换一个吧"
     }
     nav.sheet = SheetSpec("下载位置", "新下载的歌放到这里；已经下载的歌不会移动", buildList {
         add(SheetItem(mark(def) + "默认 · $def") { DlPref.set(""); nav.toast = "已恢复默认下载位置" })

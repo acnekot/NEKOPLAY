@@ -1,9 +1,5 @@
 package cc.catsuki.nekoplay.ui
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +12,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
 import kotlinx.coroutines.launch
 
 /** 能力名 → 给人看的说明 */
@@ -110,7 +110,8 @@ private val CAP_NAMES = linkedMapOf(
 
 /** 插件的扫码登录：loginQr 给出二维码（图片 base64 或文字），loginCheck 轮询状态 */
 @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-@Composable fun PluginLoginPage(pid: String) {
+@Composable
+fun PluginLoginPage(pid: String) {
     val nav = LocalNav.current
     val p = c
     val s = Plugins.get(pid)
@@ -239,9 +240,7 @@ private val CAP_NAMES = linkedMapOf(
                     doneRe?.containsMatchIn(u) == true -> {
                         if (!busy) { busy = true; scope.launch {
                             status = "正在换取凭证…"
-                            try { s.call("loginWebDone", u); onDone() }
-                            catch (e: kotlinx.coroutines.CancellationException) { throw e }
-                            catch (e: Exception) { status = "出错了：${e.message}"; busy = false; url = c0.optString("url") + (if ('?' in c0.optString("url")) "&" else "?") + "r=" + System.currentTimeMillis() }
+                            try { s.call("loginWebDone", u); onDone() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { status = "出错了：${e.message}"; busy = false; url = c0.optString("url") + (if ('?' in c0.optString("url")) "&" else "?") + "r=" + System.currentTimeMillis() }
                         } }
                         true
                     }
@@ -297,7 +296,6 @@ fun androidx.compose.foundation.lazy.LazyListScope.pluginLibrary(nav: Nav, excep
         }
     }
 }
-
 
 /** 插件页里的订阅区：订阅地址管理 + 订阅里可以安装 / 更新的插件 */
 private fun androidx.compose.foundation.lazy.LazyListScope.pluginSubsSection(nav: Nav) {

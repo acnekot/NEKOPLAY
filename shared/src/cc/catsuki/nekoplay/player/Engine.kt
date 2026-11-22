@@ -1,12 +1,11 @@
 package cc.catsuki.nekoplay.player
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import cc.catsuki.nekoplay.*
 import cc.catsuki.nekoplay.core.*
 import cc.catsuki.nekoplay.data.*
 import cc.catsuki.nekoplay.ui.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -226,13 +225,11 @@ object Engine {
         val s = state.value
         // 加载中点一下 = 打断：取消「加载完自动播放」，已经在缓冲的也停下；再点一下恢复
         if (s.loading) {
-            if (s.want) { state.value = s.copy(want = false); rampOnPlay = false; fadeJob?.cancel(); audio.pause(); audio.volume = Vol.v }
-            else { state.value = s.copy(want = true); if (opened) fadePlay() }   // 还在取地址：等打开时自动播
+            if (s.want) { state.value = s.copy(want = false); rampOnPlay = false; fadeJob?.cancel(); audio.pause(); audio.volume = Vol.v } else { state.value = s.copy(want = true); if (opened) fadePlay() }   // 还在取地址：等打开时自动播
             return
         }
         if (audio.idle) load(s.index, true)
-        else if (audio.isPlaying) { state.value = s.copy(want = false); fadePause() }
-        else { state.value = s.copy(want = true); fadePlay() }
+        else if (audio.isPlaying) { state.value = s.copy(want = false); fadePause() } else { state.value = s.copy(want = true); fadePlay() }
     }
     fun seek(ms: Long) { audio.seek(ms); position.value = ms }
 
@@ -272,8 +269,7 @@ object Engine {
     fun next() {
         val s = state.value; if (s.queue.isEmpty()) return
         if (s.fm) {
-            if (s.index + 1 < s.queue.size) { load(s.index + 1, true); if (s.index + 3 >= s.queue.size) fmFill() }
-            else fmFill { val n = state.value; if (n.index + 1 < n.queue.size) load(n.index + 1, true) }
+            if (s.index + 1 < s.queue.size) { load(s.index + 1, true); if (s.index + 3 >= s.queue.size) fmFill() } else fmFill { val n = state.value; if (n.index + 1 < n.queue.size) load(n.index + 1, true) }
             return
         }
         load(if (s.mode == Mode.SHUFFLE) (s.queue.indices).random() else (s.index + 1) % s.queue.size, true)
@@ -293,7 +289,7 @@ object Engine {
 
     fun cycleMode() { dropNext(); state.value = state.value.copy(mode = Mode.entries[(state.value.mode.ordinal + 1) % 3]) }
 
-    fun removeAt(i: Int) { dropNext();
+    fun removeAt(i: Int) { dropNext()
         val s = state.value
         if (i == s.index || i !in s.queue.indices) return
         val q = s.queue.toMutableList().apply { removeAt(i) }

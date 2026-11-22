@@ -1,20 +1,15 @@
 package cc.catsuki.nekoplay.ui
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
-import kotlin.math.roundToInt
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,16 +21,20 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
 import coil3.SingletonImageLoader
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
@@ -46,6 +45,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Calendar
+import kotlin.math.roundToInt
 
 /** 底部细线 */
 @Composable fun Modifier.bottomLine(color: Color = c.l1, w: Dp = 1.dp, ext: Dp = 0.dp) = if (Look.flat) this else drawBehind {
@@ -93,8 +93,7 @@ import java.util.Calendar
                                 T(cur?.title ?: "还没有曲目", Fs.PAGE, w = 800, lines = 3, lh = 1.1f)
                                 Spacer(Modifier.height(4.dp)); T(cur?.artist ?: "登录网易云后开始播放", 14, c.s2)
                                 Spacer(Modifier.height(16.dp))
-                                if (st.current != null) { TimeRow(st.current!!.durationMs); Spacer(Modifier.height(8.dp)); ScrubBar(st.current!!.durationMs, 4.dp, interactive = false) }
-                                else { Row { T("00:00", 12, c.p, mono = true, modifier = Modifier.weight(1f)); T(fmt(cur?.durationMs ?: 0), 12, c.s, mono = true) }; Spacer(Modifier.height(8.dp)); Box(Modifier.fillMaxWidth().height(4.dp).background(c.l3)) }
+                                if (st.current != null) { TimeRow(st.current!!.durationMs); Spacer(Modifier.height(8.dp)); ScrubBar(st.current!!.durationMs, 4.dp, interactive = false) } else { Row { T("00:00", 12, c.p, mono = true, modifier = Modifier.weight(1f)); T(fmt(cur?.durationMs ?: 0), 12, c.s, mono = true) }; Spacer(Modifier.height(8.dp)); Box(Modifier.fillMaxWidth().height(4.dp).background(c.l3)) }
                             }
                         }
                         Spacer(Modifier.height(16.dp))
@@ -338,8 +337,7 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
                         else if (signed) Box(Modifier.defaultMinSize(44.dp, 44.dp), contentAlignment = Alignment.Center) { Box(Modifier.height(28.dp).background(c.l3).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) { T("已签到", 12, c.s, 700) } }
                         else LinkBtn("签到", 14) { Store.run { nav.toast = runCatching { Ncm.signin().also { (ok, _) -> if (ok) Store.markSigned() }.second }.getOrElse { "签到失败：${it.message}" } } }
                         if (main.has("createPlaylist")) { Spacer(Modifier.width(6.dp)); LinkBtn("新建歌单", 14) { newPlaylist(nav) } }
-                    }
-                    else T("${two(others.size)} 个歌单", 13, c.s, mono = true, ls = .06f, modifier = Modifier.padding(bottom = 6.dp))
+                    } else T("${two(others.size)} 个歌单", 13, c.s, mono = true, ls = .06f, modifier = Modifier.padding(bottom = 6.dp))
                 }
                 Spacer(Modifier.height(10.dp)); Rule()
             }
@@ -640,8 +638,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                 val isMain = s.id == Plugins.main()?.id
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp).bottomLine().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) { T(s.name + if (isMain) " · 主账号" else "", 16, w = 700); T(if (name == null) "未登录 · 登录后可使用它的歌单和「我喜欢」" else "已登录 · $name", 13, p.s, lh = 1.4f) }
-                    if (name == null) { if (s.has("loginQr")) LinkBtn("登录", 14) { nav.push(Page.PluginLogin(s.id)) } }
-                    else LinkBtn("退出登录", 14, p.bad) { confirmLogout(nav, s.name) { if (isMain) Store.logout() else PluginStore.logout(s.id) } }
+                    if (name == null) { if (s.has("loginQr")) LinkBtn("登录", 14) { nav.push(Page.PluginLogin(s.id)) } } else LinkBtn("退出登录", 14, p.bad) { confirmLogout(nav, s.name) { if (isMain) Store.logout() else PluginStore.logout(s.id) } }
                 }
             }
         }
@@ -860,7 +857,6 @@ private fun Modifier.graphicsAlpha(a: Float) = this.graphicsLayer { alpha = a }
         if (clickable) { Spacer(Modifier.width(6.dp)); NIcon(NIcons.chevronRight, 16.dp, c.s) }
     }
 
-
 /** 二维码画成 ImageBitmap（两端通用） */
 fun qrBitmap(text: String): androidx.compose.ui.graphics.ImageBitmap {
     val m = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 440, 440)
@@ -872,7 +868,6 @@ fun qrBitmap(text: String): androidx.compose.ui.graphics.ImageBitmap {
     for (x in 0 until m.width) for (y in 0 until m.height) if (m[x, y]) cv.drawRect(x.toFloat(), y.toFloat(), x + 1f, y + 1f, black)
     return b
 }
-
 
 /** 可选布局：继续收听和每日推荐各占一半（窄屏时上下排） */
 /** 退出登录前再确认一次 */

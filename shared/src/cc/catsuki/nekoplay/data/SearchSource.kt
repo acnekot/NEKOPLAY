@@ -1,12 +1,12 @@
 package cc.catsuki.nekoplay.data
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import cc.catsuki.nekoplay.*
 import cc.catsuki.nekoplay.core.*
 import cc.catsuki.nekoplay.player.*
 import cc.catsuki.nekoplay.ui.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 
 /** 搜索页当前选的来源：开着且能搜索的插件 */
 object SearchSource {

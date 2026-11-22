@@ -1,0 +1,42 @@
+# 编辑器和 ktlint 共用的格式规则
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{kt,kts}]
+ktlint_code_style = intellij_idea
+max_line_length = off
+# 项目的写法：短语句可以写在一行、对齐用多个空格、Compose 函数大写开头、子包之间通配导入。
+# 下面这些规则和这种写法冲突，关掉；其余规则（空格、空行、分号、导入顺序等）照常检查
+ktlint_function_naming_ignore_when_annotated_with = Composable
+ktlint_standard_statement-wrapping = disabled
+ktlint_standard_indent = disabled
+ktlint_standard_wrapping = disabled
+ktlint_standard_argument-list-wrapping = disabled
+ktlint_standard_parameter-list-wrapping = disabled
+ktlint_standard_function-signature = disabled
+ktlint_standard_class-signature = disabled
+ktlint_standard_multiline-if-else = disabled
+ktlint_standard_multiline-loop = disabled
+ktlint_standard_no-wildcard-imports = disabled
+ktlint_standard_blank-line-between-when-conditions = disabled
+ktlint_standard_trailing-comma-on-call-site = disabled
+ktlint_standard_trailing-comma-on-declaration-site = disabled
+ktlint_standard_spacing-between-declarations-with-comments = disabled
+ktlint_standard_spacing-between-declarations-with-annotations = disabled
+ktlint_standard_no-multi-spaces = disabled
+ktlint_standard_function-literal = disabled
+ktlint_standard_property-naming = disabled
+ktlint_standard_kdoc = disabled

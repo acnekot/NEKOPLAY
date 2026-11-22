@@ -1,9 +1,5 @@
 package cc.catsuki.nekoplay.data
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.player.*
-import cc.catsuki.nekoplay.ui.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +13,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.player.*
+import cc.catsuki.nekoplay.ui.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Credentials
@@ -100,7 +100,7 @@ object DavMusic {
         }
         return out.toByteArray().decodeToString()
     }
-    private fun enc(s: String) = buildString { s.encodeToByteArray().forEach { b -> val ch = b.toInt() and 0xff; if (ch.toChar().isLetterOrDigit() && ch < 128 || ch.toChar() in "-._~") append(ch.toChar()) else append('%').append("0123456789ABCDEF"[ch shr 4]).append("0123456789ABCDEF"[ch and 15]) } }
+    private fun enc(s: String) = buildString { s.encodeToByteArray().forEach { b -> val ch = b.toInt() and 0xff; if ((ch.toChar().isLetterOrDigit() && ch < 128) || ch.toChar() in "-._~") append(ch.toChar()) else append('%').append("0123456789ABCDEF"[ch shr 4]).append("0123456789ABCDEF"[ch and 15]) } }
 }
 
 /** 曲库 → WebDAV 音乐：没配置时先填地址；配好后逐级浏览文件夹 */

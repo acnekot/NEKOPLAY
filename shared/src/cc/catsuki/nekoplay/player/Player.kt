@@ -1,55 +1,55 @@
 package cc.catsuki.nekoplay.player
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.ui.*
-import androidx.compose.foundation.clickable
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.blur
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.runtime.withFrameMillis
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.ui.*
+import kotlinx.coroutines.launch
 
 // ======================= 迷你播放条 =======================
 @Composable fun MiniBar() {
@@ -115,8 +115,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { if (!Screen.short) T(if (lt > .5f && !wideP) "LYRICS" else if (st.fm) "PERSONAL FM" else "NOW PLAYING", 12, p.k.copy(alpha = .5f), 700, mono = true, ls = .14f) }
                     // 顶栏右侧槽位（默认放「译」，只在歌词页显示）
                     if (t != null) { val x = BtnCtx(t, st, showTr) { showTr = !showTr }
-                        PlayerLayout.keys(false, "top").forEach { k -> Box(if (k == "tr") Modifier.graphicsLayer { alpha = lt } else Modifier) { PBtn(k, x) } } }
-                    else Spacer(Modifier.width(44.dp))
+                        PlayerLayout.keys(false, "top").forEach { k -> Box(if (k == "tr") Modifier.graphicsLayer { alpha = lt } else Modifier) { PBtn(k, x) } } } else Spacer(Modifier.width(44.dp))
                 }
                 if (t == null) { Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { T("NO TRACK", 12, p.s, mono = true, ls = .08f) }; return@Column }
                 // 宽窗口（PC / 平板横屏）：左边封面 + 信息 + 控制，右边歌词
@@ -396,7 +395,6 @@ val LocalLyricsActive = compositionLocalOf { true }
     }
 }
 
-
 /** 逐字高亮：底下一层半透明文字，上面一层实色文字按字的进度裁出来；进度用帧时钟在两次位置更新之间插值，扫过去是连续的 */
 @Composable private fun KaraokeLine(line: LyricLine, pos: Long) {
     val p = c
@@ -598,8 +596,7 @@ val LikeRed = Color(0xFFE5484D)
     fun more() {
         if (busy) return; busy = true
         scope.launch {
-            try { val (l, cur) = Ncm.commentFloor(songId, x.id, if (loadedOnce) cursor else -1); list = list + l.filter { a -> list.none { it.id == a.id } }; cursor = cur; loadedOnce = true }
-            catch (e: Exception) { nav.toast = "回复加载失败：${e.message}" }
+            try { val (l, cur) = Ncm.commentFloor(songId, x.id, if (loadedOnce) cursor else -1); list = list + l.filter { a -> list.none { it.id == a.id } }; cursor = cur; loadedOnce = true } catch (e: Exception) { nav.toast = "回复加载失败：${e.message}" }
             busy = false
         }
     }
@@ -631,7 +628,6 @@ fun timeAgo(ms: Long): String {
 }
 
 fun likeNum(n: Int) = if (n >= 10000) "%.1fw".format(n / 10000f) else n.toString()
-
 
 /** 宽屏播放页：左栏封面、歌名、控制（限制宽度居中），右栏歌词 */
 @Composable private fun WidePlayerBody(t: Track, st: PlayState, showTr: Boolean, toggleTr: () -> Unit) {

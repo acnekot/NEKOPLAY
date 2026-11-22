@@ -1,9 +1,5 @@
 package cc.catsuki.nekoplay.player
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +11,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.ui.*
 
 /**
  * 效果器设置：10 段均衡器（±12dB）+ 低音增强 + 环绕 + 响度。
@@ -22,10 +22,10 @@ import androidx.compose.ui.unit.dp
  */
 data class Fx(
     val on: Boolean = false,
-    val bands: List<Float> = List(10) { 0f },   // dB，对应 FREQS
-    val bass: Float = 0f,       // 0..1
-    val surround: Float = 0f,   // 0..1
-    val loud: Float = 0f,       // 0..1（最多 +10dB）
+    val bands: List<Float> = List(10) { 0f }, // dB，对应 FREQS
+    val bass: Float = 0f, // 0..1
+    val surround: Float = 0f, // 0..1
+    val loud: Float = 0f, // 0..1（最多 +10dB）
     val preset: String = "默认",
 ) {
     companion object {
@@ -129,8 +129,7 @@ object FxStore {
         awaitPointerEventScope {
             while (true) {
                 val e = awaitPointerEvent(); val ch = e.changes.firstOrNull() ?: continue
-                if (ch.pressed) { val y = 1f - (ch.position.y / size.height).coerceIn(0f, 1f); onChange(range.start + y * (range.endInclusive - range.start)); ch.consume() }
-                else if (ch.previousPressed) onDone()
+                if (ch.pressed) { val y = 1f - (ch.position.y / size.height).coerceIn(0f, 1f); onChange(range.start + y * (range.endInclusive - range.start)); ch.consume() } else if (ch.previousPressed) onDone()
             }
         }
     }.drawBehind {

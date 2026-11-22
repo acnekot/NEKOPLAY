@@ -1,15 +1,11 @@
 package cc.catsuki.nekoplay.ui
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.*
@@ -27,7 +23,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -191,7 +190,8 @@ class BgDraft {
                         if (!ch.pressed) return@withTimeoutOrNull false
                         if ((ch.position - down.position).getDistance() > viewConfiguration.touchSlop) return@withTimeoutOrNull false
                     }
-                    @Suppress("UNREACHABLE_CODE") false
+                    @Suppress("UNREACHABLE_CODE")
+                        false
                 }
                 hold = false
                 ok = r == null
@@ -224,8 +224,7 @@ class BgDraft {
     val dr = d
     val pick = Plat.impl.imagePicker { bytes ->
         scope.launch {
-            try { val img = Bg.decodeBytes(bytes); dr.src = img; dr.shown = img; dr.newImage = true; dr.scale = 1f; dr.ox = 0f; dr.oy = 0f }
-            catch (e: Exception) { nav.toast = "读取失败：${e.message}" }
+            try { val img = Bg.decodeBytes(bytes); dr.src = img; dr.shown = img; dr.newImage = true; dr.scale = 1f; dr.ox = 0f; dr.oy = 0f } catch (e: Exception) { nav.toast = "读取失败：${e.message}" }
         }
     }
     // 模糊在后台按草稿重新算（停手 120ms 后）

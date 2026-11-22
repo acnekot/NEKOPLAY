@@ -1,14 +1,16 @@
 package cc.catsuki.nekoplay.ui
 
-import cc.catsuki.nekoplay.*
-import cc.catsuki.nekoplay.core.*
-import cc.catsuki.nekoplay.data.*
-import cc.catsuki.nekoplay.player.*
 import androidx.compose.animation.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,20 +20,17 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-
-import kotlinx.coroutines.launch
+import cc.catsuki.nekoplay.*
+import cc.catsuki.nekoplay.core.*
+import cc.catsuki.nekoplay.data.*
+import cc.catsuki.nekoplay.player.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 sealed interface Page {
     data class Detail(val kind: String, val id: String, val title: String, val cover: String? = null) : Page
@@ -308,8 +307,7 @@ val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styl
             detectHorizontalDragGestures(
                 onDragEnd = {
                     scope.launch {
-                        if (sub.value < .6f && nav.stack.size > 1) { nav.stack.removeAt(nav.stack.lastIndex); sub.animateTo(1f, spF) }
-                        else if (sub.value < .6f) nav.stack.clear()
+                        if (sub.value < .6f && nav.stack.size > 1) { nav.stack.removeAt(nav.stack.lastIndex); sub.animateTo(1f, spF) } else if (sub.value < .6f) nav.stack.clear()
                         else sub.animateTo(1f, spF)
                     }
                 },
@@ -423,7 +421,6 @@ object Keys {
 
 /** 标题栏搜索框 → 搜索页：把要搜的词交给搜索页 */
 object SearchBus { var query by mutableStateOf<String?>(null) }
-
 
 /**
  * 顶栏右边的搜索 + 头像：在搜索页时搜索图标收起（淡出），播放页打开时不显示头像。两端共用。
