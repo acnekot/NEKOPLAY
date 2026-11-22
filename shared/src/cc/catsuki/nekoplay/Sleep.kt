@@ -1,10 +1,15 @@
 package cc.catsuki.nekoplay
 
-import androidx.compose.runtime.*
-import kotlinx.coroutines.*
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** 定时关闭：N 分钟后停，或者播完当前这首停；可选「到点后等这首播完再停」 */
 object Sleep {
@@ -39,24 +44,5 @@ object Sleep {
         afterSong || due -> "本首"
         endAt > 0 -> ((endAt - now).coerceAtLeast(0) / 1000).let { "%d:%02d".format(it / 60, it % 60) }
         else -> ""
-    }
-}
-
-fun sleepSheet(nav: Nav) {
-    nav.sheet = SheetSpec("定时关闭", if (Sleep.active) "剩余 ${Sleep.left()}" else "到点后自动暂停", buildList {
-        listOf(15, 30, 45, 60, 90).forEach { m -> add(SheetItem("$m 分钟") { Sleep.start(m); nav.toast = "$m 分钟后停止播放" }) }
-        add(SheetItem("播完这首") { Sleep.startAfterSong(); nav.toast = "播完这首后停止" })
-        add(SheetItem((if (Sleep.finishSong) "✓  " else "    ") + "到点后等这首播完再停") { Sleep.setFinish(!Sleep.finishSong); sleepSheet(nav) })
-        if (Sleep.active) add(SheetItem("取消定时", danger = true) { Sleep.cancel(); nav.toast = "已取消定时关闭" })
-    })
-}
-
-/** 播放页的定时按钮：没开时是个月亮图标，开着显示剩余时间 */
-@Composable fun SleepBtn() {
-    val nav = LocalNav.current
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Sleep.endAt) { while (Sleep.endAt > 0) { now = System.currentTimeMillis(); delay(1000) } }
-    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.height(44.dp).defaultMinSize(minWidth = 44.dp).press(haptic = true) { sleepSheet(nav) }, contentAlignment = androidx.compose.ui.Alignment.Center) {
-        if (Sleep.active) T(Sleep.left(now), 12, c.p, 700, mono = true) else NIcon(NIcons.moon, 21.dp)
     }
 }

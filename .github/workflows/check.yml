@@ -1,0 +1,37 @@
+name: 代码检查（架构分层 + 三端编译）
+on:
+  pull_request:
+    branches: [main, PLUGIN]
+  push:
+    branches: [main, PLUGIN]
+  workflow_dispatch:
+
+jobs:
+  arch-and-desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - name: 架构守门检查 + 桌面端编译
+        working-directory: desktop
+        run: chmod +x gradlew && ./gradlew archCheck compileKotlin --no-daemon
+
+  android-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - name: 安卓端编译校验
+        run: chmod +x gradlew && ./gradlew :app:compileReleaseKotlin --no-daemon
+
+  ios-compile:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - name: iOS 端编译校验
+        working-directory: ios
+        run: chmod +x gradlew && ./gradlew compileKotlinIosArm64 --no-daemon

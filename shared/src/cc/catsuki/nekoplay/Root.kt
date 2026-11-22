@@ -5,6 +5,7 @@ import cc.catsuki.nekoplay.ui.settings.DavMusicPage
 import cc.catsuki.nekoplay.ui.settings.DebugPage
 import cc.catsuki.nekoplay.ui.settings.DownloadsPage
 import cc.catsuki.nekoplay.ui.settings.FeaturesPage
+import cc.catsuki.nekoplay.ui.settings.FxPage
 import cc.catsuki.nekoplay.ui.settings.LocalMusicPage
 import cc.catsuki.nekoplay.ui.settings.StatsPage
 
@@ -111,6 +112,7 @@ val LocalNav = staticCompositionLocalOf { Nav() }
 /** 两端共用的启动初始化（在 Plat.impl 赋值之后调用） */
 object Boot {
     fun init() {
+        Plugins.preferredHomeId = { UiPref.homePlugin }
         Ncm.init(); LegacyLogin.migrate(); Plugins.load(); LocalLib.load(); DavMusic.load(); Updater.load(); Store.init(); Store.reloadLiked(); Engine.init(); Bg.init(); HomeLayout.init(); FxStore.init(); Downloads.init(); LocalMusic.load(); Stats.load()
         reloadPrefs(); Backup.load()
     }

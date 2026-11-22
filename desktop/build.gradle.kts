@@ -81,3 +81,45 @@ compose.desktop {
         }
     }
 }
+
+// 0.6.0 架构守门测试：校验单向分层（core / data / player 禁止反向依赖 ui）与单文件行数上限（≤ 400）
+tasks.register("archCheck") {
+    group = "verification"
+    description = "Verify layer boundaries (no reverse UI deps in core/data/player) and <=400 lines per shared file."
+    doLast {
+        val sharedRoot = rootDir.parentFile.resolve("shared/src/cc/catsuki/nekoplay")
+        val errors = mutableListOf<String>()
+        sharedRoot.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
+            val lines = f.readLines()
+            if (lines.size > 400) errors += "${f.relativeTo(sharedRoot)}: ${lines.size} lines (> 400)"
+        }
+        val nonUiFiles = setOf(
+            "Version.kt", "Perf.kt", "Hash.kt", "Debug.kt", "Features.kt",
+            "Plugin.kt", "PluginSubs.kt", "Sources.kt", "Ncm.kt", "Store.kt", "LocalLib.kt", "LocalMusic.kt",
+            "Dav.kt", "Download.kt", "Backup.kt", "Updater.kt", "Stats.kt",
+            "Engine.kt", "Fx.kt", "Lrc.kt", "Sleep.kt",
+        )
+        val uiSymRegex = Regex("""\b(UiPref|ThemePref|Look|Monet|LocalNav|SheetSpec|SheetItem|SwitchRow|NavRow|SetLine)\b""")
+        for (name in nonUiFiles) {
+            val f = sharedRoot.resolve(name)
+            if (!f.exists()) continue
+            val text = f.readText()
+            text.lines().forEachIndexed { idx, line ->
+                if (line.startsWith("import cc.catsuki.nekoplay.ui.") ||
+                    line.startsWith("import androidx.compose.ui.") ||
+                    line.startsWith("import androidx.compose.foundation.") ||
+                    line.startsWith("import androidx.compose.material")) {
+                    errors += "$name:${idx + 1} forbidden UI import: $line"
+                }
+            }
+            if ("@Composable" in text) errors += "$name contains @Composable"
+            uiSymRegex.findAll(text).map { it.value }.distinct().forEach { sym ->
+                errors += "$name references UI symbol '$sym'"
+            }
+        }
+        if (errors.isNotEmpty()) {
+            throw GradleException("Architecture check failed (${errors.size} violations):\n" + errors.joinToString("\n") { "  - $it" })
+        }
+        println("archCheck PASSED: 0 reverse UI dependencies, all shared .kt files <= 400 lines.")
+    }
+}

@@ -14,6 +14,6 @@ object SearchSource {
     /** 当前选的来源没了就换成第一个（首页来源优先） */
     fun fix() {
         val o = options.map { it.second }
-        if (key !in o) key = o.firstOrNull { it == UiPref.homePlugin } ?: o.firstOrNull() ?: ""
+        if (key !in o) key = o.firstOrNull { it == Plugins.preferredHomeId() } ?: o.firstOrNull() ?: ""
     }
 }
