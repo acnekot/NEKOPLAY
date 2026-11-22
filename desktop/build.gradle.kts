@@ -57,14 +57,15 @@ compose.desktop {
         // Windows / Linux 省内存：小堆 + Serial GC + 空闲时把堆还给系统 + 只用 C1 编译 + 小代码缓存 / 线程栈
         // macOS 保流畅（120fps 基准）：分代 ZGC（亚毫秒停顿）+ C2 编译 + Metal 三缓冲 + 128MB GPU 纹理缓存 + 取消立即重绘 VSync 阻塞
         val mac = System.getProperty("os.name").lowercase().contains("mac")
-        jvmArgs += if (mac) listOf("-Xms96m", "-Xmx384m", "-XX:+UseZGC", "-XX:+ZGenerational",
-            "-XX:ReservedCodeCacheSize=96m", "-XX:MaxMetaspaceSize=128m",
+        jvmArgs += if (mac) listOf("-Xms32m", "-Xmx256m", "-XX:+UseSerialGC",
+            "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=25",
+            "-XX:ReservedCodeCacheSize=64m", "-XX:MaxMetaspaceSize=96m",
             "-Dsun.awt.noerasebackground=true",
             "-Dskiko.vsync.enabled=true", "-Dskiko.buffering=TRIPLE",
             "-Dskiko.rendering.macos.waitForPreviousFrameVsyncOnRedrawImmediately=false",
-            "-Dskiko.gpu.resourceCacheLimit=134217728")
-        else listOf("-Xms24m", "-Xmx180m", "-XX:+UseSerialGC", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=25",
-            "-XX:TieredStopAtLevel=1", "-XX:ReservedCodeCacheSize=40m", "-XX:MaxMetaspaceSize=96m", "-Xss512k", "-XX:CICompilerCount=2",
+            "-Dskiko.gpu.resourceCacheLimit=67108864")
+        else listOf("-Xms24m", "-Xmx256m", "-XX:+UseSerialGC", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=25",
+            "-XX:ReservedCodeCacheSize=48m", "-XX:MaxMetaspaceSize=96m", "-Xss512k",
             "-Dskiko.vsync.enabled=true")
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb) // AppImage 和 dmg 共用输出目录会冲突；免安装版另外打 zip
@@ -72,7 +73,7 @@ compose.desktop {
             packageVersion = appVersion
             description = "NEKOPLAY music player" // 安装包元数据用英文：WiX 默认代码页处理不了中文
             vendor = "acnekot"
-            modules("java.sql", "jdk.unsupported", "jdk.management", "jdk.jsobject", "jdk.xml.dom") // jdk.management：性能浮窗读 CPU
+            modules("jdk.unsupported", "jdk.management", "jdk.jsobject", "jdk.xml.dom") // jdk.management：性能浮窗读 CPU
             // 播放内核 libmpv：打包时放进 resources/<系统>/（由 GitHub Actions 下载），装好就能直接播放
             appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
             windows { packageVersion = installerVersion; menuGroup = "NEKOPLAY"; shortcut = true; upgradeUuid = "8f2a6c3e-5b1d-4e7a-9c40-3d2f1a6b7e91"; iconFile.set(project.file("icons/icon.ico")) }

@@ -107,3 +107,21 @@ object PluginSubs {
         return s
     }
 }
+
+/** 老版本内置音源的登录信息搬到对应插件里（导入插件前也先搬好，导入后直接是登录状态） */
+object LegacyLogin {
+    fun migrate() {
+        val done = Plat.prefs("plugins")
+        if (done.getBoolean("migrated", false)) return
+        fun put(pid: String, key: String, json: org.json.JSONObject?) { val v = json ?: return; val st = Plat.prefs("plugin_$pid"); if (st.getString(key, null) == null) st.edit().putString(key, v.toString()).apply() }
+        Plat.prefs("ncm").getString("cookie", "")?.takeIf { it.isNotEmpty() }?.let { ck ->
+            val st = Plat.prefs("plugin_netease"); if (st.getString("cookie", null) == null) st.edit().putString("cookie", org.json.JSONObject.quote(ck)).apply()
+        }
+        Plat.prefs("qq").let { q -> val id = q.getLong("musicid", 0); val k = q.getString("musickey", "") ?: ""
+            if (id > 0 && k.isNotEmpty()) put("qqmusic", "cred", org.json.JSONObject().put("id", id).put("key", k).put("type", q.getInt("loginType", 2)).put("nick", q.getString("nick", "") ?: "")) }
+        Plat.prefs("kugou").let { g -> val id = g.getLong("userid", 0); val t = g.getString("token", "") ?: ""
+            if (id > 0 && t.isNotEmpty()) put("kugou", "cred", org.json.JSONObject().put("userid", id).put("token", t).put("nick", g.getString("nick", "") ?: "").put("avatar", g.getString("avatar", "") ?: ""))
+            g.getString("guid", null)?.let { gu -> val st = Plat.prefs("plugin_kugou"); if (st.getString("guid", null) == null) st.edit().putString("guid", org.json.JSONObject.quote(gu)).apply() } }
+        done.edit().putBoolean("migrated", true).apply()
+    }
+}

@@ -45,27 +45,28 @@ class JsSource(val file: File) {
     val searchTypes: Set<String> get() = meta["search"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet() ?: setOf("track", "album", "playlist")
 
     private var js: QuickJs? = null
+    @kotlin.concurrent.Volatile var lastUsedAt = 0L; private set
     private val lock = Mutex()
-    /** 脚本实现了哪些接口（search / stream / lyric …），界面按这个决定显示什么 */
-    var caps by mutableStateOf<Set<String>>(emptySet()); private set
+    /** 脚本实现了哪些接口（search / stream / lyric …），界面按这个决定显示什么；优先从本地缓存恢复以实现按需启动 */
+    private val capsKey get() = "caps_${id}_${version}"
+    var caps by mutableStateOf<Set<String>>(Plat.prefs("plugins").getStringSet(capsKey, null) ?: emptySet()); private set
     var error by mutableStateOf<String?>(null); private set
-
+    val isRunning get() = js != null
     fun has(cap: String) = cap in caps
-
     suspend fun start(): Boolean = lock.withLock {
+        lastUsedAt = System.currentTimeMillis()
         if (js != null) return true
         try {
             val q = QuickJs.create(Dispatchers.Default)
             installHost(q)
             q.evaluate<Any?>(PRELUDE, filename = "prelude.js")
             q.evaluate<Any?>(file.readText(), filename = file.name)
-            caps = JSONArray(q.evaluate<String>("__caps()")).let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
+            val c = JSONArray(q.evaluate<String>("__caps()")).let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
+            caps = c; Plat.prefs("plugins").edit().putStringSet(capsKey, c).apply()
             js = q; error = null
             true
         } catch (e: Throwable) {
-            error = e.message ?: e.toString()
-            Debug.log("js:$id", 0, 0, "start", error ?: "")
-            false
+            error = e.message ?: e.toString(); Debug.log("js:$id", 0, 0, "start", error ?: ""); false
         }
     }
 
@@ -100,6 +101,7 @@ class JsSource(val file: File) {
 
     /** 调用脚本里 source 对象的方法：参数和返回值都是 JSON */
     suspend fun call(fn: String, vararg args: Any?): Any? {
+        lastUsedAt = System.currentTimeMillis()
         if (js == null && !start()) throw NcmError("音源「$name」加载失败：$error")
         val argJson = JSONArray().apply { args.forEach { put(it ?: JSONObject.NULL) } }.toString()
         val t0 = System.currentTimeMillis()
@@ -240,11 +242,20 @@ object Plugins {
     val list = kotlinx.coroutines.flow.MutableStateFlow<List<JsSource>>(emptyList())
     var off by mutableStateOf(setOf<String>())
 
+    private var idleJob: kotlinx.coroutines.Job? = null
     fun load() {
         off = prefs.getStringSet("off", null) ?: emptySet()
         list.value = (dir.listFiles() ?: emptyArray()).filter { it.extension == "js" }.sortedBy { it.name }.map { JsSource(it) }
-        // 先把开着的脚本跑起来，界面才知道每个插件有哪些功能
-        kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { enabled.forEach { it.start() } }
+        // 按需启动：已有 caps 缓存的插件不立即创建 QuickJS；首次安装的插件后台跑一次拿 caps；5 分钟未用自动释放
+        val needWarm = enabled.filter { it.caps.isEmpty() }
+        if (needWarm.isNotEmpty()) kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { needWarm.forEach { it.start() } }
+        if (idleJob == null) idleJob = kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
+            while (true) {
+                kotlinx.coroutines.delay(60_000L)
+                val now = System.currentTimeMillis()
+                list.value.forEach { s -> if (s.isRunning && s.lastUsedAt > 0L && now - s.lastUsedAt > 5 * 60_000L) s.close() }
+            }
+        }
     }
     fun on(id: String) = id !in off && list.value.any { it.id == id }
     fun get(id: String) = list.value.firstOrNull { it.id == id }
@@ -379,22 +390,4 @@ object Plugins {
 
     /** 来源的显示名：组件上的小标签用；本地文件返回 null */
     fun sourceName(id: String): String? = if (isPlugin(id)) nameOf(pidOf(id)) else null
-}
-
-/** 老版本内置音源的登录信息搬到对应插件里（导入插件前也先搬好，导入后直接是登录状态） */
-object LegacyLogin {
-    fun migrate() {
-        val done = Plat.prefs("plugins")
-        if (done.getBoolean("migrated", false)) return
-        fun put(pid: String, key: String, json: JSONObject?) { val v = json ?: return; val st = Plat.prefs("plugin_$pid"); if (st.getString(key, null) == null) st.edit().putString(key, v.toString()).apply() }
-        Plat.prefs("ncm").getString("cookie", "")?.takeIf { it.isNotEmpty() }?.let { ck ->
-            val st = Plat.prefs("plugin_netease"); if (st.getString("cookie", null) == null) st.edit().putString("cookie", JSONObject.quote(ck)).apply()
-        }
-        Plat.prefs("qq").let { q -> val id = q.getLong("musicid", 0); val k = q.getString("musickey", "") ?: ""
-            if (id > 0 && k.isNotEmpty()) put("qqmusic", "cred", JSONObject().put("id", id).put("key", k).put("type", q.getInt("loginType", 2)).put("nick", q.getString("nick", "") ?: "")) }
-        Plat.prefs("kugou").let { g -> val id = g.getLong("userid", 0); val t = g.getString("token", "") ?: ""
-            if (id > 0 && t.isNotEmpty()) put("kugou", "cred", JSONObject().put("userid", id).put("token", t).put("nick", g.getString("nick", "") ?: "").put("avatar", g.getString("avatar", "") ?: ""))
-            g.getString("guid", null)?.let { gu -> val st = Plat.prefs("plugin_kugou"); if (st.getString("guid", null) == null) st.edit().putString("guid", JSONObject.quote(gu)).apply() } }
-        done.edit().putBoolean("migrated", true).apply()
-    }
 }

@@ -40,9 +40,14 @@ fun main() {
     // 渲染方式：默认显卡（Direct3D）。软件渲染省约 170MB 内存，但实测 175% 缩放下主页约 30 帧、开了背景模糊的播放页只有约 9 帧，
     // 只适合不在乎流畅度、想省内存的情况；设置里可以切换，重启生效
     if (Plat.prefs("ui").getString("render", "gpu") == "soft" && System.getProperty("skiko.renderApi") == null) System.setProperty("skiko.renderApi", "SOFTWARE_FAST")
-    Boot.init()
-    Store.refreshAll()
+    Boot.initFast()
     Perf.start()
+    // 非关键初始化（插件、更新、下载记录、本地库、网络刷新）延后到后台线程，不阻塞窗口首帧
+    Thread {
+        Thread.sleep(150)
+        Boot.initDeferred()
+        Store.refreshAll()
+    }.apply { isDaemon = true; name = "boot-deferred" }.start()
     if (System.getenv("NEKOPLAY_BENCH") == "1") {
         Thread {
             val out = java.io.File(System.getProperty("user.home"), ".nekoplay/perf-bench.log")
@@ -118,9 +123,14 @@ fun main() {
             }
             // 最小化时释放图片内存缓存并回收一次，把内存还给系统
             androidx.compose.runtime.LaunchedEffect(state.isMinimized) {
-                if (state.isMinimized && UiPref.lowMem) { SingletonImageLoader.get(coil3.PlatformContext.INSTANCE).memoryCache?.clear(); System.gc() }
-                // 最小化后把暂时用不到的内存页还给系统（任务管理器里的数字会明显降下来，切回来时按需再读回）
-                if (state.isMinimized) { kotlinx.coroutines.delay(1500); WinMem.trim() }
+                if (state.isMinimized) {
+                    if (UiPref.lowMem) { SingletonImageLoader.get(coil3.PlatformContext.INSTANCE).memoryCache?.clear(); System.gc() }
+                    kotlinx.coroutines.delay(1500); WinMem.trim()
+                    // 最小化满 30 秒：释放图片内存缓存，降低常驻内存
+                    kotlinx.coroutines.delay(28_500)
+                    SingletonImageLoader.get(coil3.PlatformContext.INSTANCE).memoryCache?.clear()
+                    WinMem.trim()
+                }
             }
             NekoTheme {
                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {

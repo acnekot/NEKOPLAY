@@ -9,6 +9,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -142,12 +143,29 @@ object Engine {
             override fun onAdvanced() = this@Engine.onAdvanced()
             override fun onError(msg: String) { state.value.current?.let { Plugins.forgetStream(it.id) }; error.value = "播放失败：$msg"; next() }
         }
-        // 进度：播放时定时更新
-        // 音质参数：开始播放后读一次（读不到就过一会再试）
-        scope.launch { while (isActive) { if (info.value == null && audio.isPlaying) info.value = audio.info()?.let { if (it.kbps == 0 && localKbps > 0) it.copy(kbps = localKbps) else it }; delay(700) } }
-        scope.launch { while (isActive) { maybeQueueNext(); delay(1000) } }
-        scope.launch { var t0 = System.currentTimeMillis(); while (isActive) { delay(1000); val now = System.currentTimeMillis(); if (audio.isPlaying) listenedMs += (now - t0).coerceAtMost(3000); t0 = now } }
-        scope.launch { while (isActive) { val p = audio.position; if (audio.isPlaying || position.value != p) position.value = p; runCatching { buffered.value = if (state.value.cached) Long.MAX_VALUE else audio.buffered }; delay(if (fastPos > 0) 50 else 250) } }
+        // 播放期定时任务：暂停时挂起等待 playing，避免空闲每秒唤醒多次耗电
+        scope.launch {
+            var t0 = System.currentTimeMillis(); var tick = 0
+            while (isActive) {
+                if (!audio.isPlaying) {
+                    val p = audio.position; if (position.value != p) position.value = p
+                    state.first { it.playing }
+                    t0 = System.currentTimeMillis()
+                }
+                val p = audio.position
+                if (audio.isPlaying || position.value != p) position.value = p
+                runCatching { buffered.value = if (state.value.cached) Long.MAX_VALUE else audio.buffered }
+                if (tick % 4 == 0) {
+                    if (info.value == null && audio.isPlaying) info.value = audio.info()?.let { if (it.kbps == 0 && localKbps > 0) it.copy(kbps = localKbps) else it }
+                    maybeQueueNext()
+                    val now = System.currentTimeMillis()
+                    if (audio.isPlaying) listenedMs += (now - t0).coerceAtMost(3000)
+                    t0 = now
+                }
+                tick++
+                delay(if (fastPos > 0) 50 else 250)
+            }
+        }
         Store.restoreQueue()?.let { (q, i, pos) -> state.value = state.value.copy(queue = q, index = i); load(i, false, pos) }
     }
 

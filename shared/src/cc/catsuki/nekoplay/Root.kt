@@ -111,11 +111,17 @@ val LocalNav = staticCompositionLocalOf { Nav() }
 
 /** 两端共用的启动初始化（在 Plat.impl 赋值之后调用） */
 object Boot {
-    fun init() {
+    /** 快速首屏初始化：只加载界面渲染必需的轻量偏好与本地队列 */
+    fun initFast() {
         Plugins.preferredHomeId = { UiPref.homePlugin }
-        Ncm.init(); LegacyLogin.migrate(); Plugins.load(); LocalLib.load(); DavMusic.load(); Updater.load(); Store.init(); Store.reloadLiked(); Engine.init(); Bg.init(); HomeLayout.init(); FxStore.init(); Downloads.init(); LocalMusic.load(); Stats.load()
-        reloadPrefs(); Backup.load()
+        Ncm.init(); Store.init(); Engine.init(); Bg.init(); HomeLayout.init(); reloadPrefs()
     }
+    /** 延后后台初始化：首帧画完后再加载插件、WebDAV、更新检查、本地库与统计 */
+    fun initDeferred() {
+        LegacyLogin.migrate(); Plugins.load(); LocalLib.load(); DavMusic.load(); Updater.load()
+        Store.reloadLiked(); FxStore.init(); Downloads.init(); LocalMusic.load(); Stats.load(); Backup.load()
+    }
+    fun init() { initFast(); initDeferred() }
     /** 重新读一遍设置（启动时、从备份恢复后） */
     fun reloadPrefs() {
         val ui = Plat.prefs("ui")

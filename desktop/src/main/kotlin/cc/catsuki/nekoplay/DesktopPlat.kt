@@ -318,11 +318,11 @@ private class MpvAudio : Audio {
     @Volatile private var bufPos = 0L
 
     init {
-        // 每 200ms 读一次状态，转成回调（在界面线程里发）
+        // 播放中每 200ms 读一次状态；暂停 / 空闲时降频至 500~800ms，省 CPU
         Thread {
             var lastPlaying = false; var lastBuf = false
             while (true) {
-                Thread.sleep(200)
+                Thread.sleep(when { !opened -> 800L; !playing -> 500L; else -> 200L })
                 if (lib == null || h == null || !opened) continue
                 val paused = str("pause") == "yes"
                 val eof = str("eof-reached") == "yes"
