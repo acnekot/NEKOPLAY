@@ -61,4 +61,4 @@ NEKOPLAY 是一份 Kotlin + Compose 代码跑在三个平台上：
 
 - `.github/workflows/check.yml`：每次推送和 PR，Linux 上编译、测试、风格检查
 - `.github/workflows/build.yml`：手动运行或推 `v*` 标签时打包五个平台，推标签时同时发布 Release
-- 版本号：`core/Version.kt`；打包时生成 `BuildMeta`（提交号、提交时间），检查更新用
+- 版本号：`Version.kt`；打包时生成 `BuildMeta`（提交号、提交时间），检查更新用

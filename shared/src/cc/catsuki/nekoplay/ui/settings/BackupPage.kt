@@ -58,7 +58,7 @@ import org.json.JSONObject
                 Field("地址（文件夹）", Backup.url, "https://example.com/dav/NEKOPLAY/") { Backup.url = it }
                 Field("用户名", Backup.user, "") { Backup.user = it }
                 Field("密码", Backup.pass, "", secret = true) { Backup.pass = it }
-                SwitchRow("包含网易云登录", "恢复后不用重新登录；登录信息会以明文存在网盘里，介意就别开", Backup.withLogin) { Backup.withLogin = it; Backup.save() }
+                SwitchRow("包含账号登录", "恢复后不用重新登录；登录信息会以明文存在网盘里，介意就别开", Backup.withLogin) { Backup.withLogin = it; Backup.save() }
                 Spacer(Modifier.height(14.dp))
                 ActionRow {
                     PrimaryBar(if (busy) "处理中…" else "备份到网盘", NIcons.chevronRight, Modifier.weight(1f)) {

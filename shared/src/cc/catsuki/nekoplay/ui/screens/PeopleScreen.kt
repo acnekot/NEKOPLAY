@@ -53,7 +53,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
                         T(pg.name, 24, w = 800, lines = 2, lh = 1.25f)
                         Spacer(Modifier.height(4.dp))
                         T(if (a == null) "LOADING" else "${two(a.songs)} 首 · ${two(a.albums)} 张专辑", 12, p.s, mono = true, ls = .04f)
-                        Spacer(Modifier.weight(1f)); T("网易云音乐 · 歌手", 13, p.s)
+                        Spacer(Modifier.weight(1f)); T("${Plugins.sourceName(pg.id) ?: "在线音源"} · 歌手", 13, p.s)
                     }
                 }
                 if (!a?.brief.isNullOrBlank()) Box(Modifier.padding(top = 14.dp).press { expand = !expand }) {

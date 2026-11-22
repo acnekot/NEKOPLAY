@@ -84,7 +84,7 @@ for f in plugins/*.js; do node --check "$f"; done
 
 ## 版本和发布
 
-1. 改 `shared/src/cc/catsuki/nekoplay/core/Version.kt` 里的 `APP_VERSION`
+1. 改 `shared/src/cc/catsuki/nekoplay/Version.kt` 里的 `APP_VERSION`
 2. 把 `CHANGELOG.md` 的「未发布」改成版本号和日期
 3. 提交后打标签并推送：`git tag v0.6.0 && git push origin v0.6.0`
 4. 「打包全部版本」工作流会自动打包并发布 GitHub Release，软件里「正式版」通道就能检测到

@@ -91,7 +91,7 @@ import java.util.Calendar
                             Spacer(Modifier.width(16.dp))
                             Column(Modifier.weight(1f)) {
                                 T(cur?.title ?: "还没有曲目", Fs.PAGE, w = 800, lines = 3, lh = 1.1f)
-                                Spacer(Modifier.height(4.dp)); T(cur?.artist ?: "登录网易云后开始播放", 14, c.s2)
+                                Spacer(Modifier.height(4.dp)); T(cur?.artist ?: "选择一首歌开始播放", 14, c.s2)
                                 Spacer(Modifier.height(16.dp))
                                 if (st.current != null) { TimeRow(st.current!!.durationMs); Spacer(Modifier.height(8.dp)); ScrubBar(st.current!!.durationMs, 4.dp, interactive = false) }
                                 else { Row { T("00:00", 12, c.p, mono = true, modifier = Modifier.weight(1f)); T(fmt(cur?.durationMs ?: 0), 12, c.s, mono = true) }; Spacer(Modifier.height(8.dp)); Box(Modifier.fillMaxWidth().height(4.dp).background(c.l3)) }

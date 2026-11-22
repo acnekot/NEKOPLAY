@@ -1,7 +1,7 @@
 # 更新日志
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
-版本号只在 `shared/src/cc/catsuki/nekoplay/core/Version.kt` 里改；发版时把「未发布」改成版本号和日期，再打 `v版本号` 标签。
+版本号只在 `shared/src/cc/catsuki/nekoplay/Version.kt` 里改；发版时把「未发布」改成版本号和日期，再打 `v版本号` 标签。
 
 ## [未发布]
 

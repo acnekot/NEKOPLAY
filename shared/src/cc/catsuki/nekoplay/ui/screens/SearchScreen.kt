@@ -173,7 +173,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                     items(r.albums, key = { "a" + it.id }) { al -> ListRow({ Cover(al.pic, 56.dp, al.name) }, al.name, listOf(al.artist, al.year).filter { it.isNotEmpty() }.joinToString(" · ")) { nav.push(Page.Album(al.id, al.name, al.pic)) } }
                     items(r.artists, key = { "r" + it.id }) { ar -> ListRow({ Cover(ar.pic, 56.dp, ar.name) }, ar.name, "${two(ar.songs)} 首 · ${two(ar.albums)} 张专辑") { nav.push(Page.Artist(ar.id, ar.name)) } }
                     items(r.playlists, key = { "p" + it.id }) { pl -> ListRow({ Cover(pl.cover, 56.dp, pl.name) }, pl.name, "${two(pl.count)} 首") { nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) } }
-                    items(r.users, key = { "u" + it.uid }) { u -> ListRow({ Cover(u.avatar, 56.dp, u.name) }, u.name, u.signature.ifBlank { "网易云用户" }) { nav.push(Page.User(u.uid, u.name)) } }
+                    items(r.users, key = { "u" + it.uid }) { u -> ListRow({ Cover(u.avatar, 56.dp, u.name) }, u.name, u.signature.ifBlank { "${Plugins.sourceName(u.uid) ?: "在线"}用户" }) { nav.push(Page.User(u.uid, u.name)) } }
                 }
             }
         }

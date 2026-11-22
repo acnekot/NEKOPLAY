@@ -59,7 +59,7 @@ object Updater {
                 }
             }
         }
-        return i?.takeIf { it >= 0 }?.let { names[it] }
+        return i.takeIf { it >= 0 }?.let { names[it] }
     }
 
     /** Actions 产物名：和 build.yml / ios.yml 里上传的名字对应 */

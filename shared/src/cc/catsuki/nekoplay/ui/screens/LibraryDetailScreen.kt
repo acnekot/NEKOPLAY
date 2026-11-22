@@ -172,7 +172,7 @@ import java.util.Calendar
                         Spacer(Modifier.height(4.dp))
                         T(if (tracks == null) "LOADING" else listMeta(list), 12, c.s, mono = true, ls = .04f)
                         Spacer(Modifier.weight(1f))
-                        T(when (p.kind) { "daily" -> "每日更新"; "recent" -> "本机记录"; "simi" -> "相似推荐"; "newsong" -> "新歌速递"; "hist" -> "历史日推"; "cloud" -> "网易云云盘"; "radio" -> "播客电台"; "llike", "lpl" -> "本机"; else -> Plugins.sourceName(p.id) ?: "网易云音乐" }, 13, c.s)
+                        T(when (p.kind) { "daily" -> "每日更新"; "recent" -> "本机记录"; "simi" -> "相似推荐"; "newsong" -> "新歌速递"; "hist" -> "历史日推"; "cloud" -> "音乐云盘"; "radio" -> "播客电台"; "llike", "lpl" -> "本机"; else -> Plugins.sourceName(p.id) ?: "在线歌单" }, 13, c.s)
                     }
                 }
                 Spacer(Modifier.height(16.dp))
