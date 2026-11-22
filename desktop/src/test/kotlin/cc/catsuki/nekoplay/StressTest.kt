@@ -149,4 +149,22 @@ class StressTest {
             println("  [${s.id}] lifecycle chaos 15 rounds PASSED")
         }
     }
+
+    @Test
+    fun liveQqQrcLyric() = runBlocking {
+        TestEnv.init()
+        val repoRoot = File(System.getProperty("user.dir")).parentFile
+        val qq = File(repoRoot, "plugins/qqmusic.js")
+        if (!qq.exists()) return@runBlocking
+        val s = JsSource(qq)
+        assertTrue(s.start(), "qqmusic.js should start cleanly")
+        val res = runCatching { withTimeout(12_000) { s.call("lyric", "0039MnYb0qxYhV") as? org.json.JSONObject } }.getOrNull()
+        s.close().join()
+        if (res != null) {
+            val yrc = res.optString("yrc")
+            val lines = Lrc.parseYrc(yrc, res.optString("tr").ifEmpty { null })
+            println("QRC->YRC lines=${lines.size}, sample=${lines.drop(2).take(3).map { "${it.text} (${it.words?.size ?: 0} words)" }}")
+            assertTrue(yrc.isNotBlank() && lines.size > 10 && lines.any { (it.words?.size ?: 0) >= 4 }, "QQ Music QRC should decrypt to word-by-word yrc lines")
+        }
+    }
 }

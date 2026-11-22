@@ -1,6 +1,6 @@
 // @id qqmusic
 // @name QQ 音乐
-// @version 1.5.0
+// @version 1.6.0
 // @author NEKOPLAY
 // @desc QQ 音乐完整音源：搜索（单曲/专辑/歌手/歌单/热搜/联想）、播放、歌词、私人 FM、每日推荐、推荐歌单、歌单广场、新碟/新歌、排行榜、MV 精选、歌曲评论与点赞、相似歌曲/歌手/歌单、歌单增删收藏、关注歌手与曲库同步
 // @api 1
@@ -157,6 +157,357 @@ async function finish(d, type) {
   await fetchProfile(base);
 }
 
+
+// ---------- QRC 逐字歌词解密（基于 MIT 协议开源库 qrc-decoder / Copyright (c) apoint123 + 纯 JS RFC 1951 Inflate） ----------
+const qrcDecrypt = (() => {
+const KEY_1 = new Uint8Array([33,64,35,41,40,42,36,37]);
+const KEY_2 = new Uint8Array([49,50,51,90,88,67,33,64]);
+const KEY_3 = new Uint8Array([33,64,35,41,40,78,72,76]);
+const S_BOXES = [
+	[14,4,13,1,2,15,11,8,3,10,6,12,5,9,0,7,0,15,7,4,14,2,13,1,10,6,12,11,9,5,3,8,4,1,14,8,13,6,2,11,15,12,9,7,3,10,5,0,15,12,8,2,4,9,1,7,5,11,3,14,10,0,6,13],
+	[15,1,8,14,6,11,3,4,9,7,2,13,12,0,5,10,3,13,4,7,15,2,8,15,12,0,1,10,6,9,11,5,0,14,7,11,10,4,13,1,5,8,12,6,9,3,2,15,13,8,10,1,3,15,4,2,11,6,7,12,0,5,14,9],
+	[10,0,9,14,6,3,15,5,1,13,12,7,11,4,2,8,13,7,0,9,3,4,6,10,2,8,5,14,12,11,15,1,13,6,4,9,8,15,3,0,11,1,2,12,5,10,14,7,1,10,13,0,6,9,8,7,4,15,14,3,11,5,2,12],
+	[7,13,14,3,0,6,9,10,1,2,8,5,11,12,4,15,13,8,11,5,6,15,0,3,4,7,2,12,1,10,14,9,10,6,9,0,12,11,7,13,15,1,3,14,5,2,8,4,3,15,0,6,10,10,13,8,9,4,5,11,12,7,2,14],
+	[2,12,4,1,7,10,11,6,8,5,3,15,13,0,14,9,14,11,2,12,4,7,13,1,5,0,15,10,3,9,8,6,4,2,1,11,10,13,7,8,15,9,12,5,6,3,0,14,11,8,12,7,1,14,2,13,6,15,0,9,10,4,5,3],
+	[12,1,10,15,9,2,6,8,0,13,3,4,14,7,5,11,10,15,4,2,7,12,9,5,6,1,13,14,0,11,3,8,9,14,15,5,2,8,12,3,7,0,4,10,1,13,11,6,4,3,2,12,9,5,15,10,11,14,1,7,6,0,8,13],
+	[4,11,2,14,15,0,8,13,3,12,9,7,5,10,6,1,13,0,11,7,4,9,1,10,14,3,5,12,2,15,8,6,1,4,11,13,12,3,7,14,10,15,6,8,0,5,9,2,6,11,13,8,1,4,10,7,9,5,0,15,14,2,3,12],
+	[13,2,8,4,6,15,11,1,10,9,3,14,5,0,12,7,1,15,13,8,10,3,7,4,12,5,6,11,0,14,9,2,7,11,4,1,9,12,14,2,0,6,10,13,15,3,5,8,2,1,14,7,4,10,8,13,15,12,9,0,3,5,6,11]
+];
+const P_BOX = [16,7,20,21,29,12,28,17,1,15,23,26,5,18,31,10,2,8,24,14,32,27,3,9,19,13,30,6,22,11,4,25];
+const E_BOX_TABLE = [32,1,2,3,4,5,4,5,6,7,8,9,8,9,10,11,12,13,12,13,14,15,16,17,16,17,18,19,20,21,20,21,22,23,24,25,24,25,26,27,28,29,28,29,30,31,32,1];
+const KEY_RND_SHIFT = [1,1,2,2,2,2,2,2,1,2,2,2,2,2,2,1];
+const KEY_PERM_C = [56,48,40,32,24,16,8,0,57,49,41,33,25,17,9,1,58,50,42,34,26,18,10,2,59,51,43,35];
+const KEY_PERM_D = [62,54,46,38,30,22,14,6,61,53,45,37,29,21,13,5,60,52,44,36,28,20,12,4,27,19,11,3];
+const KEY_COMPRESSION = [13,16,10,23,0,4,2,27,14,5,20,9,22,18,11,3,25,7,15,6,26,19,12,1,40,51,30,36,46,54,29,39,50,44,32,47,43,48,38,55,33,52,45,41,49,35,28,31];
+let Mode =  function(Mode) {
+	Mode[Mode["Encrypt"] = 0] = "Encrypt";
+	Mode[Mode["Decrypt"] = 1] = "Decrypt";
+	return Mode;
+}({});
+function permuteFromKeyBytes(key, table) {
+	let output = 0n;
+	let currentBitMask = 1n << BigInt(table.length - 1);
+	for (let i = 0; i < table.length; i++) {
+		const pos = table[i];
+		const wordIndex = pos >> 5;
+		const bitInWord = pos & 31;
+		const byteInWord = bitInWord >> 3;
+		const bitInByte = bitInWord & 7;
+		if (key[wordIndex * 4 + 3 - byteInWord] >> 7 - bitInByte & 1) output |= currentBitMask;
+		currentBitMask >>= 1n;
+	}
+	return output;
+}
+function rotateLeft28Bit(value, amount) {
+	const BITS_28_MASK = 4294967280n;
+	const val = value & BITS_28_MASK;
+	return (val << BigInt(amount) | val >> BigInt(28 - amount)) & BITS_28_MASK;
+}
+function keySchedule(key, mode) {
+	const schedule = new Int32Array(32);
+	const c0 = permuteFromKeyBytes(key, KEY_PERM_C);
+	const d0 = permuteFromKeyBytes(key, KEY_PERM_D);
+	let c = c0 << 4n;
+	let d = d0 << 4n;
+	for (let i = 0; i < 16; i++) {
+		const shift = KEY_RND_SHIFT[i];
+		c = rotateLeft28Bit(c, shift);
+		d = rotateLeft28Bit(d, shift);
+		const toGen = mode === Mode.Decrypt ? 15 - i : i;
+		let subkey48bit = 0n;
+		for (let k = 0; k < KEY_COMPRESSION.length; k++) {
+			const pos = KEY_COMPRESSION[k];
+			if ((pos < 28 ? c >> BigInt(31 - pos) & 1n : d >> BigInt(31 - (pos - 27)) & 1n) === 1n) subkey48bit |= 1n << BigInt(47 - k);
+		}
+		const b5 = Number(subkey48bit >> 40n & 255n);
+		const b4 = Number(subkey48bit >> 32n & 255n);
+		const b3 = Number(subkey48bit >> 24n & 255n);
+		const high24 = b5 << 16 | b4 << 8 | b3;
+		const b2 = Number(subkey48bit >> 16n & 255n);
+		const b1 = Number(subkey48bit >> 8n & 255n);
+		const b0 = Number(subkey48bit & 255n);
+		const low24 = b2 << 16 | b1 << 8 | b0;
+		schedule[toGen * 2] = high24;
+		schedule[toGen * 2 + 1] = low24;
+	}
+	return schedule;
+}
+const IP_RULE = [34,42,50,58,2,10,18,26,36,44,52,60,4,12,20,28,38,46,54,62,6,14,22,30,40,48,56,64,8,16,24,32,33,41,49,57,1,9,17,25,35,43,51,59,3,11,19,27,37,45,53,61,5,13,21,29,39,47,55,63,7,15,23,31];
+const INV_IP_RULE = [37,5,45,13,53,21,61,29,38,6,46,14,54,22,62,30,39,7,47,15,55,23,63,31,40,8,48,16,56,24,64,32,33,1,41,9,49,17,57,25,34,2,42,10,50,18,58,26,35,3,43,11,51,19,59,27,36,4,44,12,52,20,60,28];
+const IP_LEFT_TABLE = new Int32Array(2048);
+const IP_RIGHT_TABLE = new Int32Array(2048);
+const INV_IP_LEFT_TABLE = new Int32Array(2048);
+const INV_IP_RIGHT_TABLE = new Int32Array(2048);
+function generatePermutationTables() {
+	const applyPermutation = (input, rule) => {
+		let output = 0n;
+		for (let i = 0; i < 64; i++) {
+			const srcBit1Based = rule[i];
+			if (input >> BigInt(64 - srcBit1Based) & 1n) output |= 1n << BigInt(63 - i);
+		}
+		return output;
+	};
+	for (let bytePos = 0; bytePos < 8; bytePos++) for (let byteVal = 0; byteVal < 256; byteVal++) {
+		const permuted = applyPermutation(BigInt(byteVal) << BigInt(56 - bytePos * 8), IP_RULE);
+		const idx = bytePos << 8 | byteVal;
+		IP_LEFT_TABLE[idx] = Number(permuted >> 32n & 4294967295n);
+		IP_RIGHT_TABLE[idx] = Number(permuted & 4294967295n);
+	}
+	for (let blockPos = 0; blockPos < 8; blockPos++) for (let blockVal = 0; blockVal < 256; blockVal++) {
+		const permuted = applyPermutation(BigInt(blockVal) << BigInt(56 - blockPos * 8), INV_IP_RULE);
+		const idx = blockPos << 8 | blockVal;
+		INV_IP_LEFT_TABLE[idx] = Number(permuted >> 32n & 4294967295n);
+		INV_IP_RIGHT_TABLE[idx] = Number(permuted & 4294967295n);
+	}
+}
+generatePermutationTables();
+function calculateSboxIndex(a) {
+	return a & 32 | (a & 31) >> 1 | (a & 1) << 4;
+}
+function applyQqPboxPermutation(input) {
+	let output = 0;
+	for (let i = 0; i < 32; i++) {
+		const sourceBit1Based = P_BOX[i];
+		const destBitMask = 1 << 31 - i;
+		if ((input & 1 << 32 - sourceBit1Based) !== 0) output |= destBitMask;
+	}
+	return output;
+}
+const SP_TABLE = new Int32Array(512);
+function generateSpTables() {
+	for (let sBoxIdx = 0; sBoxIdx < 8; sBoxIdx++) for (let sBoxInput = 0; sBoxInput < 64; sBoxInput++) {
+		const sBoxIndex = calculateSboxIndex(sBoxInput);
+		const prePBoxVal = S_BOXES[sBoxIdx][sBoxIndex] << 28 - sBoxIdx * 4;
+		SP_TABLE[sBoxIdx << 6 | sBoxInput] = applyQqPboxPermutation(prePBoxVal);
+	}
+}
+generateSpTables();
+const EBOX_HIGH_TABLE = new Int32Array(1024);
+const EBOX_LOW_TABLE = new Int32Array(1024);
+function generateEBoxTables() {
+	for (let chunkIdx = 0; chunkIdx < 4; chunkIdx++) {
+		const shiftIn32 = (3 - chunkIdx) * 8;
+		for (let byteVal = 0; byteVal < 256; byteVal++) {
+			let high24 = 0;
+			let low24 = 0;
+			const input = byteVal << shiftIn32;
+			for (let i = 0; i < 24; i++) if (input >>> 32 - E_BOX_TABLE[i] & 1) high24 |= 1 << 23 - i;
+			for (let i = 24; i < 48; i++) if (input >>> 32 - E_BOX_TABLE[i] & 1) low24 |= 1 << 47 - i;
+			const tableIdx = chunkIdx << 8 | byteVal;
+			EBOX_HIGH_TABLE[tableIdx] = high24;
+			EBOX_LOW_TABLE[tableIdx] = low24;
+		}
+	}
+}
+generateEBoxTables();
+function fFunction(state, keyHigh24, keyLow24) {
+	const b0 = state >>> 24 & 255;
+	const b1 = state >>> 16 & 255;
+	const b2 = state >>> 8 & 255;
+	const b3 = state & 255;
+	const eboxHigh24 = EBOX_HIGH_TABLE[b0] | EBOX_HIGH_TABLE[256 | b1] | EBOX_HIGH_TABLE[512 | b2] | EBOX_HIGH_TABLE[768 | b3];
+	const eboxLow24 = EBOX_LOW_TABLE[b0] | EBOX_LOW_TABLE[256 | b1] | EBOX_LOW_TABLE[512 | b2] | EBOX_LOW_TABLE[768 | b3];
+	const xorHigh24 = eboxHigh24 ^ keyHigh24;
+	const xorLow24 = eboxLow24 ^ keyLow24;
+	return SP_TABLE[xorHigh24 >>> 18 & 63] | SP_TABLE[64 | xorHigh24 >>> 12 & 63] | SP_TABLE[128 | xorHigh24 >>> 6 & 63] | SP_TABLE[192 | xorHigh24 & 63] | SP_TABLE[256 | xorLow24 >>> 18 & 63] | SP_TABLE[320 | xorLow24 >>> 12 & 63] | SP_TABLE[384 | xorLow24 >>> 6 & 63] | SP_TABLE[448 | xorLow24 & 63];
+}
+function desCrypt(input, output, keySchedule) {
+	let left = 0;
+	let right = 0;
+	for (let i = 0; i < 8; i++) {
+		const idx = i << 8 | input[i];
+		left |= IP_LEFT_TABLE[idx];
+		right |= IP_RIGHT_TABLE[idx];
+	}
+	for (let i = 0; i < 15; i++) {
+		const temp = right;
+		right = (left ^ fFunction(right, keySchedule[i * 2], keySchedule[i * 2 + 1])) >>> 0;
+		left = temp;
+	}
+	left = (left ^ fFunction(right, keySchedule[30], keySchedule[31])) >>> 0;
+	let outLeft = 0;
+	let outRight = 0;
+	for (let i = 0; i < 4; i++) {
+		const idxL = i << 8 | left >>> 24 - i * 8 & 255;
+		outLeft |= INV_IP_LEFT_TABLE[idxL];
+		outRight |= INV_IP_RIGHT_TABLE[idxL];
+		const idxR = i + 4 << 8 | right >>> 24 - i * 8 & 255;
+		outLeft |= INV_IP_LEFT_TABLE[idxR];
+		outRight |= INV_IP_RIGHT_TABLE[idxR];
+	}
+	output[0] = outLeft >>> 24 & 255;
+	output[1] = outLeft >>> 16 & 255;
+	output[2] = outLeft >>> 8 & 255;
+	output[3] = outLeft & 255;
+	output[4] = outRight >>> 24 & 255;
+	output[5] = outRight >>> 16 & 255;
+	output[6] = outRight >>> 8 & 255;
+	output[7] = outRight & 255;
+}
+function hexToUint8Array(hex) {
+	if (typeof Buffer !== "undefined") return Buffer.from(hex, "hex");
+	if (hex.length % 2 !== 0) throw new Error("无效的十六进制字符串: 长度必须是偶数");
+	const bytes = new Uint8Array(hex.length / 2);
+	for (let i = 0; i < hex.length; i += 2) bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+	return bytes;
+}
+function uint8ArrayToHex(bytes) {
+	if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("hex");
+	return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+const DES_BLOCK_SIZE = 8;
+var QqMusicCodec = class {
+	encryptSchedule;
+	decryptSchedule;
+	constructor() {
+		this.decryptSchedule = [
+			keySchedule(KEY_3, Mode.Decrypt),
+			keySchedule(KEY_2, Mode.Encrypt),
+			keySchedule(KEY_1, Mode.Decrypt)
+		];
+		this.encryptSchedule = [
+			keySchedule(KEY_1, Mode.Encrypt),
+			keySchedule(KEY_2, Mode.Decrypt),
+			keySchedule(KEY_3, Mode.Encrypt)
+		];
+	}
+	decryptBlock(input, output) {
+		const temp1 = new Uint8Array(8);
+		const temp2 = new Uint8Array(8);
+		desCrypt(input, temp1, this.decryptSchedule[0]);
+		desCrypt(temp1, temp2, this.decryptSchedule[1]);
+		desCrypt(temp2, output, this.decryptSchedule[2]);
+	}
+	encryptBlock(input, output) {
+		const temp1 = new Uint8Array(8);
+		const temp2 = new Uint8Array(8);
+		desCrypt(input, temp1, this.encryptSchedule[0]);
+		desCrypt(temp1, temp2, this.encryptSchedule[1]);
+		desCrypt(temp2, output, this.encryptSchedule[2]);
+	}
+};
+const CODEC = new QqMusicCodec();
+  function inflateZlib(src) {
+    // 跳过 2 字节 zlib 头（CMF + FLG）
+    let p = 2, bitBuf = 0, bitCnt = 0;
+    const out = [];
+    const bits = (n) => {
+      while (bitCnt < n) { if (p >= src.length) throw new Error('inflate eof'); bitBuf |= src[p++] << bitCnt; bitCnt += 8; }
+      const v = bitBuf & ((1 << n) - 1); bitBuf >>>= n; bitCnt -= n; return v;
+    };
+    const buildTree = (lens) => {
+      const maxB = 15, cnt = new Int32Array(maxB + 1);
+      for (let i = 0; i < lens.length; i++) if (lens[i]) cnt[lens[i]]++;
+      const next = new Int32Array(maxB + 1);
+      let code = 0;
+      for (let b = 1; b <= maxB; b++) { code = (code + cnt[b - 1]) << 1; next[b] = code; }
+      const tbl = {};
+      for (let i = 0; i < lens.length; i++) {
+        const l = lens[i]; if (!l) continue;
+        tbl[(l << 16) | next[l]++] = i;
+      }
+      return tbl;
+    };
+    const decodeSym = (tbl) => {
+      let c = 0;
+      for (let l = 1; l <= 15; l++) {
+        c = (c << 1) | bits(1);
+        const v = tbl[(l << 16) | c];
+        if (v !== undefined) return v;
+      }
+      throw new Error('inflate bad huffman');
+    };
+    const LEN_BASE = [3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+    const LEN_EXT  = [0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+    const DIST_BASE = [1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+    const DIST_EXT  = [0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+    const CL_ORDER  = [16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
+    const fixedLit = buildTree(Array.from({ length: 288 }, (_, i) => i < 144 ? 8 : i < 256 ? 9 : i < 280 ? 7 : 8));
+    const fixedDist = buildTree(Array.from({ length: 32 }, () => 5));
+    let bfinal = 0;
+    while (!bfinal) {
+      bfinal = bits(1);
+      const btype = bits(2);
+      if (btype === 0) {
+        bitBuf = 0; bitCnt = 0;
+        const len = src[p] | (src[p + 1] << 8); p += 4;
+        for (let i = 0; i < len; i++) out.push(src[p++]);
+      } else if (btype === 1 || btype === 2) {
+        let litT = fixedLit, distT = fixedDist;
+        if (btype === 2) {
+          const hlit = bits(5) + 257, hdist = bits(5) + 1, hclen = bits(4) + 4;
+          const clLens = new Array(19).fill(0);
+          for (let i = 0; i < hclen; i++) clLens[CL_ORDER[i]] = bits(3);
+          const clT = buildTree(clLens);
+          const all = [];
+          while (all.length < hlit + hdist) {
+            const sym = decodeSym(clT);
+            if (sym < 16) all.push(sym);
+            else if (sym === 16) { const r = bits(2) + 3, prev = all[all.length - 1]; for (let k = 0; k < r; k++) all.push(prev); }
+            else if (sym === 17) { const r = bits(3) + 3; for (let k = 0; k < r; k++) all.push(0); }
+            else { const r = bits(7) + 11; for (let k = 0; k < r; k++) all.push(0); }
+          }
+          litT = buildTree(all.slice(0, hlit));
+          distT = buildTree(all.slice(hlit));
+        }
+        while (true) {
+          const sym = decodeSym(litT);
+          if (sym === 256) break;
+          if (sym < 256) { out.push(sym); continue; }
+          const li = sym - 257;
+          const len = LEN_BASE[li] + bits(LEN_EXT[li]);
+          const di = decodeSym(distT);
+          const dist = DIST_BASE[di] + bits(DIST_EXT[di]);
+          for (let k = 0; k < len; k++) out.push(out[out.length - dist]);
+        }
+      } else throw new Error('inflate bad btype');
+    }
+    return new Uint8Array(out);
+  }
+  function utf8Decode(bytes) {
+    let i = (bytes.length >= 3 && bytes[0] === 239 && bytes[1] === 187 && bytes[2] === 191) ? 3 : 0, s = '';
+    while (i < bytes.length) {
+      const c = bytes[i++];
+      if (c < 128) s += String.fromCharCode(c);
+      else if (c < 224) s += String.fromCharCode(((c & 31) << 6) | (bytes[i++] & 63));
+      else if (c < 240) s += String.fromCharCode(((c & 15) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63));
+      else {
+        const cp = (((c & 7) << 18) | ((bytes[i++] & 63) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63)) - 0x10000;
+        s += String.fromCharCode(0xD800 + (cp >> 10), 0xDC00 + (cp & 0x3FF));
+      }
+    }
+    return s;
+  }
+  return function decryptQrcHex(hex) {
+    if (!hex || hex.length < 16 || hex.length % 16 !== 0) return '';
+    const enc = hexToUint8Array(hex);
+    const dec = new Uint8Array(enc.length);
+    for (let i = 0; i < enc.length; i += 8) CODEC.decryptBlock(enc.subarray(i, i + 8), dec.subarray(i, i + 8));
+    return utf8Decode(inflateZlib(dec));
+  };
+})();
+
+/** 把解密出的 QRC XML 转成 NEKOPLAY 原生逐字歌词 yrc 格式：[行开始,行时长](字开始,字时长,0)字 */
+function qrcToYrc(xml) {
+  if (!xml) return null;
+  const m = /LyricContent="([\s\S]*?)"/.exec(xml);
+  const raw = (m ? m[1] : xml).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const out = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const lm = /^\[(\d+),(\d+)\](.*)$/.exec(line.trim());
+    if (!lm) continue;
+    const body = lm[3];
+    const parts = [];
+    const re = /([^()]*?)\((\d+),(\d+)\)/g;
+    let wm;
+    while ((wm = re.exec(body))) {
+      if (wm[1]) parts.push(`(${wm[2]},${wm[3]},0)${wm[1]}`);
+    }
+    if (parts.length) out.push(`[${lm[1]},${lm[2]}]${parts.join('')}`);
+  }
+  return out.length ? out.join('\n') : null;
+}
+
 nk.register({
   // ---------- 搜索 ----------
   async search(q, type, page) {
@@ -214,8 +565,28 @@ nk.register({
   },
 
   async lyric(mid) {
-    const d = await call('music.musichallSong.PlayLyricInfo', 'GetPlayLyricInfo', { songMid: mid, crypt: 0, ct: 19, cv: 2201, lrc_t: 0, qrc: 0, qrc_t: 0, roma: 0, roma_t: 0, trans: 1, trans_t: 0, type: 1 });
-    return { lrc: b64(d.lyric), tr: b64(d.trans) || null };
+    let yrc = null, tr = null, lrc = '';
+    try {
+      if (!ids[mid]) await details([mid]);
+      const q = await call('music.musichallSong.PlayLyricInfo', 'GetPlayLyricInfo', {
+        songMid: mid, songID: Number(ids[mid] || 0), crypt: 1, ct: 19, cv: 2201,
+        lrc_t: 0, qrc: 1, qrc_t: 0, roma: 0, roma_t: 0, trans: 1, trans_t: 0, type: 1,
+      });
+      if (q.lyric && /^[0-9a-fA-F]+$/.test(q.lyric.slice(0, 32))) {
+        yrc = qrcToYrc(qrcDecrypt(q.lyric));
+      }
+      if (q.trans) {
+        tr = /^[0-9a-fA-F]+$/.test(q.trans.slice(0, 32)) ? (qrcDecrypt(q.trans) || null) : (b64(q.trans) || null);
+      }
+    } catch (e) {}
+    if (!yrc) {
+      const d = await call('music.musichallSong.PlayLyricInfo', 'GetPlayLyricInfo', {
+        songMid: mid, crypt: 0, ct: 19, cv: 2201, lrc_t: 0, qrc: 0, qrc_t: 0, roma: 0, roma_t: 0, trans: 1, trans_t: 0, type: 1,
+      });
+      lrc = b64(d.lyric);
+      if (!tr) tr = b64(d.trans) || null;
+    }
+    return { lrc, tr, yrc };
   },
 
   // ---------- 歌单 / 专辑 / 歌手 ----------
