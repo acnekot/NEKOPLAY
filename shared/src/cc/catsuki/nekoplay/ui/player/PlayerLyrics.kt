@@ -193,7 +193,7 @@ val LocalLyricsActive = compositionLocalOf { true }
                   val sMax = (LyricPref.size + 2f) / LyricPref.size
                   Box(Modifier.layout { m, cs -> val pl = m.measure(cs.copy(minWidth = 0, maxWidth = (cs.maxWidth / sMax).toInt())); layout(pl.width, pl.height) { pl.place(0, 0) } }
                     .graphicsLayer { scaleX = big.value; scaleY = big.value; transformOrigin = TransformOrigin(0f, .5f) }
-                    .press(onLong = { if (line.text.isNotEmpty()) copy(if (showTr && line.tr != null) line.text + "\n" + line.tr else line.text, "歌词") }) { Engine.seek(line.t); backJob?.cancel(); browsing = false; scope.launch { manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessMediumLow))) } }) {
+                    .press(onLong = { if (line.text.isNotEmpty()) copy(if (showTr && line.tr != null) line.text + "\n" + line.tr else line.text, "歌词") }) { Engine.seek((line.t - offset).coerceAtLeast(0)); backJob?.cancel(); browsing = false; scope.launch { manual.animateTo(0f, spring(.9f, Anim.stiff(Spring.StiffnessMediumLow))) } }) {
                     if (line.text.isEmpty()) {
                         InterludeDots(i == cur, line.t, l.getOrNull(i + 1)?.t ?: (line.t + 5000), offset)
                     } else Column {

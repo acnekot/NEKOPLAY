@@ -364,7 +364,7 @@ private class MpvAudio : Audio {
         // 抛异常由 Engine 显示提示，不会自动跳下一首（避免整个队列连环报错）
         if (lib == null || h == null) throw Exception("播放内核 libmpv 加载失败" + if (lib != null) "（mpv_create 失败）" else if (loadErrors.isNotEmpty()) "：" + loadErrors.joinToString("；") else "（程序目录里没有找到 libmpv）")
         if (url == null) throw Exception("桌面版暂无本地缓存")
-        ended = false; opened = true; failed = false; openedAt = System.currentTimeMillis()
+        ended = false; opened = true; failed = false; pos = startMs; openedAt = System.currentTimeMillis()
         lib.mpv_set_property_string(h, "pause", if (autoplay) "no" else "yes")
         val src = if (url.startsWith("file:")) File(java.net.URI(url)).absolutePath else url
         // mpv 0.38 起 loadfile 多了一个「插入位置」参数；Mac 自带的 libmpv 比较老，第三个参数就是选项

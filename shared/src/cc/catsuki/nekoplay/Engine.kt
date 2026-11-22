@@ -148,12 +148,14 @@ object Engine {
             var t0 = System.currentTimeMillis(); var tick = 0
             while (isActive) {
                 if (!audio.isPlaying) {
-                    val p = audio.position; if (position.value != p) position.value = p
+                    if (!audio.idle) { val p = audio.position; if (position.value != p) position.value = p }
                     state.first { it.playing }
                     t0 = System.currentTimeMillis()
                 }
-                val p = audio.position
-                if (audio.isPlaying || position.value != p) position.value = p
+                if (!audio.idle) {
+                    val p = audio.position
+                    if (audio.isPlaying || position.value != p) position.value = p
+                }
                 runCatching { buffered.value = if (state.value.cached) Long.MAX_VALUE else audio.buffered }
                 if (tick % 4 == 0) {
                     if (info.value == null && audio.isPlaying) info.value = audio.info()?.let { if (it.kbps == 0 && localKbps > 0) it.copy(kbps = localKbps) else it }
@@ -211,24 +213,24 @@ object Engine {
                 val hit = cachedLevel(t.id)
                 val dl = Downloads.file(t.id)
                 if (t.src != null) {
-                    audio.open(srcUrl(t.src), "loc_${t.id}", startMs, state.value.want, t); opened = true
+                    audio.open(srcUrl(t.src), "loc_${t.id}", position.value, state.value.want, t); opened = true
                     state.value = state.value.copy(format = t.src.substringAfterLast('.', "").takeIf { it.length in 2..4 }?.lowercase() ?: "", kbps = 0, cached = true)
                 } else if (dl != null) {
                     if (t.durationMs > 0) localKbps = (dl.length() * 8 / t.durationMs).toInt()
-                    audio.open(dl.toURI().toString(), "dl_${t.id}", startMs, state.value.want, t); opened = true
+                    audio.open(dl.toURI().toString(), "dl_${t.id}", position.value, state.value.want, t); opened = true
                     state.value = state.value.copy(format = dl.extension.lowercase(), kbps = 0, cached = true)
                 } else if (hit != null) {
-                    audio.open(null, cacheKey(t.id, hit.first), startMs, state.value.want, t); opened = true
+                    audio.open(null, cacheKey(t.id, hit.first), position.value, state.value.want, t); opened = true
                     state.value = state.value.copy(format = hit.second, kbps = 0, cached = true)
                 } else {
                     val s = Ncm.stream(t.id, q)
                     s.trial?.let { error.value = it }   // 只能放试听：轮到这首真正播放时才提示
-                    audio.open(s.url, cacheKey(t.id, s.level), startMs, state.value.want, t); opened = true
+                    audio.open(s.url, cacheKey(t.id, s.level), position.value, state.value.want, t); opened = true
                     prefs?.edit()?.putString("fmt_${cacheKey(t.id, s.level)}", s.format)?.apply()
                     state.value = state.value.copy(format = s.format, kbps = s.kbps, cached = false)
                 }
                 prefetchNext()
-                Store.saveQueue(state.value.queue, i, startMs)
+                Store.saveQueue(state.value.queue, i, position.value)
             } catch (e: Exception) {
                 state.value = state.value.copy(loading = false)
                 error.value = "无法播放「${t.title}」：${e.message}"
@@ -244,11 +246,11 @@ object Engine {
             else { state.value = s.copy(want = true); if (opened) fadePlay() }   // 还在取地址：等打开时自动播
             return
         }
-        if (audio.idle) load(s.index, true)
+        if (audio.idle) load(s.index, true, position.value)
         else if (audio.isPlaying) { state.value = s.copy(want = false); fadePause() }
         else { state.value = s.copy(want = true); fadePlay() }
     }
-    fun seek(ms: Long) { audio.seek(ms); position.value = ms }
+    fun seek(ms: Long) { val t = ms.coerceAtLeast(0); if (!audio.idle) audio.seek(t); position.value = t }
 
     // ---------- 私人 FM ----------
     private var fmJob: Job? = null
