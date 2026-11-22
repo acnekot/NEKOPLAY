@@ -37,6 +37,9 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     implementation("net.java.dev.jna:jna:5.17.0")
     implementation("io.github.dokar3:quickjs-kt:1.0.18")
+    testImplementation(kotlin("test"))
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     // 内嵌网页：Windows 用系统 WebView2；macOS / Linux 用 JavaFX WebView（只打进这两个系统的安装包）
     val os = System.getProperty("os.name").lowercase()
     val arm = System.getProperty("os.arch") in listOf("aarch64", "arm64")
@@ -76,4 +79,15 @@ compose.desktop {
             linux { iconFile.set(project.file("icons/icon.png")) }
         }
     }
+}
+
+// 单元测试：共用代码（shared/src）跟着桌面模块一起编译，所以测试放在 desktop/src/test。
+// 用一个临时目录当用户目录，测试读写的配置不会碰到本机真正的 NEKOPLAY 数据
+tasks.test {
+    useJUnitPlatform()
+    val home = layout.buildDirectory.dir("test-home").get().asFile
+    doFirst { home.deleteRecursively(); home.mkdirs() }
+    systemProperty("user.home", home.absolutePath)
+    systemProperty("nekoplay.repo", rootDir.parentFile.absolutePath)
+    testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
