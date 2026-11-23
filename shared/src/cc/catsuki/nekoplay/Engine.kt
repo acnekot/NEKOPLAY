@@ -53,8 +53,8 @@ object Engine {
     fun pause() = fadePause()
 
     // ---------- 淡入淡出 ----------
-    /** 暂停 / 播放 / 切歌时音量渐变的时长（毫秒，0 = 关闭） */
-    var fadeMs by androidx.compose.runtime.mutableIntStateOf(300)
+    /** 暂停 / 播放 / 切歌时音量渐变的时长（毫秒，0 = 关闭，默认关闭以避免与无缝播放冲突） */
+    var fadeMs by androidx.compose.runtime.mutableIntStateOf(0)
     private var fadeJob: Job? = null
     private var rampOnPlay = false
     /** 这次 load 已经把新歌交给播放器了 */
@@ -139,7 +139,7 @@ object Engine {
         prefs = Plat.prefs("ui")
         quality = prefs!!.getInt("q2", 3)
         qualityCell = prefs!!.getInt("qCell", -1)
-        fadeMs = prefs!!.getInt("fade", 300)
+        fadeMs = prefs!!.getInt("fade", 0)
         gapless = prefs!!.getBoolean("gapless", true)
         audio.listener = object : Audio.Listener {
             override fun onPlaying(p: Boolean) {
