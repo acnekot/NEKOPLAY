@@ -107,12 +107,30 @@ import java.util.Calendar
         }
         val made = if (net) others.filter { it.mine } else emptyList(); val faved = if (net) others.filter { !it.mine } else emptyList()
         val albums = if (net) subAlbums ?: emptyList() else emptyList()
+        if (albums.isNotEmpty()) item {
+            Column(Modifier.padding(top = 26.dp, bottom = 6.dp)) {
+                TagRow("ALBUMS · 专辑", 12.dp) { T("${two(albums.size)} 张", 13, c.s, mono = true) }
+                Spacer(Modifier.height(14.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(albums, key = { "al" + it.id }) { al ->
+                        Column(Modifier.width(124.dp).press(onLong = {
+                            nav.sheet = SheetSpec(al.name, al.artist, listOf(SheetItem("取消收藏", danger = true) {
+                                Store.run { try { Ncm.subAlbum(al.id, false); nav.toast = "已取消收藏"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "操作失败：${e.message}" } }
+                            }))
+                        }) { nav.push(Page.Album(al.id, al.name, al.pic)) }) {
+                            Cover(al.pic, 124.dp, al.name)
+                            Spacer(Modifier.height(8.dp))
+                            T(al.name, 14, w = 700, lines = 1)
+                            val sub = al.artist.ifEmpty { if (al.size > 0) "${al.size} 首" else "" }
+                            if (sub.isNotEmpty()) T(sub, 12, c.s, lines = 1, modifier = Modifier.padding(top = 2.dp))
+                        }
+                    }
+                }
+            }
+        }
         if (made.isNotEmpty()) item { Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("CREATED", 12.dp) { T("${two(made.size)} 个", 13, c.s, mono = true) } } }
         items(made, key = { it.id }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name) }, p.name, "${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
-        // 收藏：歌单和专辑放在一起
-        if (faved.isNotEmpty() || albums.isNotEmpty()) item { Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("COLLECTED", 12.dp) { T("${two(faved.size + albums.size)} 个", 13, c.s, mono = true) } } }
-        items(albums, key = { "al" + it.id }) { al -> ListRow({ Cover(al.pic, 56.dp, al.name) }, al.name, "专辑 · " + listOf(al.artist, if (al.size > 0) "${al.size} 首" else "").filter { it.isNotEmpty() }.joinToString(" · "),
-            onLong = { nav.sheet = SheetSpec(al.name, al.artist, listOf(SheetItem("取消收藏", danger = true) { Store.run { try { Ncm.subAlbum(al.id, false); nav.toast = "已取消收藏"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "操作失败：${e.message}" } } })) }) { nav.push(Page.Album(al.id, al.name, al.pic)) } }
+        if (faved.isNotEmpty()) item { Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("COLLECTED", 12.dp) { T("${two(faved.size)} 个", 13, c.s, mono = true) } } }
         items(faved, key = { it.id }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name) }, p.name, "歌单 · ${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
         // 没有任何插件：本体只剩本地功能
         if (main == null) item {
