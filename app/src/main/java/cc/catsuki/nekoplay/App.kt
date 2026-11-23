@@ -19,13 +19,20 @@ class App : Application(), SingletonImageLoader.Factory {
         Boot.init()
     }
 
-    // 图片：内存缓存 24MB，磁盘缓存 200MB；网易云图片带浏览器请求头，避免 403
+    // 图片：内存缓存 24MB，磁盘缓存 200MB；网易云 / B 站图片带浏览器请求头，避免 403
     override fun newImageLoader(context: PlatformContext): ImageLoader {
         val client = Ncm.http.newBuilder().addInterceptor { ch ->
             val r = ch.request()
-            ch.proceed(if (r.url.host.endsWith("126.net")) r.newBuilder()
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36")
-                .header("Referer", "https://music.163.com/").build() else r)
+            val h = r.url.host
+            ch.proceed(when {
+                h.endsWith("126.net") -> r.newBuilder()
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36")
+                    .header("Referer", "https://music.163.com/").build()
+                h.endsWith("hdslb.com") || h.endsWith("bilibili.com") -> r.newBuilder()
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36")
+                    .header("Referer", "https://www.bilibili.com/").build()
+                else -> r
+            })
         }.build()
         return ImageLoader.Builder(context)
             .memoryCache { MemoryCache.Builder().maxSizeBytes((if (UiPref.lowMem) 10L else 24L) * 1024 * 1024).build() }

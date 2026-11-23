@@ -371,11 +371,20 @@ private class MpvAudio : Audio {
     private fun num(n: String): Double { val r = DoubleByReference(); return if (lib!!.mpv_get_property(h!!, n, 5, r) >= 0) r.value else 0.0 }
     private fun cmd(vararg a: String) { lib?.mpv_command(h!!, arrayOf(*a, null)) }
 
+    private fun applyStreamHeaders(url: String) {
+        val hh = h ?: return
+        val u = url.lowercase()
+        val isBili = "bilivideo" in u || "hdslb" in u || "bilibili" in u || "akamaized" in u
+        lib?.mpv_set_property_string(hh, "referrer", if (isBili) "https://www.bilibili.com/" else "https://music.163.com/")
+        lib?.mpv_set_property_string(hh, "user-agent", if (isBili) "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" else "Mozilla/5.0")
+    }
+
     override fun open(url: String?, cacheKey: String, startMs: Long, autoplay: Boolean, meta: Track) {
         // 抛异常由 Engine 显示提示，不会自动跳下一首（避免整个队列连环报错）
         if (lib == null || h == null) throw Exception("播放内核 libmpv 加载失败" + if (lib != null) "（mpv_create 失败）" else if (loadErrors.isNotEmpty()) "（可能被安全软件误删，请在保护历史中还原）：" + loadErrors.joinToString("；") else "（程序目录里没有找到 libmpv，可能被安全软件误删）")
         if (url == null) throw Exception("桌面版暂无本地缓存")
         ended = false; opened = true; failed = false; playing = false; resetState = true; pos = startMs; openedAt = System.currentTimeMillis()
+        applyStreamHeaders(url)
         lib.mpv_set_property_string(h, "pause", if (autoplay) "no" else "yes")
         val src = if (url.startsWith("file:")) File(java.net.URI(url)).absolutePath else url
         // mpv 0.38 起 loadfile 多了一个「插入位置」参数；Mac 自带的 libmpv 比较老，第三个参数就是选项
@@ -385,6 +394,7 @@ private class MpvAudio : Audio {
     override fun queueNext(url: String?, cacheKey: String, meta: Track) {
         if (lib == null || h == null || url == null) return
         clearNext()
+        applyStreamHeaders(url)
         cmd("loadfile", if (url.startsWith("file:")) File(java.net.URI(url)).absolutePath else url, "append")
     }
     override fun clearNext() { if (lib == null || h == null) return; val n = str("playlist-count")?.toIntOrNull() ?: 0; for (i in n - 1 downTo 1) cmd("playlist-remove", i.toString()) }

@@ -62,13 +62,20 @@ fun main() {
             }
         }.apply { isDaemon = true; name = "perf-bench" }.start()
     }
-    // 图片：网易云图片带浏览器请求头，避免 403
+    // 图片：网易云 / B 站图片带浏览器请求头，避免 403
     SingletonImageLoader.setSafe { ctx ->
         val client = Ncm.http.newBuilder().addInterceptor { ch ->
             val r = ch.request()
-            ch.proceed(if (r.url.host.endsWith("126.net")) r.newBuilder()
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
-                .header("Referer", "https://music.163.com/").build() else r)
+            val h = r.url.host
+            ch.proceed(when {
+                h.endsWith("126.net") -> r.newBuilder()
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                    .header("Referer", "https://music.163.com/").build()
+                h.endsWith("hdslb.com") || h.endsWith("bilibili.com") -> r.newBuilder()
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                    .header("Referer", "https://www.bilibili.com/").build()
+                else -> r
+            })
         }.build()
         ImageLoader.Builder(ctx)
             .memoryCache { MemoryCache.Builder().maxSizeBytes((when { UiPref.lowMem -> 12L; UiPref.isMac -> 64L; else -> 24L }) * 1024 * 1024).build() }

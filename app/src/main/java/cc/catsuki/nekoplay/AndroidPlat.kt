@@ -283,11 +283,15 @@ class ExoAudio(private val c: Context) : Audio {
     init {
         val lc = DefaultLoadControl.Builder().setBufferDurationsMs(15_000, 25_000, 1_500, 4_000).setTargetBufferBytes(4 * 1024 * 1024).build()
         val http = DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0").setConnectTimeoutMs(10_000).setReadTimeoutMs(15_000)
-        // 地址里带账号密码（WebDAV 音乐 https://用户:密码@主机/…）：去掉并改成 Basic 认证头，HttpURLConnection 自己不认
+        // 地址里带账号密码（WebDAV 音乐 https://用户:密码@主机/…）：去掉并改成 Basic 认证头；B 站 CDN 自动补 Referer 防 403
         val upstream = androidx.media3.datasource.ResolvingDataSource.Factory(http) { spec ->
-            val ui = spec.uri.encodedUserInfo
-            if (ui.isNullOrEmpty()) spec
-            else spec.withUri(spec.uri.buildUpon().encodedAuthority(spec.uri.encodedAuthority!!.substringAfter('@')).build())
+            val host = spec.uri.host.orEmpty().lowercase()
+            val s0 = if ("bilivideo" in host || "hdslb" in host || "bilibili" in host || "akamaized" in host) {
+                spec.withAdditionalHeaders(mapOf("Referer" to "https://www.bilibili.com/", "Origin" to "https://www.bilibili.com"))
+            } else spec
+            val ui = s0.uri.encodedUserInfo
+            if (ui.isNullOrEmpty()) s0
+            else s0.withUri(s0.uri.buildUpon().encodedAuthority(s0.uri.encodedAuthority!!.substringAfter('@')).build())
                 .withAdditionalHeaders(mapOf("Authorization" to "Basic " + android.util.Base64.encodeToString(android.net.Uri.decode(ui).toByteArray(), android.util.Base64.NO_WRAP)))
         }
         val ds = CacheDataSource.Factory().setCache(cache).setUpstreamDataSourceFactory(upstream).setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)

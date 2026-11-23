@@ -2,6 +2,14 @@
   "name": "NEKOPLAY 官方插件",
   "plugins": [
     {
+      "id": "bilibili",
+      "name": "哔哩哔哩",
+      "version": "1.0.0",
+      "author": "NEKOPLAY",
+      "desc": "哔哩哔哩音源（参考 BBPlayer）：WBI 签名、视频/UP主搜索、DASH 音频流（支持 Hi-Res FLAC）、分P专辑、音乐区排行榜、CC 字幕歌词，扫码登录后同步收藏夹与稍后再看",
+      "url": "bilibili.js"
+    },
+    {
       "id": "kugou",
       "name": "酷狗音乐",
       "version": "1.1.0",
