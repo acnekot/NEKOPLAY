@@ -196,13 +196,15 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
         ScrubBar(t.durationMs) { scrub = it }
         Spacer(Modifier.height(2.dp)); TimeRow(t.durationMs, scrub)
         Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
             if (st.fm) SquareBtn(NIcons.trash) { Engine.fmTrash(); nav.toast = "不再推荐这首" } else SquareBtn(NIcons.prev) { Engine.prev() }
-            Spacer(Modifier.width(26.dp))
-            Box(Modifier.press(.96f, true) { Engine.toggle() }.size(48.dp).background(c.p), contentAlignment = Alignment.Center) {
-                if (st.loading && st.want && !st.playing) LoadingDots() else NIcon(if (st.playing) NIcons.pause else NIcons.play, 22.dp, Color.White)
+            Spacer(Modifier.width(10.dp))
+            Row(Modifier.weight(1f).fillMaxHeight().press(.98f, true) { Engine.toggle() }.background(c.p).padding(horizontal = 18.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                T(when { st.loading && st.want && !st.playing -> "加载中"; st.playing -> "暂停"; else -> "播放" }, 15, Color.White, 700, modifier = Modifier.weight(1f))
+                if (st.loading && st.want && !st.playing) LoadingDots() else NIcon(if (st.playing) NIcons.pause else NIcons.play, 20.dp, Color.White)
             }
-            Spacer(Modifier.width(26.dp))
+            Spacer(Modifier.width(10.dp))
             SquareBtn(NIcons.next) { Engine.next() }
         }
         if (row != null) { Spacer(Modifier.height(10.dp)); Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically, content = row) }
