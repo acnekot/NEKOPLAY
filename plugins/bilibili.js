@@ -1,8 +1,8 @@
 // @id bilibili
 // @name 哔哩哔哩
-// @version 1.0.0
+// @version 1.1.0
 // @author NEKOPLAY
-// @desc 哔哩哔哩音源（参考 BBPlayer）：WBI 签名、视频/UP主搜索、DASH 音频流（支持 Hi-Res FLAC）、分P专辑、音乐区排行榜、CC 字幕歌词，扫码登录后同步收藏夹与稍后再看
+// @desc 哔哩哔哩音源（参考 BBPlayer）：WBI 签名、视频/UP主搜索、DASH 音频流（支持 Hi-Res FLAC）、分P与UP主合集、多页加载全部投稿与收藏夹、音乐区排行榜、CC 字幕歌词，扫码登录后同步收藏夹与稍后再看
 // @api 1
 // @search track,artist
 //
@@ -328,8 +328,61 @@ nk.register({
     return { lrc };
   },
 
-  async album(bvid) {
-    const cleanBvid = splitId(bvid).bvid;
+  async album(id) {
+    const s = String(id || '');
+    if (s.startsWith('season:')) {
+      const [, mid, seasonId] = s.split(':');
+      const all = [];
+      let meta = {};
+      for (let pn = 1; pn <= 5; pn++) {
+        const j = await biliGet('https://api.bilibili.com/x/polymer/web-space/seasons_archives_list', {
+          mid, season_id: seasonId, sort_reverse: false, page_num: pn, page_size: 100,
+        }, false);
+        if (!j || j.code !== 0 || !j.data) break;
+        if (pn === 1 && j.data.meta) meta = j.data.meta;
+        const arcs = j.data.archives || [];
+        arcs.forEach(a => all.push(mapArchiveVideo(a)));
+        const total = (j.data.page && j.data.page.total) || all.length;
+        if (arcs.length < 100 || all.length >= total) break;
+      }
+      return {
+        album: {
+          id: s,
+          name: cleanText(meta.name || '合集'),
+          cover: pic(meta.cover || (all[0] && all[0].cover)),
+          artist: '',
+          year: '',
+          count: all.length,
+        },
+        tracks: all,
+      };
+    }
+    if (s.startsWith('series:')) {
+      const [, mid, seriesId] = s.split(':');
+      const all = [];
+      for (let pn = 1; pn <= 5; pn++) {
+        const j = await biliGet('https://api.bilibili.com/x/series/archives', {
+          mid, series_id: seriesId, only_normal: true, sort: 'desc', pn, ps: 100,
+        }, false);
+        if (!j || j.code !== 0 || !j.data) break;
+        const arcs = j.data.archives || [];
+        arcs.forEach(a => all.push(mapArchiveVideo(a)));
+        const total = (j.data.page && j.data.page.total) || all.length;
+        if (arcs.length < 100 || all.length >= total) break;
+      }
+      return {
+        album: {
+          id: s,
+          name: '视频系列',
+          cover: pic(all[0] && all[0].cover),
+          artist: '',
+          year: '',
+          count: all.length,
+        },
+        tracks: all,
+      };
+    }
+    const cleanBvid = splitId(s).bvid;
     const j = await biliGet('https://api.bilibili.com/x/web-interface/view', { bvid: cleanBvid }, false);
     if (!j || j.code !== 0 || !j.data) throw new Error((j && j.message) || '获取视频详情失败');
     const v = j.data;
@@ -362,28 +415,71 @@ nk.register({
   },
 
   async artist(mid) {
-    const [infoRes, arcRes] = await Promise.all([
-      biliGet('https://api.bilibili.com/x/space/wbi/acc/info', { mid }, true).catch(() => null),
-      biliGet('https://api.bilibili.com/x/space/wbi/arc/search', { mid, pn: 1, ps: 30, order: 'pubdate' }, true),
-    ]);
+    const infoRes = await biliGet('https://api.bilibili.com/x/space/wbi/acc/info', { mid }, true).catch(() => null);
     const info = (infoRes && infoRes.code === 0 && infoRes.data) || {};
-    const vlist = (arcRes && arcRes.data && arcRes.data.list && arcRes.data.list.vlist) || [];
-    const tracks = vlist.map(v => ({
-      id: v.bvid,
-      title: cleanText(v.title),
-      artist: cleanText(info.name || v.author || 'UP主'),
-      album: 'UP主投稿',
-      albumId: v.bvid,
-      duration: parseDur(v.length),
-      cover: pic(v.pic),
-      artists: [{ id: String(mid), name: cleanText(info.name || v.author || 'UP主') }],
-    }));
+    const all = [];
+    let total = 0;
+    // 分页拉取 UP 主投稿（每页 50 条，最多拉 6 页共 300 条）
+    for (let pn = 1; pn <= 6; pn++) {
+      const arcRes = await biliGet('https://api.bilibili.com/x/space/wbi/arc/search', { mid, pn, ps: 50, order: 'pubdate' }, true).catch(() => null);
+      if (!arcRes || arcRes.code !== 0 || !arcRes.data) break;
+      const vlist = (arcRes.data.list && arcRes.data.list.vlist) || [];
+      if (arcRes.data.page && arcRes.data.page.count) total = arcRes.data.page.count;
+      vlist.forEach(v => {
+        const upName = cleanText(info.name || v.author || 'UP主');
+        all.push({
+          id: v.bvid,
+          title: cleanText(v.title),
+          artist: upName,
+          album: 'UP主投稿',
+          albumId: v.bvid,
+          duration: parseDur(v.length),
+          cover: pic(v.pic),
+          artists: [{ id: String(mid), name: upName }],
+        });
+      });
+      if (vlist.length < 50 || (total > 0 && all.length >= total)) break;
+    }
     return {
-      name: cleanText(info.name || (vlist[0] && vlist[0].author) || ('UP主 ' + mid)),
+      name: cleanText(info.name || (all[0] && all[0].artist) || ('UP主 ' + mid)),
       cover: pic(info.face),
       desc: cleanText(info.sign || ''),
-      tracks,
+      songs: total || all.length,
+      tracks: all,
     };
+  },
+
+  async artistAlbums(mid, page) {
+    const pn = page || 1;
+    const j = await biliGet('https://api.bilibili.com/x/polymer/web-space/seasons_series_list', {
+      mid, page_num: pn, page_size: 20,
+    }, false).catch(() => null);
+    const box = j && j.code === 0 && j.data && j.data.items_lists;
+    if (!box) return [];
+    const out = [];
+    (box.seasons_list || []).forEach(s => {
+      const m = s.meta || {};
+      if (m.season_id) {
+        out.push({
+          id: `season:${mid}:${m.season_id}`,
+          name: cleanText(m.name || '合集'),
+          cover: pic(m.cover),
+          count: m.total || 0,
+        });
+      }
+    });
+    (box.series_list || []).forEach(s => {
+      const m = s.meta || {};
+      if (m.series_id) {
+        out.push({
+          id: `series:${mid}:${m.series_id}`,
+          name: cleanText(m.name || '视频列表'),
+          cover: pic((s.archives && s.archives[0] && s.archives[0].pic) || null),
+          count: m.total || 0,
+        });
+      }
+    });
+    return out;
   },
 
   async toplists() {
@@ -418,30 +514,39 @@ nk.register({
     }
     if (s.startsWith('fav:')) {
       const mediaId = s.slice(4);
-      const j = await biliGet('https://api.bilibili.com/x/v3/fav/resource/list', {
-        media_id: mediaId,
-        pn: 1,
-        ps: 40,
-        platform: 'web',
-      }, false);
-      if (!j || j.code !== 0) throw new Error((j && j.message) || '获取收藏夹内容失败');
-      return ((j.data && j.data.medias) || [])
-        .filter(m => m && m.attr !== 9 && (m.bvid || m.bv_id))
-        .map(m => {
-          const bvid = m.bvid || m.bv_id;
-          const up = m.upper || {};
-          const artist = cleanText(up.name || 'UP主');
-          return {
-            id: bvid,
-            title: cleanText(m.title),
-            artist,
-            album: cleanText((j.data.info && j.data.info.title) || 'B 站收藏夹'),
-            albumId: bvid,
-            duration: (m.duration || 0) * 1000,
-            cover: pic(m.cover),
-            artists: up.mid ? [{ id: String(up.mid), name: artist }] : [],
-          };
-        });
+      const out = [];
+      for (let pn = 1; pn <= 10; pn++) {
+        const j = await biliGet('https://api.bilibili.com/x/v3/fav/resource/list', {
+          media_id: mediaId,
+          pn,
+          ps: 40,
+          platform: 'web',
+        }, false);
+        if (!j || j.code !== 0 || !j.data) {
+          if (pn === 1) throw new Error((j && j.message) || '获取收藏夹内容失败');
+          break;
+        }
+        const title = cleanText((j.data.info && j.data.info.title) || 'B 站收藏夹');
+        ((j.data.medias) || [])
+          .filter(m => m && m.attr !== 9 && (m.bvid || m.bv_id))
+          .forEach(m => {
+            const bvid = m.bvid || m.bv_id;
+            const up = m.upper || {};
+            const artist = cleanText(up.name || 'UP主');
+            out.push({
+              id: bvid,
+              title: cleanText(m.title),
+              artist,
+              album: title,
+              albumId: bvid,
+              duration: (m.duration || 0) * 1000,
+              cover: pic(m.cover),
+              artists: up.mid ? [{ id: String(up.mid), name: artist }] : [],
+            });
+          });
+        if (!j.data.has_more) break;
+      }
+      return out;
     }
     return [];
   },
