@@ -185,9 +185,11 @@ val LocalCompactAction = compositionLocalOf { false }
     }
 
 @Composable fun NSwitch(on: Boolean, onChange: (Boolean) -> Unit) {
+    val curOn by rememberUpdatedState(on)
+    val curChange by rememberUpdatedState(onChange)
     val x by animateDpAsState(if (on) 23.dp else 3.dp, if (AnimStyle.osu) tween(220, easing = OsuOut) else spring(1f, Anim.stiff(Spring.StiffnessMedium)), label = "sw")
     val bg by androidx.compose.animation.animateColorAsState(if (on) c.p else Color.Transparent, tween(180), label = "swb")
-    Box(Modifier.size(52.dp, 44.dp).pointerInput(on) { detectTapGestures { onChange(!on) } }, contentAlignment = Alignment.Center) {
+    Box(Modifier.size(52.dp, 44.dp).pointerInput(Unit) { detectTapGestures { curChange(!curOn) } }, contentAlignment = Alignment.Center) {
         Box(Modifier.size(44.dp, 24.dp).background(bg).nbf(1.dp, c.k)) {
             Box(Modifier.offset(x = x, y = 3.dp).size(16.dp).background(if (on) Color.White else c.k))
         }
