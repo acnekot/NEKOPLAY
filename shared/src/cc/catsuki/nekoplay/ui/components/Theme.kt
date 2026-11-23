@@ -103,7 +103,8 @@ object ThemePref {
     val dark = when (ThemePref.mode) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
     // 莫奈取色抽到独立节点，避免播放状态变化触发整个 NekoTheme 顶层重组
     MonetCoverWatcher()
-    val base = if (dark) Dark else Light
+    val customPal = ThemeStore.activePal()
+    val base = customPal ?: if (dark) Dark else Light
     // 全局缩放：严禁在 NekoTheme 顶层直接读取 LocalWindowInfo.containerSize（拖窗每动 1px 都会触发整棵 App 重组导致掉帧！）
     // 改在 LaunchedEffect 里用 snapshotFlow 采样 + 250ms 防抖，拖窗全程 NekoTheme 0 重组
     val d = androidx.compose.ui.platform.LocalDensity.current
@@ -124,7 +125,8 @@ object ThemePref {
     }
     val finalScale = (UiPref.scale / 100f * settledAuto).coerceIn(.6f, 1.6f)
     val dens = remember(d, finalScale) { androidx.compose.ui.unit.Density(d.density * finalScale, d.fontScale) }
-    CompositionLocalProvider(LocalPal provides animPal(if (Monet.on) Monet.apply(base) else base), androidx.compose.ui.platform.LocalDensity provides dens, content = content)
+    val resolvedPal = if (customPal != null) base else if (Monet.on) Monet.apply(base) else base
+    CompositionLocalProvider(LocalPal provides animPal(resolvedPal), androidx.compose.ui.platform.LocalDensity provides dens, content = content)
 }
 
 /** 配色切换（换歌跟封面变色）时背景层和主色做一个渐变 */
@@ -137,7 +139,7 @@ object ThemePref {
 /** 背景：深色纯平 #2D333B，浅色 165° 渐变 + 两个淡光斑（drawWithCache 缓存 Brush，避免每帧重算渐变） */
 @Composable fun Modifier.backdrop(): Modifier {
     val p = c
-    if (Monet.on) return if (p.dark) background(p.page) else drawWithCache {
+    if (ThemeStore.activePal() != null || Monet.on) return if (p.dark) background(p.page) else drawWithCache {
         val bg = Brush.linearGradient(listOf(p.bar, p.page, p.sheet), Offset(size.width * .37f, 0f), Offset(size.width * .63f, size.height))
         onDrawBehind { drawRect(bg) }
     }
