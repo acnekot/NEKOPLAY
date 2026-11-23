@@ -121,8 +121,9 @@ object FolderPick { var req by mutableStateOf<Pair<String?, (String?) -> Unit>?>
     }
     fun copy() { val t = sel?.absolutePath ?: dir.absolutePath; copyText(t); toast = "已复制路径" }
     var pathText by remember(dir) { mutableStateOf(dir.absolutePath) }
+    val curDismiss by rememberUpdatedState(onDismiss)
     Popup(alignment = Alignment.Center, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
-        Box(Modifier.fillMaxSize().background(Color(0x66000000)).pointerInput(Unit) { detectTapGestures { onDismiss() } }, contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().background(Color(0x66000000)).pointerInput(Unit) { detectTapGestures { curDismiss() } }, contentAlignment = Alignment.Center) {
             Box(Modifier.fillMaxSize(.86f).widthIn(max = 1100.dp)) {
             Column(Modifier.fillMaxSize().background(p.sheet).border(1.dp, p.k).pointerInput(Unit) { detectTapGestures { } }
                 // Ctrl+C 复制选中图片（没选就是当前文件夹）的路径；Ctrl+V 粘贴资源管理器里复制的文件或路径
@@ -223,7 +224,9 @@ object FolderPick { var req by mutableStateOf<Pair<String?, (String?) -> Unit>?>
 
 @Composable private fun PickCell(f: File, selected: Boolean, onClick: () -> Unit, onDouble: () -> Unit) {
     val p = c
-    Column(Modifier.pointerInput(f) { detectTapGestures(onTap = { onClick() }, onDoubleTap = { onDouble() }) }
+    val curClick by rememberUpdatedState(onClick)
+    val curDouble by rememberUpdatedState(onDouble)
+    Column(Modifier.pointerInput(f) { detectTapGestures(onTap = { curClick() }, onDoubleTap = { curDouble() }) }
         .background(if (selected) p.hl else Color.Transparent).border(if (selected) 2.dp else 0.dp, if (selected) p.p else Color.Transparent).padding(6.dp)) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f).background(p.ph), contentAlignment = Alignment.Center) {
             if (f.isDirectory) NIcon(NIcons.folder, 40.dp, p.s)

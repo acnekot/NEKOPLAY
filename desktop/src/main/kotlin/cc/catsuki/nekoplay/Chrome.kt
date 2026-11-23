@@ -116,10 +116,11 @@ import java.awt.MouseInfo
 @Composable private fun CaptionClick(hoverFg: Color? = null, onClick: () -> Unit, icon: DrawScope.(Color) -> Unit) {
     val src = remember { MutableInteractionSource() }
     val hover by src.collectIsHoveredAsState()
+    val click by rememberUpdatedState(onClick)
     // 细线图标、无底色；悬停时变成主题色（关闭键变红）
     val fg = if (hover) hoverFg ?: c.p else c.k
     Box(Modifier.width(48.dp).fillMaxHeight().hoverable(src)
-        .pointerInput(Unit) { detectTapGestures { onClick() } }.drawBehind { icon(fg) })
+        .pointerInput(Unit) { detectTapGestures { click() } }.drawBehind { icon(fg) })
 }
 
 private fun DrawScope.line(col: Color, x1: Float, y1: Float, x2: Float, y2: Float) {

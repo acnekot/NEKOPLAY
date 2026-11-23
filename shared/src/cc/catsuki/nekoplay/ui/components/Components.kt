@@ -274,8 +274,9 @@ val LocalCompactAction = compositionLocalOf { false }
 @Composable fun ScrubBar(durMs: Long, hit: Dp = 16.dp, interactive: Boolean = true, onScrub: (Float?) -> Unit = {}) {
     val pos by Engine.position.collectAsState()
     val buf by Engine.buffered.collectAsState()
-    var drag by remember { mutableStateOf<Float?>(null) }
     val dur = durMs.coerceAtLeast(1)
+    var drag by remember(dur) { mutableStateOf<Float?>(null) }
+    val curScrub by rememberUpdatedState(onScrub)
     // 和 Flutter 版 ScrubBar 完全一致：
     // 进度线宽度永远用 150ms 匀速动画追到新位置（拖动、播放、跳转都一样，这就是拖尾）；
     // 方块滑块直接在手指位置，只做 150ms 的缩放（0.4→1）和淡入淡出
@@ -292,8 +293,8 @@ val LocalCompactAction = compositionLocalOf { false }
                 val e = awaitPointerEvent()
                 val ch = e.changes.firstOrNull() ?: continue
                 val f = (ch.position.x / size.width).coerceIn(0f, 1f)
-                if (ch.pressed) { drag = f; onScrub(f); ch.consume() }
-                else if (drag != null) { Engine.seek((drag!! * dur).toLong()); drag = null; onScrub(null) }
+                if (ch.pressed) { drag = f; curScrub(f); ch.consume() }
+                else if (drag != null) { Engine.seek((drag!! * dur).toLong()); drag = null; curScrub(null) }
             }
         }
     }).drawBehind {

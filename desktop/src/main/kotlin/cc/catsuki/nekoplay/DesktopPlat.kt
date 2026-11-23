@@ -228,7 +228,13 @@ class DesktopPlat : PlatImpl {
 /** 简单的 properties 文件存储 */
 private class FileKV(val f: File) : KV {
     private val p = Properties().apply { if (f.exists()) runCatching { f.inputStream().use { load(it) } } }
-    private fun save() = synchronized(p) { runCatching { f.outputStream().use { p.store(it, null) } } }
+    private fun save() = synchronized(p) {
+        runCatching {
+            val tmp = File(f.parentFile, "${f.name}.tmp")
+            tmp.outputStream().use { p.store(it, null) }
+            java.nio.file.Files.move(tmp.toPath(), f.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
     override fun getString(k: String, d: String?) = p.getProperty(k) ?: d
     override fun all(): Map<String, Any?> = synchronized(p) { p.stringPropertyNames().associateWith { p.getProperty(it) } }
     override fun getInt(k: String, d: Int) = p.getProperty(k)?.toIntOrNull() ?: d

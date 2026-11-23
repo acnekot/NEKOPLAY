@@ -90,13 +90,15 @@ import kotlin.math.roundToInt
 /** 竖向滑块（均衡器用）：中线是 0dB，往上加、往下减 */
 @Composable fun VSlider(value: Float, range: ClosedFloatingPointRange<Float>, modifier: Modifier, onDone: () -> Unit, onChange: (Float) -> Unit) {
     val p = c
+    val curChange = androidx.compose.runtime.rememberUpdatedState(onChange)
+    val curDone = androidx.compose.runtime.rememberUpdatedState(onDone)
     val f = ((value - range.start) / (range.endInclusive - range.start)).coerceIn(0f, 1f)
     Box(modifier.width(32.dp).pointerInput(range) {
         awaitPointerEventScope {
             while (true) {
                 val e = awaitPointerEvent(); val ch = e.changes.firstOrNull() ?: continue
-                if (ch.pressed) { val y = 1f - (ch.position.y / size.height).coerceIn(0f, 1f); onChange(range.start + y * (range.endInclusive - range.start)); ch.consume() }
-                else if (ch.previousPressed) onDone()
+                if (ch.pressed) { val y = 1f - (ch.position.y / size.height).coerceIn(0f, 1f); curChange.value(range.start + y * (range.endInclusive - range.start)); ch.consume() }
+                else if (ch.previousPressed) curDone.value()
             }
         }
     }.drawBehind {

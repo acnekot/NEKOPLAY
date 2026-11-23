@@ -110,7 +110,7 @@ fun main() {
             onDispose { SingleInstance.onWake = null }
         }
         if (UiPref.tray && trayOk) NekoTrayHost(appIcon, show, quit)
-        val close = { if (UiPref.tray && trayOk) { visible = false; Thread { Thread.sleep(1500); System.gc(); WinMem.trim() }.start() } else quit() }
+        val close = { if (UiPref.tray && trayOk) { visible = false; Thread { Thread.sleep(1500); System.gc(); WinMem.trim() }.apply { isDaemon = true }.start() } else quit() }
         if (DeskLyric.on && Features.on("desk")) DeskLyricWindow(appIcon)
         // 无边框窗口：标题栏、最小化 / 最大化 / 关闭按钮和拖边改大小都自己画
         // macOS 120fps 优化：永远使用不透明窗口（transparent = false），彻底避开透明合成与 WindowServer 每帧重算动态阴影；
