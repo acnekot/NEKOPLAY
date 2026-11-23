@@ -36,6 +36,7 @@ import okio.Path.Companion.toOkioPath
 
 fun main() {
     if (!SingleInstance.acquire()) kotlin.system.exitProcess(0)
+    ClickThrough.setAppId()
     Perf.markLaunch()
     Plat.impl = DesktopPlat()
     // 渲染方式：默认显卡（Direct3D）。软件渲染省约 170MB 内存，但实测 175% 缩放下主页约 30 帧、开了背景模糊的播放页只有约 9 帧，
@@ -108,9 +109,9 @@ fun main() {
             SingleInstance.onWake = { showRef() }
             onDispose { SingleInstance.onWake = null }
         }
-        if (UiPref.tray && trayOk) NekoTrayHost(show, quit)
+        if (UiPref.tray && trayOk) NekoTrayHost(appIcon, show, quit)
         val close = { if (UiPref.tray && trayOk) { visible = false; Thread { Thread.sleep(1500); System.gc(); WinMem.trim() }.start() } else quit() }
-        if (DeskLyric.on && Features.on("desk")) DeskLyricWindow()
+        if (DeskLyric.on && Features.on("desk")) DeskLyricWindow(appIcon)
         // 无边框窗口：标题栏、最小化 / 最大化 / 关闭按钮和拖边改大小都自己画
         // macOS 120fps 优化：永远使用不透明窗口（transparent = false），彻底避开透明合成与 WindowServer 每帧重算动态阴影；
         // 开了「窗口圆角」时用 macOS 原生全内容无标题栏窗口（apple.awt.fullWindowContent）+ 隐藏原生红黄绿三键，零开销获得系统硬件圆角和阴影
@@ -166,14 +167,15 @@ fun main() {
 /** 桌面歌词悬浮窗：透明、置顶、不抢焦点；没锁时可以拖动，锁定后鼠标点击穿透（Windows） */
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @androidx.compose.runtime.Composable
-private fun androidx.compose.ui.window.ApplicationScope.DeskLyricWindow() {
+private fun androidx.compose.ui.window.ApplicationScope.DeskLyricWindow(appIcon: androidx.compose.ui.graphics.painter.Painter) {
     val ws = rememberWindowState(size = DpSize(860.dp, 140.dp),
         position = if (DeskLyric.x >= 0) androidx.compose.ui.window.WindowPosition(DeskLyric.x.dp, DeskLyric.y.dp) else WinFrame.usable().let { u ->
             // 默认放在屏幕下方偏上一点，避开最大化窗口底部的播放控制
             androidx.compose.ui.window.WindowPosition((u.x + (u.width - 860) / 2).dp, (u.y + u.height - 140 - 150).dp)
         })
-    Window(onCloseRequest = { DeskLyric.on = false; DeskLyric.save() }, state = ws, title = "NEKOPLAY Lyrics", undecorated = true, transparent = true,
+    Window(onCloseRequest = { DeskLyric.on = false; DeskLyric.save() }, state = ws, title = "NEKOPLAY Lyrics", icon = appIcon, undecorated = true, transparent = true,
         alwaysOnTop = true, focusable = false, resizable = false) {
+        androidx.compose.runtime.LaunchedEffect(Unit) { ClickThrough.hideFromTaskbar(window) }
         androidx.compose.runtime.LaunchedEffect(DeskLyric.locked) { ClickThrough.set(window, DeskLyric.locked) }
         androidx.compose.runtime.LaunchedEffect(Unit) {
             androidx.compose.runtime.snapshotFlow { ws.position }.collect { p ->
@@ -234,15 +236,34 @@ object MacWindow {
     }
 }
 
-/** Windows：给窗口加 / 去掉 WS_EX_TRANSPARENT，让鼠标点击穿过歌词落到下面的窗口 */
+/** Windows：点击穿透、隐藏辅助窗口任务栏图标（WS_EX_TOOLWINDOW）与绑定进程 AppUserModelID */
 object ClickThrough {
     private interface U32 : com.sun.jna.Library {
         fun GetWindowLongW(h: com.sun.jna.Pointer, i: Int): Int
         fun SetWindowLongW(h: com.sun.jna.Pointer, i: Int, v: Int): Int
     }
+    private interface Shell32 : com.sun.jna.Library {
+        fun SetCurrentProcessExplicitAppUserModelID(appId: com.sun.jna.WString): Int
+    }
+    private val isWin = System.getProperty("os.name").orEmpty().lowercase().contains("win")
     private val u32 by lazy { runCatching { com.sun.jna.Native.load("user32", U32::class.java) }.getOrNull() }
+    fun setAppId() {
+        if (!isWin) return
+        runCatching { com.sun.jna.Native.load("shell32", Shell32::class.java).SetCurrentProcessExplicitAppUserModelID(com.sun.jna.WString("cc.catsuki.nekoplay")) }
+    }
+    /** 标记为工具窗口：彻底隐藏桌面歌词、托盘右键菜单在任务栏 / Alt+Tab 里的独立图标（避免闪出默认 Java 图标） */
+    fun hideFromTaskbar(w: java.awt.Window) {
+        runCatching { w.type = java.awt.Window.Type.UTILITY }
+        if (!isWin) return
+        runCatching {
+            val h = com.sun.jna.Native.getWindowPointer(w) ?: return
+            val u = u32 ?: return
+            val ex = u.GetWindowLongW(h, -20)
+            u.SetWindowLongW(h, -20, (ex or 0x80) and 0x40000.inv())
+        }
+    }
     fun set(w: java.awt.Window, on: Boolean) {
-        if (!System.getProperty("os.name").lowercase().contains("win")) return
+        if (!isWin) return
         runCatching {
             val h = com.sun.jna.Native.getWindowPointer(w) ?: return
             val u = u32 ?: return
@@ -255,14 +276,14 @@ object ClickThrough {
 
 /** 把 Engine.state 订阅隔离开，避免播放状态变化触发整个 application 顶层重组 */
 @Composable
-private fun NekoTrayHost(show: () -> Unit, quit: () -> Unit) {
+private fun NekoTrayHost(appIcon: androidx.compose.ui.graphics.painter.Painter, show: () -> Unit, quit: () -> Unit) {
     val st by Engine.state.collectAsState()
-    NekoTray(st.playing, st.current?.let { "${it.title} - ${it.artist}" } ?: "NEKOPLAY", show, quit)
+    NekoTray(appIcon, st.playing, st.current?.let { "${it.title} - ${it.artist}" } ?: "NEKOPLAY", show, quit)
 }
 
 /** 系统托盘：图标 + 右键菜单（中文字体），双击 / 单击图标打开窗口 */
 @Composable
-private fun NekoTray(playing: Boolean, tip: String, show: () -> Unit, quit: () -> Unit) {
+private fun NekoTray(appIcon: androidx.compose.ui.graphics.painter.Painter, playing: Boolean, tip: String, show: () -> Unit, quit: () -> Unit) {
     // 托盘菜单自己用 Compose 画：AWT 的原生菜单在部分 Windows 上中文显示成方块，换字体也没用
     val img = remember { javax.imageio.ImageIO.read(Thread.currentThread().contextClassLoader.getResourceAsStream("icon.png")) }
     val showS by rememberUpdatedState(show); val quitS by rememberUpdatedState(quit)
@@ -285,14 +306,14 @@ private fun NekoTray(playing: Boolean, tip: String, show: () -> Unit, quit: () -
         runCatching { java.awt.SystemTray.getSystemTray().add(icon) }
         onDispose { runCatching { java.awt.SystemTray.getSystemTray().remove(icon) } }
     }
-    TrayState.menuAt?.let { at -> TrayMenu(at, playing, { TrayState.menuAt = null }, showS, quitS) }
+    TrayState.menuAt?.let { at -> TrayMenu(appIcon, at, playing, { TrayState.menuAt = null }, showS, quitS) }
 }
 
 object TrayState { var menuAt by mutableStateOf<java.awt.Point?>(null) }
 
 /** 托盘右键菜单：BenchLab 风格的小窗口，出现在鼠标旁边，点别处就关 */
 @Composable
-private fun TrayMenu(at: java.awt.Point, playing: Boolean, close: () -> Unit, show: () -> Unit, quit: () -> Unit) {
+private fun TrayMenu(appIcon: androidx.compose.ui.graphics.painter.Painter, at: java.awt.Point, playing: Boolean, close: () -> Unit, show: () -> Unit, quit: () -> Unit) {
     val items = buildList<Pair<String, (() -> Unit)?>> {
         add("显示窗口" to show); add("" to null)
         add((if (playing) "暂停" else "播放") to { Engine.toggle() })
@@ -304,14 +325,15 @@ private fun TrayMenu(at: java.awt.Point, playing: Boolean, close: () -> Unit, sh
         }
         add("退出" to quit)
     }
-    val w = 180; val h = items.sumOf { (if (it.second == null) 9 else 36).toInt() } + 8
+    val w = 180; val h = items.sumOf { if (it.second == null) 9 else 36 } + 8
     // 放在鼠标旁边，不超出屏幕可用区域（任务栏在上 / 下 / 左 / 右都行）
     val u = WinFrame.usable(at)
     val x = (at.x - w).coerceIn(u.x, (u.x + u.width - w).coerceAtLeast(u.x))
     val y = (if (at.y - h >= u.y) at.y - h else at.y).coerceIn(u.y, (u.y + u.height - h).coerceAtLeast(u.y))
     val ws = rememberWindowState(size = DpSize(w.dp, h.dp), position = androidx.compose.ui.window.WindowPosition(x.dp, y.dp))
-    Window(onCloseRequest = close, state = ws, title = "NEKOPLAY", undecorated = true, resizable = false, alwaysOnTop = true) {
+    Window(onCloseRequest = close, state = ws, title = "NEKOPLAY", icon = appIcon, undecorated = true, resizable = false, alwaysOnTop = true) {
         LaunchedEffect(Unit) {
+            ClickThrough.hideFromTaskbar(window)
             window.toFront(); window.requestFocus()
             window.addWindowFocusListener(object : java.awt.event.WindowFocusListener {
                 override fun windowGainedFocus(e: java.awt.event.WindowEvent?) {}

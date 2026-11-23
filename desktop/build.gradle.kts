@@ -79,8 +79,22 @@ compose.desktop {
             modules("jdk.unsupported", "jdk.management", "jdk.jsobject", "jdk.xml.dom") // jdk.management：性能浮窗读 CPU
             // 播放内核 libmpv：打包时放进 resources/<系统>/（由 GitHub Actions 下载），装好就能直接播放
             appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
-            windows { packageVersion = installerVersion; menuGroup = "NEKOPLAY"; shortcut = true; upgradeUuid = "8f2a6c3e-5b1d-4e7a-9c40-3d2f1a6b7e91"; iconFile.set(project.file("icons/icon.ico")) }
-            macOS { packageVersion = installerVersion; dmgPackageVersion = installerVersion; iconFile.set(project.file("icons/icon.icns")) }
+            windows {
+                packageVersion = installerVersion
+                menu = true
+                menuGroup = "NEKOPLAY"
+                shortcut = true
+                dirChooser = true
+                perUserInstall = true
+                upgradeUuid = "8f2a6c3e-5b1d-4e7a-9c40-3d2f1a6b7e91"
+                iconFile.set(project.file("icons/icon.ico"))
+            }
+            macOS {
+                packageVersion = installerVersion
+                dmgPackageVersion = installerVersion
+                bundleID = "cc.catsuki.nekoplay"
+                iconFile.set(project.file("icons/icon.icns"))
+            }
             linux { iconFile.set(project.file("icons/icon.png")) }
         }
     }
