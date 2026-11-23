@@ -35,6 +35,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import okio.Path.Companion.toOkioPath
 
 fun main() {
+    if (!SingleInstance.acquire()) kotlin.system.exitProcess(0)
     Perf.markLaunch()
     Plat.impl = DesktopPlat()
     // 渲染方式：默认显卡（Direct3D）。软件渲染省约 170MB 内存，但实测 175% 缩放下主页约 30 帧、开了背景模糊的播放页只有约 9 帧，
@@ -78,7 +79,7 @@ fun main() {
     DiscordRpc.start()
     application {
         val state = rememberWindowState(size = DpSize(w.dp, h.dp), position = if (System.getenv("NEKOPLAY_W") != null) androidx.compose.ui.window.WindowPosition(0.dp, 0.dp) else androidx.compose.ui.window.WindowPosition.PlatformDefault)
-        val quit = { Engine.savePosition(); exitApplication() }
+        val quit = { Engine.savePosition(); SingleInstance.release(); exitApplication() }
         var visible by remember { mutableStateOf(true) }
         // 应用图标（音符猫）：窗口、任务栏和托盘共用
         val appIcon = remember {
@@ -89,7 +90,24 @@ fun main() {
         val trayOk = remember { runCatching { java.awt.SystemTray.isSupported() }.getOrDefault(false) }
         // 托盘：自己用 AWT 建（Compose 的 Tray 菜单在 Windows 上中文会显示成方块，这里给菜单指定中文字体）
         val winRef = remember { arrayOfNulls<java.awt.Window>(1) }
-        val show = { visible = true; state.isMinimized = false; winRef[0]?.toFront(); Unit }
+        val show = {
+            visible = true
+            state.isMinimized = false
+            winRef[0]?.let { win ->
+                win.toFront()
+                win.requestFocus()
+                if (System.getProperty("os.name").orEmpty().lowercase().contains("win")) {
+                    win.isAlwaysOnTop = true
+                    win.isAlwaysOnTop = false
+                }
+            }
+            Unit
+        }
+        val showRef by rememberUpdatedState(show)
+        DisposableEffect(Unit) {
+            SingleInstance.onWake = { showRef() }
+            onDispose { SingleInstance.onWake = null }
+        }
         if (UiPref.tray && trayOk) NekoTrayHost(show, quit)
         val close = { if (UiPref.tray && trayOk) { visible = false; Thread { Thread.sleep(1500); System.gc(); WinMem.trim() }.start() } else quit() }
         if (DeskLyric.on && Features.on("desk")) DeskLyricWindow()
