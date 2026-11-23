@@ -69,7 +69,7 @@ compose.desktop {
             "-Dskiko.gpu.resourceCacheLimit=67108864")
         else listOf("-Xms24m", "-Xmx256m", "-XX:+UseSerialGC", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=25",
             "-XX:ReservedCodeCacheSize=48m", "-XX:MaxMetaspaceSize=96m", "-Xss512k",
-            "-Dskiko.vsync.enabled=true")
+            "-Djna.encoding=UTF-8", "-Dskiko.vsync.enabled=true")
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb) // AppImage 和 dmg 共用输出目录会冲突；免安装版另外打 zip
             packageName = "NEKOPLAY"

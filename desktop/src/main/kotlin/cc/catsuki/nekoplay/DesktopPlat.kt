@@ -292,7 +292,7 @@ private class MpvAudio : Audio {
             ?.listFiles { f -> f.name.startsWith("libmpv") && (f.name.endsWith(".dll") || f.name.endsWith(".dylib") || f.name.contains(".so")) }
             ?.sortedBy { it.name.length }?.map { it.absolutePath } ?: emptyList()
         (bundled + listOf("mpv", "libmpv-2", "mpv-2", "libmpv", "mpv.2")).firstNotNullOfOrNull { n ->
-            runCatching { Native.load(n, Mpv::class.java) }.onFailure { e -> if (loadErrors.size < 3 && (n.contains('/') || n.contains('\\'))) loadErrors += "${File(n).name}: ${e.message?.lineSequence()?.firstOrNull()}" }.getOrNull()
+            runCatching { Native.load(n, Mpv::class.java, mapOf(Library.OPTION_STRING_ENCODING to "UTF-8")) }.onFailure { e -> if (loadErrors.size < 3 && (n.contains('/') || n.contains('\\'))) loadErrors += "${File(n).name}: ${e.message?.lineSequence()?.firstOrNull()}" }.getOrNull()
         }
     }
     private val h: Pointer? = lib?.mpv_create()?.also { h ->
