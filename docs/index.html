@@ -551,7 +551,7 @@
     <section class="hero">
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
         <span class="tag">NEKOPLAY</span>
-        <span class="tag blue" id="verBadge">v0.6.4</span>
+        <span class="tag blue" id="verBadge">v0.6.5</span>
         <span class="tag">KOTLIN · COMPOSE MULTIPLATFORM</span>
       </div>
 
@@ -563,10 +563,10 @@
         <div class="hero-info">
           <h1>为听歌本身而生的跨平台播放器</h1>
           <p class="hero-sub">
-            Android、Windows、macOS、Linux、iOS 共用一套无边框 Compose 界面与原生音频内核。支持本地与 WebDAV 无损曲库、QuickJS 插件扩展，以及桌面端 VST3 / VST2 实时插件宿主（Beta）。
+            Android、Windows、macOS、Linux、iOS 共用一套无边框 Compose 界面与原生音频内核。内置本地与 WebDAV 无损曲库、AMLL 逐字流歌词、自定义主题与可视化动效曲线，支持 QuickJS 插件按需扩展。
           </p>
           <div class="progress-row">
-            <span class="left" id="osHint">READY · 48kHz / 24-BIT</span>
+            <span class="left" id="osHint">READY · FLAC / HI-RES</span>
             <span class="right">开源免费 · 零广告</span>
           </div>
           <div class="progress-track">
@@ -590,12 +590,12 @@
           <div class="v"><span class="num">05</span><span class="unit">端</span></div>
         </div>
         <div class="stat-item">
-          <div class="k">桌面 VST 管线</div>
-          <div class="v"><span class="num">48</span><span class="unit">kHz</span></div>
+          <div class="k">歌词引擎</div>
+          <div class="v"><span class="num">AMLL</span><span class="unit">逐字流</span></div>
         </div>
         <div class="stat-item">
-          <div class="k">插件宿主（Beta）</div>
-          <div class="v"><span class="num">VST</span><span class="unit">2 / 3</span></div>
+          <div class="k">主题与动效</div>
+          <div class="v"><span class="num">100%</span><span class="unit">可定制</span></div>
         </div>
         <div class="stat-item">
           <div class="k">内置在线音源</div>
@@ -614,8 +614,7 @@
         <div class="tab-row" role="tablist">
           <button class="tab-btn active" role="tab" aria-selected="true" data-idx="0">桌面主页</button>
           <button class="tab-btn" role="tab" aria-selected="false" data-idx="1">播放与歌词</button>
-          <button class="tab-btn" role="tab" aria-selected="false" data-idx="2">VST 插件 Beta</button>
-          <button class="tab-btn" role="tab" aria-selected="false" data-idx="3">移动端</button>
+          <button class="tab-btn" role="tab" aria-selected="false" data-idx="2">移动端</button>
         </div>
       </div>
 
@@ -654,25 +653,25 @@
           <div>
             <div class="feat-idx">02 · NATIVE AUDIO</div>
             <h3>原生内核与无缝播放</h3>
-            <p>桌面端内置 libmpv、Android 用 ExoPlayer、iOS 用 AVPlayer；支持无缝切歌、1GB 播放缓存、均衡器与真实采样率显示。</p>
+            <p>桌面端内置 libmpv、Android 用 ExoPlayer、iOS 用 AVPlayer；支持无缝切歌、1GB 播放缓存、10 段均衡器与真实采样率显示。</p>
           </div>
           <div class="feat-spec">FLAC · Hi-Res · Gapless</div>
         </article>
 
         <article class="feat">
           <div>
-            <div class="feat-idx">03 · VST HOST [BETA]</div>
-            <h3>实时 VST3 / VST2 插件链</h3>
-            <p>桌面端经 48kHz Stereo Float PCM 实时串联效果器与可视化仪，独立原生窗口支持置顶悬浮（MiniMeters / Pro-Q / SPAN）。</p>
+            <div class="feat-idx">03 · THEME &amp; MOTION</div>
+            <h3>主题系统与可视化动效曲线</h3>
+            <p>内置多套预设与可视化主题制作器，支持直接拖拽 cubic-bezier 动效曲线与弹簧参数，并可一键 JSON 导入导出分享。</p>
           </div>
-          <div class="feat-spec">C++17 Native · Always-on-Top</div>
+          <div class="feat-spec">Theme Studio · Cubic-Bezier · JSON</div>
         </article>
 
         <article class="feat">
           <div>
             <div class="feat-idx">04 · DRY / WET SPLIT</div>
             <h3>本体纯粹，插件扩展</h3>
-            <p>软件本体不内置任何在线音源、无需账号；需要时可在设置中通过文件、链接或订阅导入 QuickJS 脚本插件。</p>
+            <p>软件本体不内置任何在线音源、无需账号；需要时可在设置中通过文件、链接或订阅导入 QuickJS 脚本插件，沙箱隔离。</p>
           </div>
           <div class="feat-spec">QuickJS · Plugin Subscription</div>
         </article>
@@ -681,18 +680,18 @@
           <div>
             <div class="feat-idx">05 · LOCAL &amp; WEBDAV</div>
             <h3>本地曲库与 WebDAV</h3>
-            <p>自动扫描本地音乐目录并匹配同名 .lrc 歌词；直连 WebDAV 网盘按目录播放，支持本机喜欢、本地歌单与配置备份。</p>
+            <p>自动扫描本地音乐目录并匹配同名 .lrc 歌词；直连私有 WebDAV 网盘按目录播放，支持本机喜欢、本地歌单与全量配置备份。</p>
           </div>
           <div class="feat-spec">Local Library · WebDAV · Backup</div>
         </article>
 
         <article class="feat">
           <div>
-            <div class="feat-idx">06 · LYRICS &amp; DESKTOP</div>
-            <h3>逐字歌词与桌面浮窗</h3>
-            <p>支持逐字高亮、双语翻译、景深模糊滚动歌词与歌词偏移；桌面端配备可锁定点击穿透的悬浮歌词与单实例托盘唤醒。</p>
+            <div class="feat-idx">06 · AMLL &amp; LYRICS</div>
+            <h3>AMLL 逐字流与桌面歌词</h3>
+            <p>支持 AMLL 逐字上浮扫光、Hydrogen 顺滑滚动、景深模糊与歌词样式 JSON 导入导出；桌面端配备高度可定制的透明悬浮歌词窗。</p>
           </div>
-          <div class="feat-spec">YRC / LRC · Click-Through · Tray</div>
+          <div class="feat-spec">AMLL · YRC / LRC · Desktop Lyrics</div>
         </article>
       </div>
     </section>
@@ -714,7 +713,7 @@
             <div class="dl-os">Windows</div>
             <div class="dl-fmt">.msi / .exe / .zip</div>
           </div>
-          <p class="dl-note">内置 libmpv 与 VST 宿主库，支持自选安装目录。</p>
+          <p class="dl-note">内置纯音频 libmpv 内核，支持自选安装目录与单实例托盘唤醒。</p>
           <a class="dl-btn dl-link" data-match="windows" href="https://github.com/acnekot/NEKOPLAY/releases/latest" target="_blank" rel="noopener">下载 Windows</a>
         </div>
 
@@ -724,7 +723,7 @@
             <div class="dl-os">macOS</div>
             <div class="dl-fmt">Apple Silicon .dmg</div>
           </div>
-          <p class="dl-note">Metal 120fps 渲染、原生硬件圆角与内置 VST 宿主。</p>
+          <p class="dl-note">Metal 120fps 渲染、原生硬件圆角与内置 libmpv 播放内核。</p>
           <a class="dl-btn dl-link" data-match="macos" href="https://github.com/acnekot/NEKOPLAY/releases/latest" target="_blank" rel="noopener">下载 macOS</a>
         </div>
 
@@ -804,14 +803,7 @@
       {
         src: 'demo/desktop-player-dark.png',
         title: '桌面端 · 全屏播放与歌词',
-        desc: '展示真实解码格式与采样率/位深（FLAC 48k/24bit），搭配景深模糊滚动歌词。',
-        res: '1920 × 1200 · ← / → 切换',
-        mobile: false
-      },
-      {
-        src: 'demo/desktop-vst-beta.png',
-        title: '桌面端 · VST3 / VST2 实时插件宿主（Beta）',
-        desc: '48kHz Stereo Float 实时 PCM 管线串联效果器与可视化仪，原生窗口支持置顶悬浮。',
+        desc: '展示真实解码格式与采样率/位深（FLAC 48k/24bit），搭配 AMLL 逐字流与景深模糊歌词。',
         res: '1920 × 1200 · ← / → 切换',
         mobile: false
       },
@@ -838,7 +830,7 @@
         t.classList.toggle('active', i === cur);
         t.setAttribute('aria-selected', String(i === cur));
       });
-      heroProg.style.width = `${(cur + 1) * 25}%`;
+      heroProg.style.width = `${((cur + 1) / demos.length) * 100}%`;
       demoImg.style.opacity = '0.3';
       setTimeout(() => {
         demoImg.src = d.src;

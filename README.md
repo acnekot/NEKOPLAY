@@ -10,9 +10,10 @@
 </p>
 
 <p align="center">
-  <img alt="版本" src="https://img.shields.io/badge/版本-0.6.4-1f1f23">
+  <img alt="版本" src="https://img.shields.io/badge/版本-0.6.5-1f1f23">
   <img alt="平台" src="https://img.shields.io/badge/平台-Android%20·%20Windows%20·%20macOS%20·%20Linux%20·%20iOS-1f1f23">
   <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-Compose%20Multiplatform-7F52FF">
+  <a href="https://nekoplay.catsuki.cc"><img alt="官网" src="https://img.shields.io/badge/官网-nekoplay.catsuki.cc-1A4BE0"></a>
 </p>
 
 ---
@@ -28,23 +29,17 @@ NEKOPLAY 是一个**本地音乐播放器**：播放你自己设备上或自己�
 
 <table>
   <tr>
-    <td align="center" width="50%">
+    <td align="center" width="38%">
       <img src="docs/demo/desktop-home-light.png" alt="桌面端浅色主页" width="100%">
       <br><sub><b>桌面端 · 宽屏主页（浅色）</b></sub>
     </td>
-    <td align="center" width="50%">
+    <td align="center" width="38%">
       <img src="docs/demo/desktop-player-dark.png" alt="桌面端深色播放与歌词页" width="100%">
       <br><sub><b>桌面端 · 全屏播放与歌词（深色）</b></sub>
     </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <img src="docs/demo/desktop-vst-beta.png" alt="桌面端 VST3/VST2 实时插件链" width="100%">
-      <br><sub><b>桌面端 · VST3 / VST2 实时插件宿主（Beta）</b></sub>
-    </td>
-    <td align="center" width="50%">
-      <img src="docs/demo/mobile-home.png" alt="移动端自适应布局" width="44%">
-      <br><sub><b>移动端 · 响应式布局（Android / iOS / 窄窗）</b></sub>
+    <td align="center" width="24%">
+      <img src="docs/demo/mobile-home.png" alt="移动端自适应布局" width="76%">
+      <br><sub><b>移动端 · 响应式布局</b></sub>
     </td>
   </tr>
 </table>
@@ -55,9 +50,9 @@ NEKOPLAY 是一个**本地音乐播放器**：播放你自己设备上或自己�
 - 本地音乐：手机读媒体库，电脑扫「音乐」文件夹，同名 `.lrc` 当歌词
 - WebDAV 音乐：直接浏览网盘文件夹播放，文件名「歌手 - 歌名」自动拆开
 - 本机喜欢 / 本地歌单：不用登录；本地歌和没登录的来源点喜欢都记在这里
-- 播放：1GB 播放缓存、音质选择、无缝切歌、定时关闭、效果器 / 均衡器、**VST3 / VST2 实时插件宿主（Beta，桌面端）**
-- 歌词：逐字歌词、翻译、歌词偏移、桌面歌词（PC）、歌词卡片
-- 界面：手机布局和 PC 宽屏三栏布局按窗口宽度自动切换；主题、取色、自定义背景、首页模块自由排序和并排组合
+- 播放：1GB 播放缓存、音质选择、无缝切歌、定时关闭、10 段均衡器与音效
+- 歌词：AMLL 逐字流 / Hydrogen 顺滑 / 大字流动多风格切换、歌词样式 JSON 导入导出、双语翻译、歌词偏移、可高度自定义的桌面悬浮歌词（PC）、歌词卡片
+- 界面与个性化：手机布局和 PC 宽屏三栏布局按窗口宽度自动切换；内置主题系统（制作 / 导入 / 导出 JSON）、可视化贝塞尔曲线动效编辑器、动态取色、自定义背景、首页模块自由排序与曲库专辑卡片架
 - 数据与维护：听歌统计、下载、WebDAV / 本地配置备份（包括插件脚本）、启动自动检查更新
 
 <a id="插件"></a>
@@ -112,7 +107,7 @@ design/    图标源文件
 
 | 版本 | 分支 | 内容 |
 |---|---|---|
-| 0.6.4 | `main` | 桌面端 VST3 / VST2 实时插件宿主（Beta，支持置顶浮窗）、启动自动检查更新、单实例托盘唤醒与多端性能优化 |
+| 0.6.5 | `main` | AMLL 逐字流与多风格歌词引擎、自定义主题系统、可视化贝塞尔动效曲线编辑器、桌面歌词增强、曲库专辑架、启动自动检查更新与多端性能优化 |
 | 0.5.0 | `main` | 插件系统和插件订阅；本体去掉内置音源（干湿分离）；本机喜欢、本地歌单、WebDAV 音乐 |
 | 0.4.0 | `DEV` | 多个在线服务的内置对接（0.5.0 起改为可选插件）；歌曲来源标签 |
 | 0.3.0 | — | Kotlin + Compose 原生版：手机 / PC 双布局、逐字歌词、评论、桌面歌词、效果器 |
@@ -136,11 +131,11 @@ design/    图标源文件
 | [JSON-java](https://github.com/stleary/JSON-java) | JSON 解析 | Public Domain |
 | [Inter](https://rsms.me/inter/)、[JetBrains Mono](https://www.jetbrains.com/lp/mono/) | 字体 | SIL OFL 1.1 |
 
-`plugins/kugou.js` 中的签名算法和接口参数参考了 [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)（MIT License），版权声明保留在该文件开头。
+部分示例插件中的接口参数参考了社区开源项目（MIT License），对应版权声明保留在各脚本文件开头。
 
 ## 免责声明
 
-- 本项目为个人学习和技术研究用途的开源项目，不以营利为目的，与网易云音乐、QQ 音乐、酷狗音乐等任何音乐服务及其运营公司**无关联、未获授权、未获认可**
+- 本项目为个人学习和技术研究用途的开源项目，不以营利为目的，与任何在线音乐服务及其运营公司**无关联、未获授权、未获认可**
 - 文中提到的产品名称和商标归各自所有者所有，仅用于说明兼容性
 - 软件本身不提供、不存储、不分发任何音乐、歌词、封面等受版权保护的内容；通过插件获取的内容均来自相关服务对用户本人开放的接口，版权归相关权利人所有
 - 请在遵守所在地法律法规和相关服务用户协议的前提下使用；因使用本软件或第三方插件产生的任何后果由使用者自行承担
