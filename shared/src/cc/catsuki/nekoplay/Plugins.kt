@@ -23,9 +23,11 @@ object Plugins {
     var off by mutableStateOf(setOf<String>())
 
     private var idleJob: kotlinx.coroutines.Job? = null
-    fun load() {
+    @Volatile private var loaded = false
+    fun load() = synchronized(this) {
         off = prefs.getStringSet("off", null) ?: emptySet()
         list.value = (dir.listFiles() ?: emptyArray()).filter { it.extension == "js" }.sortedBy { it.name }.map { JsSource(it) }
+        loaded = true
         // 按需启动：已有 caps 缓存的插件不立即创建 QuickJS；首次安装的插件后台跑一次拿 caps；5 分钟未用自动释放
         val needWarm = enabled.filter { it.caps.isEmpty() }
         if (needWarm.isNotEmpty()) kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { needWarm.forEach { it.start() } }
@@ -37,9 +39,10 @@ object Plugins {
             }
         }
     }
-    fun on(id: String) = id !in off && list.value.any { it.id == id }
-    fun get(id: String) = list.value.firstOrNull { it.id == id }
-    val enabled get() = list.value.filter { it.id !in off }
+    private fun ensureLoaded() { if (!loaded) load() }
+    fun on(id: String): Boolean { ensureLoaded(); return id !in off && list.value.any { it.id == id } }
+    fun get(id: String): JsSource? { ensureLoaded(); return list.value.firstOrNull { it.id == id } }
+    val enabled get(): List<JsSource> { ensureLoaded(); return list.value.filter { it.id !in off } }
     fun set(id: String, v: Boolean) { off = if (v) off - id else off + id; prefs.edit().putStringSet("off", off).apply(); if (!v) get(id)?.close()
         kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { if (v) get(id)?.start(); PluginStore.refresh().join(); Store.refreshAll() } }
 

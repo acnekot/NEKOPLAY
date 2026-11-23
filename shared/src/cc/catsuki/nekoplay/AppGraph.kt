@@ -26,19 +26,19 @@ class AppGraph(
     val updater: Updater = Updater,
     var playerConfig: PlayerConfig = PlayerConfig(),
 ) {
-    /** 快速首屏初始化：只加载界面渲染必需的轻量偏好、音源配置与本地队列 */
+    /** 快速首屏初始化：只加载界面渲染必需的轻量偏好、插件元数据、音源配置与本地队列 */
     fun initFast(onReloadPrefs: () -> Unit) {
         plugins.preferredHomeId = playerConfig.preferredHomePlugin
+        plugins.load()
         ncm.init()
         store.init()
         engine.init()
         onReloadPrefs()
     }
 
-    /** 延后后台初始化：首帧画完后再加载插件、WebDAV、更新检查、本地库与统计 */
+    /** 延后后台初始化：首帧画完后再加载迁移、WebDAV、更新检查、本地库与统计 */
     fun initDeferred() {
         LegacyLogin.migrate()
-        plugins.load()
         localLib.load()
         dav.load()
         updater.load()
