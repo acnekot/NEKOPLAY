@@ -89,6 +89,7 @@ std::unique_ptr<VstPluginInstance> loadVst3Plugin(const std::string& path);
 // Platform GUI helpers implemented in gui_mac.mm / gui_win.cpp / gui_linux.cpp
 struct EditorCallbacks {
     void* userData = nullptr;
+    bool (*onAttach)(void* userData, void* nativeView) = nullptr;
     void (*onIdle)(void* userData) = nullptr;
     void (*onClose)(void* userData) = nullptr;
 };

@@ -110,8 +110,10 @@ import kotlinx.coroutines.withContext
                 }
                 Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.press {
-                        val err = host.openEditor(slot.id)
-                        if (err != null) nav.toast = err
+                        scope.launch {
+                            val err = withContext(Dispatchers.IO) { host.openEditor(slot.id) }
+                            if (err != null) nav.toast = err
+                        }
                     }.background(p.k).padding(horizontal = 12.dp, vertical = 6.dp)) {
                         T(if (slot.editorOpen) "置前界面" else "打开界面", 12, p.tagFg, 700)
                     }

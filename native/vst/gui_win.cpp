@@ -2,6 +2,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <objbase.h>
 #include <condition_variable>
 #include <thread>
 
@@ -67,6 +68,7 @@ void ensureGuiThread() {
         std::condition_variable cv;
         bool ready = false;
         std::thread([&]() {
+            CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
             WNDCLASSEXW wc{};
             wc.cbSize = sizeof(wc);
             wc.style = CS_HREDRAW | CS_VREDRAW;
@@ -105,10 +107,15 @@ void ensureGuiThread() {
                             holder->hwnd = hwnd;
                             holder->cb = req->cb;
                             SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(holder));
-                            if (req->cb.onIdle) SetTimer(hwnd, IDLE_TIMER_ID, 33, nullptr);
-                            ShowWindow(hwnd, SW_SHOW);
-                            UpdateWindow(hwnd);
-                            req->result = holder;
+                            if (req->cb.onAttach && !req->cb.onAttach(req->cb.userData, static_cast<void*>(hwnd))) {
+                                holder->closed = true;
+                                DestroyWindow(hwnd);
+                            } else {
+                                if (req->cb.onIdle) SetTimer(hwnd, IDLE_TIMER_ID, 33, nullptr);
+                                ShowWindow(hwnd, SW_SHOW);
+                                UpdateWindow(hwnd);
+                                req->result = holder;
+                            }
                         }
                         {
                             std::lock_guard<std::mutex> lk(req->mtx);
@@ -137,8 +144,11 @@ void ensureGuiThread() {
                     } else if (msg.message == WM_NV_DESTROY) {
                         auto* h = reinterpret_cast<WinHolder*>(msg.wParam);
                         if (h && h->hwnd && IsWindow(h->hwnd)) {
-                            h->closed = true;
-                            KillTimer(h->hwnd, IDLE_TIMER_ID);
+                            if (!h->closed) {
+                                h->closed = true;
+                                KillTimer(h->hwnd, IDLE_TIMER_ID);
+                                if (h->cb.onClose) h->cb.onClose(h->cb.userData);
+                            }
                             DestroyWindow(h->hwnd);
                         }
                         continue;

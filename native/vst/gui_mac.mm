@@ -52,14 +52,22 @@ void* nvGuiCreateWindow(const char* title, int width, int height, bool alwaysOnT
         holder.callbacks = cb;
         holder.closed = NO;
         [win setDelegate:holder];
+        viewPtr = (__bridge void*)cv;
+        if (cb.onAttach && !cb.onAttach(cb.userData, viewPtr)) {
+            holder.closed = YES;
+            [win setDelegate:nil];
+            [win close];
+            holder = nil;
+            viewPtr = nullptr;
+            return;
+        }
         if (cb.onIdle) {
             holder.idleTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 / 30.0 target:holder selector:@selector(tickIdle:) userInfo:nil repeats:YES];
         }
         [win makeKeyAndOrderFront:nil];
-        viewPtr = (__bridge void*)cv;
     });
     if (outNativeView) *outNativeView = viewPtr;
-    return (__bridge_retained void*)holder;
+    return holder ? (__bridge_retained void*)holder : nullptr;
 }
 
 void nvGuiResizeWindow(void* winHandle, int width, int height) {
@@ -89,6 +97,7 @@ void nvGuiDestroyWindow(void* winHandle) {
             holder.closed = YES;
             [holder.idleTimer invalidate];
             holder.idleTimer = nil;
+            if (holder.callbacks.onClose) holder.callbacks.onClose(holder.callbacks.userData);
             [holder.window setDelegate:nil];
             [holder.window close];
         }

@@ -93,8 +93,10 @@ public:
     AEffect* fx = nullptr;
     double sampleRate_ = 48000.0;
     int blockSize_ = 512;
-    std::vector<float> outL_, outR_;
+    std::vector<float> outL_, outR_, dummyBuf_;
+    std::vector<float*> inPtrs_, outPtrs_;
     std::mutex procMutex_;
+    bool editorOpen_ = false;
 #ifdef _WIN32
     HMODULE mod = nullptr;
 #elif defined(__APPLE__)
@@ -160,7 +162,10 @@ public:
         blockSize_ = maxBlockSize;
         outL_.assign(static_cast<size_t>(maxBlockSize), 0.0f);
         outR_.assign(static_cast<size_t>(maxBlockSize), 0.0f);
+        dummyBuf_.assign(static_cast<size_t>(maxBlockSize), 0.0f);
         if (!fx) return false;
+        inPtrs_.resize(static_cast<size_t>(std::max(2, fx->numInputs)));
+        outPtrs_.resize(static_cast<size_t>(std::max(2, fx->numOutputs)));
         fx->dispatcher(fx, effMainsChanged, 0, 0, nullptr, 0.0f);
         fx->dispatcher(fx, effSetSampleRate, 0, 0, nullptr, static_cast<float>(sampleRate));
         fx->dispatcher(fx, effSetBlockSize, 0, maxBlockSize, nullptr, 0.0f);
@@ -175,13 +180,28 @@ public:
         if (static_cast<int>(outL_.size()) < numFrames) {
             outL_.resize(static_cast<size_t>(numFrames));
             outR_.resize(static_cast<size_t>(numFrames));
+            dummyBuf_.assign(static_cast<size_t>(numFrames), 0.0f);
         }
-        float* ins[2] = { left, right };
-        float* outs[2] = { outL_.data(), outR_.data() };
+        std::memcpy(outL_.data(), left, static_cast<size_t>(numFrames) * sizeof(float));
+        std::memcpy(outR_.data(), right, static_cast<size_t>(numFrames) * sizeof(float));
+        if (inPtrs_.size() < 2) inPtrs_.resize(static_cast<size_t>(std::max(2, fx->numInputs)));
+        if (outPtrs_.size() < 2) outPtrs_.resize(static_cast<size_t>(std::max(2, fx->numOutputs)));
+        inPtrs_[0] = left;
+        inPtrs_[1] = right;
+        for (size_t i = 2; i < inPtrs_.size(); ++i) inPtrs_[i] = dummyBuf_.data();
+        outPtrs_[0] = outL_.data();
+        outPtrs_[1] = outR_.data();
+        for (size_t i = 2; i < outPtrs_.size(); ++i) outPtrs_[i] = dummyBuf_.data();
         if (fx->processReplacing) {
-            fx->processReplacing(fx, ins, outs, numFrames);
-            std::memcpy(left, outL_.data(), static_cast<size_t>(numFrames) * sizeof(float));
-            std::memcpy(right, outR_.data(), static_cast<size_t>(numFrames) * sizeof(float));
+            fx->processReplacing(fx, inPtrs_.data(), outPtrs_.data(), numFrames);
+            if (fx->numOutputs > 0) {
+                std::memcpy(left, outL_.data(), static_cast<size_t>(numFrames) * sizeof(float));
+                if (fx->numOutputs > 1) {
+                    std::memcpy(right, outR_.data(), static_cast<size_t>(numFrames) * sizeof(float));
+                } else {
+                    std::memcpy(right, outL_.data(), static_cast<size_t>(numFrames) * sizeof(float));
+                }
+            }
         }
     }
 
@@ -212,19 +232,29 @@ public:
         return true;
     }
 
+    static bool onEditorAttach(void* ud, void* nativeView) {
+        auto* self = static_cast<Vst2Instance*>(ud);
+        if (!self || !self->fx || !nativeView) return false;
+        self->fx->dispatcher(self->fx, effEditOpen, 0, 0, nativeView, 0.0f);
+        self->editorOpen_ = true;
+        return true;
+    }
+
     static void onEditorIdle(void* ud) {
         auto* self = static_cast<Vst2Instance*>(ud);
-        if (self && self->fx && self->guiHandle) {
+        if (self && self->fx && self->editorOpen_) {
             self->fx->dispatcher(self->fx, effEditIdle, 0, 0, nullptr, 0.0f);
         }
     }
 
     static void onEditorClose(void* ud) {
         auto* self = static_cast<Vst2Instance*>(ud);
-        if (self && self->fx && self->guiHandle) {
+        if (!self) return;
+        if (self->fx && self->editorOpen_) {
+            self->editorOpen_ = false;
             self->fx->dispatcher(self->fx, effEditClose, 0, 0, nullptr, 0.0f);
-            self->guiHandle = nullptr;
         }
+        self->guiHandle = nullptr;
     }
 
     bool openEditor(bool alwaysOnTop) override {
@@ -243,15 +273,16 @@ public:
         int h = (rect && rect->bottom > rect->top) ? (rect->bottom - rect->top) : 420;
         EditorCallbacks cb;
         cb.userData = this;
+        cb.onAttach = &Vst2Instance::onEditorAttach;
         cb.onIdle = &Vst2Instance::onEditorIdle;
         cb.onClose = &Vst2Instance::onEditorClose;
         void* nativeView = nullptr;
         guiHandle = nvGuiCreateWindow(name.c_str(), w, h, alwaysOnTop, cb, &nativeView);
-        if (!guiHandle || !nativeView) {
+        if (!guiHandle || !editorOpen_) {
+            guiHandle = nullptr;
             nvSetError("创建 VST2 插件窗口失败");
             return false;
         }
-        fx->dispatcher(fx, effEditOpen, 0, 0, nativeView, 0.0f);
         rect = nullptr;
         fx->dispatcher(fx, effEditGetRect, 0, 0, &rect, 0.0f);
         if (rect && rect->right > rect->left && rect->bottom > rect->top) {
@@ -268,7 +299,6 @@ public:
         if (guiHandle) {
             void* h = guiHandle;
             guiHandle = nullptr;
-            if (fx) fx->dispatcher(fx, effEditClose, 0, 0, nullptr, 0.0f);
             nvGuiDestroyWindow(h);
         }
     }

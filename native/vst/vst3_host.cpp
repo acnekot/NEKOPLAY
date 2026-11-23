@@ -8,6 +8,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <objbase.h>
 #define SMTG_CALL __stdcall
 #elif defined(__APPLE__)
 #include <CoreFoundation/CoreFoundation.h>
@@ -65,6 +66,7 @@ DEF_UID(kIPlugViewIID,         0x5BC32507, 0xD06049EA, 0xA6151B52, 0x2B755B29);
 DEF_UID(kIPlugFrameIID,        0x367FAF01, 0xAFA94693, 0x8D4DA2A0, 0xED0882A3);
 DEF_UID(kIHostApplicationIID,  0x58E595CC, 0xDB2D4969, 0x8B6AAF8C, 0x36A664E5);
 DEF_UID(kIComponentHandlerIID, 0x93A0BEA3, 0x0BD045DB, 0x8E890B0C, 0xC1E46AC6);
+DEF_UID(kIParameterChangesIID, 0xA4779663, 0x0BB64A56, 0xB44384A8, 0x466FEB9D);
 
 inline bool uidEq(const TUID a, const TUID b) { return std::memcmp(a, b, 16) == 0; }
 
@@ -159,6 +161,63 @@ struct AudioBusBuffers {
     };
 };
 
+struct FrameRate {
+    uint32_t framesPerSecond;
+    uint32_t flags;
+};
+
+struct Chord {
+    uint8_t keyNote;
+    uint8_t rootNote;
+    int16_t chordMask;
+};
+
+struct ProcessContext {
+    uint32_t state;
+    double sampleRate;
+    int64_t projectTimeSamples;
+    int64_t systemTime;
+    int64_t continousTimeSamples;
+    double projectTimeMusic;
+    double barPositionMusic;
+    double cycleStartMusic;
+    double cycleEndMusic;
+    double tempo;
+    int32_t timeSigNumerator;
+    int32_t timeSigDenominator;
+    Chord chord;
+    int32_t smpteOffsetSubframes;
+    FrameRate frameRate;
+    int32_t samplesToNextClock;
+};
+
+class IParameterChanges : public FUnknown {
+public:
+    virtual int32_t SMTG_CALL getParameterCount() = 0;
+    virtual void* SMTG_CALL getParameterData(int32_t index) = 0;
+    virtual void* SMTG_CALL addParameterData(const ParamID& id, int32_t& index) = 0;
+};
+
+class EmptyParamChanges final : public IParameterChanges {
+    std::atomic<uint32_t> refs_{1};
+public:
+    tresult SMTG_CALL queryInterface(const TUID iid, void** obj) override {
+        if (!obj) return kResultFalse;
+        if (uidEq(iid, kFUnknownIID) || uidEq(iid, kIParameterChangesIID)) {
+            addRef();
+            *obj = static_cast<IParameterChanges*>(this);
+            return kResultOk;
+        }
+        *obj = nullptr;
+        return kNoInterface;
+    }
+    uint32_t SMTG_CALL addRef() override { return ++refs_; }
+    uint32_t SMTG_CALL release() override { return --refs_; }
+    int32_t SMTG_CALL getParameterCount() override { return 0; }
+    void* SMTG_CALL getParameterData(int32_t) override { return nullptr; }
+    void* SMTG_CALL addParameterData(const ParamID&, int32_t&) override { return nullptr; }
+};
+
 struct ProcessData {
     int32_t processMode;
     int32_t symbolicSampleSize;
@@ -167,11 +226,11 @@ struct ProcessData {
     int32_t numOutputs;
     AudioBusBuffers* inputs;
     AudioBusBuffers* outputs;
-    void* inputParameterChanges;
-    void* outputParameterChanges;
+    IParameterChanges* inputParameterChanges;
+    IParameterChanges* outputParameterChanges;
     void* inputEvents;
     void* outputEvents;
-    void* processContext;
+    ProcessContext* processContext;
 };
 
 class IAudioProcessor : public FUnknown {
@@ -267,6 +326,7 @@ class SimpleHostApp final : public IHostApplication {
     std::atomic<uint32_t> refs_{1};
 public:
     tresult SMTG_CALL queryInterface(const TUID iid, void** obj) override {
+        if (!obj) return kResultFalse;
         if (uidEq(iid, kFUnknownIID) || uidEq(iid, kIHostApplicationIID)) {
             addRef();
             *obj = static_cast<IHostApplication*>(this);
@@ -294,6 +354,7 @@ class SimpleComponentHandler final : public IComponentHandler {
     std::atomic<uint32_t> refs_{1};
 public:
     tresult SMTG_CALL queryInterface(const TUID iid, void** obj) override {
+        if (!obj) return kResultFalse;
         if (uidEq(iid, kFUnknownIID) || uidEq(iid, kIComponentHandlerIID)) {
             addRef();
             *obj = static_cast<IComponentHandler*>(this);
@@ -315,6 +376,7 @@ class SimplePlugFrame final : public IPlugFrame {
 public:
     void** winPtr = nullptr;
     tresult SMTG_CALL queryInterface(const TUID iid, void** obj) override {
+        if (!obj) return kResultFalse;
         if (uidEq(iid, kFUnknownIID) || uidEq(iid, kIPlugFrameIID)) {
             addRef();
             *obj = static_cast<IPlugFrame*>(this);
@@ -344,6 +406,8 @@ public:
     SimpleHostApp hostApp;
     SimpleComponentHandler compHandler;
     SimplePlugFrame plugFrame;
+    EmptyParamChanges emptyParams_;
+    ProcessContext processCtx_{};
 
     IPluginFactory* factory = nullptr;
     IComponent* component = nullptr;
@@ -351,9 +415,15 @@ public:
     IEditController* controller = nullptr;
     bool controllerIsComponent = false;
     IPlugView* view = nullptr;
+    IPlugView* pendingView_ = nullptr;
+    const char* pendingPlatType_ = nullptr;
 
     std::vector<float> outL_, outR_;
     std::mutex procMutex_;
+    double sampleRate_ = 48000.0;
+    int64_t samplePos_ = 0;
+    int inBuses_ = 1;
+    int outBuses_ = 1;
     bool active_ = false;
 
 #ifdef _WIN32
@@ -403,6 +473,7 @@ public:
     bool prepare(double sampleRate, int maxBlockSize) override {
         std::lock_guard<std::mutex> lk(procMutex_);
         if (!component || !processor) return false;
+        sampleRate_ = sampleRate;
         outL_.assign(static_cast<size_t>(maxBlockSize), 0.0f);
         outR_.assign(static_cast<size_t>(maxBlockSize), 0.0f);
         if (active_) {
@@ -410,8 +481,12 @@ public:
             component->setActive(0);
             active_ = false;
         }
+        inBuses_ = std::max(0, component->getBusCount(0, 0));
+        outBuses_ = std::max(0, component->getBusCount(0, 1));
         uint64_t stereo = 0x3; // kStereo (L | R)
-        processor->setBusArrangements(&stereo, 1, &stereo, 1);
+        processor->setBusArrangements(
+            inBuses_ > 0 ? &stereo : nullptr, inBuses_ > 0 ? 1 : 0,
+            outBuses_ > 0 ? &stereo : nullptr, outBuses_ > 0 ? 1 : 0);
         ProcessSetup setup{};
         setup.processMode = 0; // kRealtime
         setup.symbolicSampleSize = 0; // kSample32
@@ -421,10 +496,16 @@ public:
             nvSetError("VST3 setupProcessing 失败");
             return false;
         }
-        component->activateBus(0, 0, 0, 1); // Audio Input 0
-        component->activateBus(0, 1, 0, 1); // Audio Output 0
+        if (inBuses_ > 0) component->activateBus(0, 0, 0, 1); // Audio Input 0
+        if (outBuses_ > 0) component->activateBus(0, 1, 0, 1); // Audio Output 0
         component->setActive(1);
         processor->setProcessing(1);
+        processCtx_ = {};
+        processCtx_.state = (1u << 1) | (1u << 10) | (1u << 11); // kPlaying | kTempoValid | kTimeSigValid
+        processCtx_.sampleRate = sampleRate;
+        processCtx_.tempo = 120.0;
+        processCtx_.timeSigNumerator = 4;
+        processCtx_.timeSigDenominator = 4;
         active_ = true;
         return true;
     }
@@ -437,19 +518,27 @@ public:
             outL_.resize(static_cast<size_t>(numFrames));
             outR_.resize(static_cast<size_t>(numFrames));
         }
+        std::memcpy(outL_.data(), left, static_cast<size_t>(numFrames) * sizeof(float));
+        std::memcpy(outR_.data(), right, static_cast<size_t>(numFrames) * sizeof(float));
         float* inCh[2] = { left, right };
         float* outCh[2] = { outL_.data(), outR_.data() };
         AudioBusBuffers inBus{2, 0, {inCh}};
         AudioBusBuffers outBus{2, 0, {outCh}};
+        processCtx_.sampleRate = sampleRate_;
+        processCtx_.projectTimeSamples = samplePos_;
+        samplePos_ += numFrames;
         ProcessData data{};
         data.processMode = 0;
         data.symbolicSampleSize = 0;
         data.numSamples = numFrames;
-        data.numInputs = 1;
-        data.numOutputs = 1;
-        data.inputs = &inBus;
-        data.outputs = &outBus;
-        if (processor->process(data) == kResultOk) {
+        data.numInputs = inBuses_ > 0 ? 1 : 0;
+        data.numOutputs = outBuses_ > 0 ? 1 : 0;
+        data.inputs = inBuses_ > 0 ? &inBus : nullptr;
+        data.outputs = outBuses_ > 0 ? &outBus : nullptr;
+        data.inputParameterChanges = &emptyParams_;
+        data.outputParameterChanges = &emptyParams_;
+        data.processContext = &processCtx_;
+        if (processor->process(data) == kResultOk && outBuses_ > 0) {
             std::memcpy(left, outL_.data(), static_cast<size_t>(numFrames) * sizeof(float));
             std::memcpy(right, outR_.data(), static_cast<size_t>(numFrames) * sizeof(float));
         }
@@ -486,15 +575,29 @@ public:
         return true;
     }
 
+    static bool onEditorAttach(void* ud, void* nativeView) {
+        auto* self = static_cast<Vst3Instance*>(ud);
+        if (!self || !self->pendingView_ || !nativeView) return false;
+        IPlugView* v = self->pendingView_;
+        v->setFrame(&self->plugFrame);
+        if (v->attached(nativeView, self->pendingPlatType_) != kResultOk) {
+            v->setFrame(nullptr);
+            return false;
+        }
+        self->view = v;
+        return true;
+    }
+
     static void onEditorClose(void* ud) {
         auto* self = static_cast<Vst3Instance*>(ud);
-        if (self && self->view) {
+        if (!self) return;
+        if (self->view) {
             self->view->removed();
             self->view->setFrame(nullptr);
             self->view->release();
             self->view = nullptr;
-            self->guiHandle = nullptr;
         }
+        self->guiHandle = nullptr;
     }
 
     bool openEditor(bool alwaysOnTop) override {
@@ -527,26 +630,22 @@ public:
         v->getSize(&vr);
         int w = (vr.right > vr.left) ? (vr.right - vr.left) : 640;
         int h = (vr.bottom > vr.top) ? (vr.bottom - vr.top) : 420;
+        pendingView_ = v;
+        pendingPlatType_ = platType;
         EditorCallbacks cb;
         cb.userData = this;
+        cb.onAttach = &Vst3Instance::onEditorAttach;
         cb.onClose = &Vst3Instance::onEditorClose;
         void* nativeView = nullptr;
         guiHandle = nvGuiCreateWindow(name.c_str(), w, h, alwaysOnTop, cb, &nativeView);
-        if (!guiHandle || !nativeView) {
-            v->release();
-            nvSetError("创建 VST3 插件窗口失败");
-            return false;
-        }
-        v->setFrame(&plugFrame);
-        if (v->attached(nativeView, platType) != kResultOk) {
-            v->setFrame(nullptr);
-            v->release();
-            nvGuiDestroyWindow(guiHandle);
+        pendingView_ = nullptr;
+        pendingPlatType_ = nullptr;
+        if (!guiHandle || !view) {
+            if (!view) v->release();
             guiHandle = nullptr;
-            nvSetError("挂载 VST3 插件界面失败");
+            nvSetError("创建或挂载 VST3 插件界面失败");
             return false;
         }
-        view = v;
         return true;
     }
 
@@ -558,12 +657,6 @@ public:
         if (guiHandle) {
             void* h = guiHandle;
             guiHandle = nullptr;
-            if (view) {
-                view->removed();
-                view->setFrame(nullptr);
-                view->release();
-                view = nullptr;
-            }
             nvGuiDestroyWindow(h);
         }
     }
@@ -595,6 +688,7 @@ std::unique_ptr<VstPluginInstance> loadVst3Plugin(const std::string& path) {
     GetPluginFactoryFn getFactory = nullptr;
 
 #ifdef _WIN32
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     std::string binPath = resolveVst3BinaryWin(path);
     int wlen = MultiByteToWideChar(CP_UTF8, 0, binPath.c_str(), -1, nullptr, 0);
     std::wstring wpath(static_cast<size_t>(wlen), L'\0');
