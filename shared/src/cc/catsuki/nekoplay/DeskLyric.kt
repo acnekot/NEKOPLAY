@@ -159,7 +159,7 @@ fun LazyListScope.deskLyricSettings(p: Pal) {
         else -> { val next = l.getOrNull(i + 1)?.t ?: (cur.t + 5000); ((now - cur.t).toFloat() / (next - cur.t).coerceAtLeast(300)).coerceIn(0f, 1f) }
     }
     val showBar = hover && !DeskLyric.locked
-    val panel by androidx.compose.animation.core.animateFloatAsState(if (showBar) 1f else 0f, androidx.compose.animation.core.tween(180), label = "pn")
+    val panel by androidx.compose.animation.core.animateFloatAsState(if (showBar) 1f else 0f, Motion.standard(), label = "pn")
     val ink = Color(0xFF0E1015)
     val accent = DeskLyric.COLORS.getOrNull(DeskLyric.colorIdx) ?: p.p
     val tAlign = when (DeskLyric.align) { 1 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
@@ -190,8 +190,8 @@ fun LazyListScope.deskLyricSettings(p: Pal) {
             Spacer(Modifier.height(2.dp))
             // 换句：新句从下面淡入
             androidx.compose.animation.AnimatedContent(text, Modifier.graphicsLayer { alpha = DeskLyric.textAlpha }, transitionSpec = {
-                (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)) + androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(220)) { it / 4 }) togetherWith
-                    androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(140))
+                (androidx.compose.animation.fadeIn(Motion.standard()) + androidx.compose.animation.slideInVertically(Motion.standard()) { it / 4 }) togetherWith
+                    androidx.compose.animation.fadeOut(Motion.quick())
             }, label = "dl") { tx ->
                 var lay by remember { mutableStateOf<TextLayoutResult?>(null) }
                 val f = if (tx == text) frac else 1f

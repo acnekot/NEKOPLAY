@@ -131,19 +131,19 @@ object ThemePref {
 
 /** 配色切换（换歌跟封面变色）时背景层和主色做一个渐变 */
 @Composable private fun animPal(t: Pal): Pal {
-    val sp = androidx.compose.animation.core.tween<Color>(450)
+    val sp = Motion.crossfade<Color>()
     @Composable fun a(v: Color, l: String) = androidx.compose.animation.animateColorAsState(v, sp, label = l).value
     return t.copy(p = a(t.p, "p"), page = a(t.page, "pg"), bar = a(t.bar, "bar"), sheet = a(t.sheet, "sh"), pop = a(t.pop, "pop"), ph = a(t.ph, "ph"), lyBg = a(t.lyBg, "ly"), tagFg = a(t.tagFg, "tf"))
 }
 
-/** 背景：深色纯平 #2D333B，浅色 165° 渐变 + 两个淡光斑（drawWithCache 缓存 Brush，避免每帧重算渐变） */
+/** 背景：深色纯平，浅色 165° 渐变 + 两个淡光斑（drawWithCache 缓存 Brush，避免每帧重算渐变） */
 @Composable fun Modifier.backdrop(): Modifier {
     val p = c
     if (ThemeStore.activePal() != null || Monet.on) return if (p.dark) background(p.page) else drawWithCache {
         val bg = Brush.linearGradient(listOf(p.bar, p.page, p.sheet), Offset(size.width * .37f, 0f), Offset(size.width * .63f, size.height))
         onDrawBehind { drawRect(bg) }
     }
-    return if (p.dark) background(Color(0xFF2D333B)) else drawWithCache {
+    return if (p.dark) background(p.page) else drawWithCache {
         val bg = Brush.linearGradient(listOf(Color(0xFFC6DCE4), Color(0xFFD3E5EA), Color(0xFFE2EDEE)), Offset(size.width * .37f, 0f), Offset(size.width * .63f, size.height))
         val r1 = 130.dp.toPx(); val c1 = Offset(size.width + 80.dp.toPx() - r1, 120.dp.toPx() + r1)
         val b1 = Brush.radialGradient(listOf(Color(0x33FFD9B0), Color(0x00FFD9B0)), c1, r1)

@@ -176,13 +176,13 @@ fun openArtists(nav: Nav, t: Track) {
     val p = c
     var last by remember { mutableStateOf<SheetSpec?>(null) }
     nav.sheet?.let { last = it }
-    AnimatedVisibility(nav.sheet != null, enter = fadeIn(tween(200)), exit = fadeOut(tween(200))) {
+    AnimatedVisibility(nav.sheet != null, enter = fadeIn(Motion.standard()), exit = fadeOut(Motion.quick())) {
         Box(Modifier.fillMaxSize().background(Color(if (wide) 0x55000000 else 0x80000000)).pointerInput(Unit) { detectTapGestures { nav.sheet = null } })
     }
     // PC 宽屏：居中的小弹窗（缩放 + 淡入）；手机：底部弹出
     if (wide) AnimatedVisibility(nav.sheet != null, Modifier.fillMaxSize(),
-        enter = fadeIn(tween(160)) + scaleIn(spring(.8f, Anim.stiff(Spring.StiffnessMedium)), initialScale = .92f),
-        exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = .96f)) {
+        enter = fadeIn(Motion.standard()) + scaleIn(Motion.hero(), initialScale = if (MotionEffects.pageScale) .92f else 1f),
+        exit = fadeOut(Motion.quick()) + scaleOut(Motion.quick(), targetScale = if (MotionEffects.pageScale) .96f else 1f)) {
         val s = last ?: return@AnimatedVisibility
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(Modifier.width(380.dp).heightIn(max = 620.dp).background(p.sheet).nb(1.dp, p.k).topLine().pointerInput(Unit) { detectTapGestures { } }
@@ -267,14 +267,14 @@ fun qualitySheet(nav: Nav) {
     val nav = LocalNav.current
     var v by remember(initial) { mutableStateOf(initial) }
     val p = c
-    val bg by androidx.compose.animation.animateColorAsState(if (v) Color.Transparent else p.k, tween(220), label = "fb")
-    val fg by androidx.compose.animation.animateColorAsState(if (v) p.k else p.tagFg, tween(220), label = "ff")
+    val bg by androidx.compose.animation.animateColorAsState(if (v) Color.Transparent else p.k, Motion.standard(), label = "fb")
+    val fg by androidx.compose.animation.animateColorAsState(if (v) p.k else p.tagFg, Motion.standard(), label = "ff")
     Box(Modifier.press(.96f, true) {
         if (!ready) return@press
         val n = !v; v = n
         Store.run { try { act(n); nav.toast = if (n) "已$off" else "已取消$off" } catch (e: Exception) { v = !n; nav.toast = "操作失败：${e.message}" } }
-    }.height(48.dp).background(bg).nbf(1.dp, p.k).padding(horizontal = 14.dp).animateContentSize(tween(220)), contentAlignment = Alignment.Center) {
-        androidx.compose.animation.AnimatedContent(v, transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) }, label = "ft") { x ->
+    }.height(48.dp).background(bg).nbf(1.dp, p.k).padding(horizontal = 14.dp).animateContentSize(Motion.standard()), contentAlignment = Alignment.Center) {
+        androidx.compose.animation.AnimatedContent(v, transitionSpec = { fadeIn(Motion.standard()) togetherWith fadeOut(Motion.quick()) }, label = "ft") { x ->
             T(if (x) on else "+ $off", 15, fg, 700)
         }
     }
@@ -297,8 +297,8 @@ fun qualitySheet(nav: Nav) {
             if (AnimStyle.off) { sweep.snapTo(1f); step.snapTo(1f) }
             else {
                 sweep.snapTo(0f); step.snapTo(0f)
-                launch { sweep.animateTo(1f, tween((420 / Anim.f).toInt().coerceAtLeast(1), easing = OsuOut)) }
-                launch { step.animateTo(1f, tween((360 / Anim.f).toInt().coerceAtLeast(1), easing = OsuOut)) }
+                launch { sweep.animateTo(1f, Motion.page()) }
+                launch { step.animateTo(1f, Motion.standard()) }
             }
         }
     }

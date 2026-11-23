@@ -383,8 +383,8 @@ fun img(url: String?, px: Int): String? {
         target >= 0 && ls.layoutInfo.visibleItemsInfo.let { v -> v.isEmpty() || v.none { it.index == target } || v.first { it.index == target }.let { it.offset < 0 || it.offset + it.size > ls.layoutInfo.viewportEndOffset } }
     } }
     androidx.compose.animation.AnimatedVisibility(show, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = bottom),
-        enter = androidx.compose.animation.fadeIn(tween(150)) + androidx.compose.animation.scaleIn(tween(150), .8f),
-        exit = androidx.compose.animation.fadeOut(tween(150)) + androidx.compose.animation.scaleOut(tween(150), .8f)) {
+        enter = androidx.compose.animation.fadeIn(Motion.quick()) + androidx.compose.animation.scaleIn(Motion.quick(), if (MotionEffects.pageScale) .8f else 1f),
+        exit = androidx.compose.animation.fadeOut(Motion.quick()) + androidx.compose.animation.scaleOut(Motion.quick(), if (MotionEffects.pageScale) .8f else 1f)) {
         Box(Modifier.size(44.dp).press(.92f, true) {
             scope.launch { ls.animateScrollToItem(target, -(ls.layoutInfo.viewportEndOffset / 3)) }
         }.background(c.sheet).border(if (Look.flat) 0.dp else 1.dp, c.k), contentAlignment = Alignment.Center) { NIcon(NIcons.locate, 20.dp, c.p) }

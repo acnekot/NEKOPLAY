@@ -93,7 +93,7 @@ private val CURVE_PRESETS = listOf(
 
         item {
             SetLine("全局速度倍率", "整体加快或放慢所有页面切换、播放页、队列与弹窗动画") {
-                ChipRow(Anim.labels, Anim.level) { Anim.level = it; Plat.prefs("ui").edit().putInt("anim", it).apply(); playPreview() }
+                ChipRow(Anim.labels, Anim.level) { Anim.set(it); playPreview() }
             }
         }
 

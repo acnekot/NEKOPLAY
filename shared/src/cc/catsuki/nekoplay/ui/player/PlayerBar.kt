@@ -82,8 +82,8 @@ import kotlinx.coroutines.flow.map
                 Spacer(Modifier.width(14.dp))
                 Box(Modifier.size(40.dp).press(.94f) { Engine.toggle() }.background(p.p), contentAlignment = Alignment.Center) {
                     AnimatedContent(st.playing, transitionSpec = {
-                        (fadeIn(tween(140)) + scaleIn(tween(180, easing = OsuOut), initialScale = .75f)) togetherWith
-                            (fadeOut(tween(100)) + scaleOut(tween(100), targetScale = .75f))
+                        (fadeIn(Motion.quick()) + scaleIn(Motion.standard(), initialScale = if (MotionEffects.pageScale) .75f else 1f)) togetherWith
+                            (fadeOut(Motion.quick()) + scaleOut(Motion.quick(), targetScale = if (MotionEffects.pageScale) .75f else 1f))
                     }, label = "playIcon") { playing ->
                         NIcon(if (playing) NIcons.pause else NIcons.play, 18.dp, Color.White)
                     }

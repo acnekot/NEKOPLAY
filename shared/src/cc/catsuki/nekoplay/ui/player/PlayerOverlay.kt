@@ -109,7 +109,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                 // 顶栏：按住下拉可以跟手收起
                 if (!wideP) Row(Modifier.fillMaxWidth().height(if (Screen.short) 40.dp else 48.dp).pointerInput(Unit) {
                     detectVerticalDragGestures(onDragEnd = {
-                        scope.launch { if (drag.value > h * .18f) nav.player = false else drag.animateTo(0f, spring(1f, Anim.stiff(Spring.StiffnessMediumLow))) }
+                        scope.launch { if (drag.value > h * .18f) nav.player = false else drag.animateTo(0f, Motion.hero()) }
                     }) { _, dy -> scope.launch { drag.snapTo((drag.value + dy).coerceAtLeast(0f)) } }
                 }.drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp) }
@@ -151,9 +151,9 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     }.pointerInput(nav.lyrics) {
                         // 封面视图下往下拖封面 = 点 ⌄ 收起；歌词模式不拦，留给歌词滚动
                         if (!nav.lyrics) detectVerticalDragGestures(onDragEnd = {
-                            scope.launch { if (drag.value > h * .18f) nav.player = false else drag.animateTo(0f, spring(1f, Anim.stiff(Spring.StiffnessMediumLow))) }
+                            scope.launch { if (drag.value > h * .18f) nav.player = false else drag.animateTo(0f, Motion.hero()) }
                         }, onDragCancel = {
-                            scope.launch { drag.animateTo(0f, spring(1f, Anim.stiff(Spring.StiffnessMediumLow))) }
+                            scope.launch { drag.animateTo(0f, Motion.hero()) }
                         }) { ch, dy -> ch.consume(); scope.launch { drag.snapTo((drag.value + dy).coerceAtLeast(0f)) } }
                     }.then(Modifier.clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { nav.lyrics = !nav.lyrics })) {
                         androidx.compose.animation.Crossfade(t.cover, animationSpec = tween(Motion.crossfadeMs), label = "pCover") { url -> Cover(url, coverDp, t.title) }
@@ -304,8 +304,8 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
         // 右栏：歌词；打开评论时换成评论（从右边滑进来）
         Box(Modifier.weight(1f).fillMaxHeight().clipToBounds().onGloballyPositioned { rightY = it.positionInRoot().y }) {
             AnimatedContent(nav.comments, Modifier.fillMaxSize(), transitionSpec = {
-                if (targetState != null) (slideInHorizontally(sp) { it / 3 } + fadeIn(tween(200))) togetherWith fadeOut(tween(120))
-                else fadeIn(tween(200)) togetherWith (slideOutHorizontally(tween(200)) { it / 3 } + fadeOut(tween(160)))
+                if (targetState != null) (slideInHorizontally(Motion.page()) { it / 3 } + fadeIn(Motion.standard())) togetherWith fadeOut(Motion.quick())
+                else fadeIn(Motion.standard()) togetherWith (slideOutHorizontally(Motion.standard()) { it / 3 } + fadeOut(Motion.quick()))
             }, label = "right") { ct ->
                 if (ct != null) CommentsBody(ct) { nav.comments = null }
                 // 歌词栏按目标宽度排版：队列展开 / 收起的动画过程中不重新换行，不会跳动
@@ -315,8 +315,8 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
         }
         // 第三栏：播放队列（看歌词的同时打开），从右边展开
         AnimatedVisibility(nav.side == 2, Modifier.fillMaxHeight(),
-            enter = expandHorizontally(spring(1f, Anim.stiff(Spring.StiffnessMediumLow)), expandFrom = Alignment.Start) + fadeIn(tween(200)),
-            exit = shrinkHorizontally(tween(220), shrinkTowards = Alignment.Start) + fadeOut(tween(160))) {
+            enter = expandHorizontally(Motion.hero(), expandFrom = Alignment.Start) + fadeIn(Motion.standard()),
+            exit = shrinkHorizontally(Motion.standard(), shrinkTowards = Alignment.Start) + fadeOut(Motion.quick())) {
             Column(Modifier.width(360.dp).fillMaxHeight().drawBehind {
                 if (!Look.flat) drawRect(p.k, Offset.Zero, Size(3.dp.toPx(), size.height))
             }.padding(start = 3.dp)) {

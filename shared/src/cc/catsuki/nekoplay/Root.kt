@@ -122,10 +122,8 @@ object Boot {
     fun init() { initFast(); initDeferred() }
     /** 重新读一遍设置（启动时、从备份恢复后） */
     fun reloadPrefs() {
-        val ui = Plat.prefs("ui")
-        Anim.level = ui.getInt("anim", 1)
         ThemePref.load(); ThemeStore.load(); Typo.load(); Look.load(); LyricPref.load(); AnimStyle.load(); UiPref.load(); Vol.load(); Monet.load(); Sleep.load(); DeskLyric.load(); DiscordPref.load(); Debug.load(); Features.load(); PlayerLayout.load(); SidePref.load(); DlPref.load()
-        Perf.overlay.value = ui.getBoolean("perf", false)
+        Perf.overlay.value = Plat.prefs("ui").getBoolean("perf", false)
         Store.reloadLiked(); FxStore.init(); HomeLayout.init()
     }
 }
@@ -166,12 +164,12 @@ object Boot {
             chrome?.invoke()
             Box(Modifier.weight(1f).fillMaxWidth()) {
             AnimatedContent(wide, Modifier.fillMaxSize(), transitionSpec = {
-                fadeIn(tween(200, easing = OsuOut)) togetherWith fadeOut(tween(140))
+                fadeIn(Motion.standard()) togetherWith fadeOut(Motion.quick())
             }, label = "layoutMode") { isWide ->
             if (isWide) WideLayout() else Column(Modifier.fillMaxSize()) {
                 if (chrome == null) androidx.compose.animation.AnimatedVisibility(!(Screen.short && nav.player),
-                    enter = androidx.compose.animation.expandVertically(spring(1f, Anim.stiff(Spring.StiffnessMediumLow))),
-                    exit = androidx.compose.animation.shrinkVertically(spring(1f, Anim.stiff(Spring.StiffnessMediumLow)))) { TopBar() }
+                    enter = androidx.compose.animation.expandVertically(Motion.hero()),
+                    exit = androidx.compose.animation.shrinkVertically(Motion.hero())) { TopBar() }
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
                     val w = constraints.maxWidth.toFloat()
                     val sub = remember { Animatable(0f) }
@@ -193,8 +191,8 @@ object Boot {
             }
             if (nav.menu) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { nav.menu = false } })
             AnimatedVisibility(nav.menu, Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = if (chrome != null) 54.dp else 59.dp, end = 12.dp),
-                enter = fadeIn(tween(180, easing = OsuOut)) + scaleIn(tween(220, easing = OsuOut), initialScale = .92f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)),
-                exit = fadeOut(tween(130)) + scaleOut(tween(130), targetScale = .95f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f))) {
+                enter = fadeIn(Motion.standard()) + scaleIn(Motion.standard(), initialScale = if (MotionEffects.pageScale) .92f else 1f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)),
+                exit = fadeOut(Motion.quick()) + scaleOut(Motion.quick(), targetScale = if (MotionEffects.pageScale) .95f else 1f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f))) {
                 AccountMenu(Modifier)
             }
             if (!wide) QueueSheet()
@@ -203,8 +201,8 @@ object Boot {
             InputDialog()
             UpdateDialog(wide)
             AnimatedVisibility(nav.toast != null, Modifier.align(Alignment.BottomCenter).padding(bottom = if (hasTrack) 150.dp else 90.dp, start = 24.dp, end = 24.dp).navigationBarsPadding(),
-                enter = fadeIn(tween(200, easing = OsuOut)) + slideInVertically(tween(240, easing = OsuOut)) { it / 2 } + scaleIn(tween(220, easing = OsuOut), initialScale = .95f),
-                exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { it / 3 }) {
+                enter = fadeIn(Motion.standard()) + slideInVertically(Motion.standard()) { it / 2 } + scaleIn(Motion.standard(), initialScale = if (MotionEffects.pageScale) .95f else 1f),
+                exit = fadeOut(Motion.quick()) + slideOutVertically(Motion.quick()) { it / 3 }) {
                 Box(Modifier.background(c.k).padding(horizontal = 16.dp, vertical = 11.dp)) { T(nav.toast ?: "", 14, c.tagFg, lines = 3, lh = 1.4f, align = TextAlign.Center) }
             }
             PerfOverlay(Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 6.dp, bottom = 140.dp))

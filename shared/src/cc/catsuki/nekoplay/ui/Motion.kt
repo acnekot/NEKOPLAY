@@ -1,51 +1,32 @@
 package cc.catsuki.nekoplay
 
-import cc.catsuki.nekoplay.ui.settings.BackupPage
-import cc.catsuki.nekoplay.ui.settings.DavMusicPage
-import cc.catsuki.nekoplay.ui.settings.DebugPage
-import cc.catsuki.nekoplay.ui.settings.DownloadsPage
-import cc.catsuki.nekoplay.ui.settings.FeaturesPage
-import cc.catsuki.nekoplay.ui.settings.LocalMusicPage
-import cc.catsuki.nekoplay.ui.settings.StatsPage
-
-import androidx.compose.animation.*
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.IntOffset
+import org.json.JSONObject
 
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
-
+/** 全局动效速率档位：0 慢 / 1 标准 / 2 快 / 3 很快 */
 object Anim {
     val labels = listOf("慢", "标准", "快", "很快")
     private val factors = listOf(0.7f, 1f, 1.4f, 2f)
     var level by mutableIntStateOf(1)
     val f get() = factors[level]
     fun stiff(base: Float) = base * f * f
+    fun load() { level = Plat.prefs("ui").getInt("anim", 1).coerceIn(0, labels.lastIndex) }
+    fun set(v: Int) { level = v.coerceIn(0, labels.lastIndex); Plat.prefs("ui").edit().putInt("anim", level).apply() }
 }
+
 /**
  * 空间微交互令牌（与曲线/时间引擎 AnimStyle 完全解耦）：
  * 无论使用弹簧、缓动、osu! 还是自定义贝塞尔曲线，以下空间反馈均可独立开关与调参。
@@ -57,7 +38,7 @@ object MotionEffects {
     var hoverTint by mutableStateOf(true)
     /** 按下控件时的默认缩放比例（1.00 = 关闭按压缩放） */
     var pressScale by mutableFloatStateOf(0.985f)
-    /** 播放页 / 面板展开收起时是否叠加微缩放过渡 */
+    /** 播放页 / 面板 / 页面切换时是否叠加空间缩放与视差 */
     var pageScale by mutableStateOf(true)
 
     private val k get() = Plat.prefs("ui")
@@ -95,16 +76,17 @@ object AnimStyle {
     val osu get() = style == 4
     val off get() = style == 3
     val custom get() = style == 5
-    val customEasing get() = androidx.compose.animation.core.CubicBezierEasing(x1.coerceIn(0f, 1f), y1.coerceIn(-0.45f, 1.45f), x2.coerceIn(0f, 1f), y2.coerceIn(-0.45f, 1.45f))
-    val activeEasing: androidx.compose.animation.core.Easing get() = when (style) {
-        2 -> androidx.compose.animation.core.LinearEasing
+    val customEasing get() = CubicBezierEasing(x1.coerceIn(0f, 1f), y1.coerceIn(-0.45f, 1.45f), x2.coerceIn(0f, 1f), y2.coerceIn(-0.45f, 1.45f))
+    val activeEasing: Easing get() = when (style) {
+        2 -> LinearEasing
         4 -> OsuOut
         5 -> customEasing
-        else -> androidx.compose.animation.core.FastOutSlowInEasing
+        else -> FastOutSlowInEasing
     }
 
     private val k get() = Plat.prefs("ui")
     fun load() {
+        Anim.load()
         style = k.getInt("animStyle", 0).coerceIn(0, labels.lastIndex)
         x1 = k.getFloat("anim_x1", 0.16f).coerceIn(0f, 1f)
         y1 = k.getFloat("anim_y1", 1.00f).coerceIn(-0.45f, 1.45f)
@@ -132,14 +114,14 @@ object AnimStyle {
         save()
     }
     fun reset() {
-        style = 0; Anim.level = 1; k.edit().putInt("anim", 1).apply()
+        style = 0; Anim.set(1)
         x1 = 0.16f; y1 = 1f; x2 = 0.30f; y2 = 1f
         springDamping = 0.85f; springStiffness = 400f
         quickBaseMs = 120; standardBaseMs = 240; pageBaseMs = 320; crossfadeBaseMs = 400
         save()
         MotionEffects.reset()
     }
-    fun exportJson(): String = org.json.JSONObject()
+    fun exportJson(): String = JSONObject()
         .put("format", "nekoplay-motion-v1")
         .put("style", style).put("speedLevel", Anim.level)
         .put("x1", x1.toDouble()).put("y1", y1.toDouble()).put("x2", x2.toDouble()).put("y2", y2.toDouble())
@@ -149,9 +131,9 @@ object AnimStyle {
         .put("pressScale", MotionEffects.pressScale.toDouble()).put("pageScale", MotionEffects.pageScale)
         .toString(2)
     fun importJson(raw: String) {
-        val o = org.json.JSONObject(raw.trim())
+        val o = JSONObject(raw.trim())
         if (o.has("style")) style = o.optInt("style", style).coerceIn(0, labels.lastIndex)
-        if (o.has("speedLevel")) { Anim.level = o.optInt("speedLevel", Anim.level).coerceIn(0, Anim.labels.lastIndex); k.edit().putInt("anim", Anim.level).apply() }
+        if (o.has("speedLevel")) Anim.set(o.optInt("speedLevel", Anim.level))
         if (o.has("x1")) x1 = o.optDouble("x1", x1.toDouble()).toFloat().coerceIn(0f, 1f)
         if (o.has("y1")) y1 = o.optDouble("y1", y1.toDouble()).toFloat().coerceIn(-0.45f, 1.45f)
         if (o.has("x2")) x2 = o.optDouble("x2", x2.toDouble()).toFloat().coerceIn(0f, 1f)
@@ -171,90 +153,37 @@ object AnimStyle {
     val ms get() = (pageBaseMs / Anim.f).toInt().coerceAtLeast(1)
     val osuMs get() = ((pageBaseMs + 40) / Anim.f).toInt().coerceAtLeast(1)
 }
-/** osu! stable 招牌 OutExpo/OutQuint 缓出曲线：瞬间冲出、长尾丝滑刹停、零回弹 */
-val OsuOut = androidx.compose.animation.core.CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
-val DecelOut = androidx.compose.animation.core.CubicBezierEasing(0f, 0f, 0.2f, 1f)
+
+/** osu! 招牌 OutExpo/OutQuint 缓出曲线：瞬间冲出、长尾丝滑刹停、零回弹 */
+val OsuOut = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
+val DecelOut = CubicBezierEasing(0f, 0f, 0.2f, 1f)
 
 /**
- * 统一动效令牌（所有组件统一消费此层，禁止在 UI 里直接判断 if (AnimStyle.osu)）：
+ * 统一动效令牌（所有 UI 组件统一消费此层，禁止散落硬编码 tween/spring 或曲线分支）：
  */
 object Motion {
     val quickMs get() = if (AnimStyle.off) 0 else (AnimStyle.quickBaseMs / Anim.f).toInt().coerceAtLeast(1)
     val standardMs get() = if (AnimStyle.off) 0 else (AnimStyle.standardBaseMs / Anim.f).toInt().coerceAtLeast(1)
     val pageMs get() = if (AnimStyle.off) 0 else (AnimStyle.pageBaseMs / Anim.f).toInt().coerceAtLeast(1)
     val crossfadeMs get() = if (AnimStyle.off) 0 else (AnimStyle.crossfadeBaseMs / Anim.f).toInt().coerceAtLeast(1)
-    fun <T> quick(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
-        if (AnimStyle.off) androidx.compose.animation.core.snap()
-        else androidx.compose.animation.core.tween(quickMs, easing = if (AnimStyle.style in listOf(2, 4, 5)) AnimStyle.activeEasing else DecelOut)
-    fun <T> standard(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
-        if (AnimStyle.off) androidx.compose.animation.core.snap()
-        else androidx.compose.animation.core.tween(standardMs, easing = AnimStyle.activeEasing)
-    fun <T> page(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
-        if (AnimStyle.off) androidx.compose.animation.core.snap()
-        else androidx.compose.animation.core.tween(pageMs, easing = AnimStyle.activeEasing)
-    fun <T> hero(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
-        if (AnimStyle.off) androidx.compose.animation.core.snap()
-        else if (AnimStyle.style != 0) androidx.compose.animation.core.tween(pageMs, easing = AnimStyle.activeEasing)
+
+    fun <T> quick(): FiniteAnimationSpec<T> =
+        if (AnimStyle.off) snap()
+        else tween(quickMs, easing = if (AnimStyle.style in listOf(2, 4, 5)) AnimStyle.activeEasing else DecelOut)
+    fun <T> standard(): FiniteAnimationSpec<T> =
+        if (AnimStyle.off) snap()
+        else tween(standardMs, easing = AnimStyle.activeEasing)
+    fun <T> page(): FiniteAnimationSpec<T> =
+        if (AnimStyle.off) snap()
+        else tween(pageMs, easing = AnimStyle.activeEasing)
+    fun <T> crossfade(): FiniteAnimationSpec<T> =
+        if (AnimStyle.off) snap()
+        else tween(crossfadeMs, easing = AnimStyle.activeEasing)
+    fun <T> hero(): FiniteAnimationSpec<T> =
+        if (AnimStyle.off) snap()
+        else if (AnimStyle.style != 0) tween(pageMs, easing = AnimStyle.activeEasing)
         else spring(dampingRatio = AnimStyle.springDamping, stiffness = Anim.stiff(AnimStyle.springStiffness))
 }
-private fun <T> styled(stiff: Float): androidx.compose.animation.core.FiniteAnimationSpec<T> = when (AnimStyle.style) {
-    1 -> androidx.compose.animation.core.tween(AnimStyle.ms, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-    2 -> androidx.compose.animation.core.tween(AnimStyle.ms, easing = androidx.compose.animation.core.LinearEasing)
-    3 -> androidx.compose.animation.core.snap()
-    4 -> androidx.compose.animation.core.tween(AnimStyle.osuMs, easing = OsuOut)
-    5 -> androidx.compose.animation.core.tween(AnimStyle.ms, easing = AnimStyle.customEasing)
-    else -> spring(dampingRatio = AnimStyle.springDamping, stiffness = Anim.stiff(AnimStyle.springStiffness.coerceAtLeast(stiff * 0.5f)))
-}
-val sp: androidx.compose.animation.core.FiniteAnimationSpec<IntOffset> get() = styled(Spring.StiffnessMediumLow)
-val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styled(Spring.StiffnessMediumLow)
 
-
-object Keys {
-    var nav: Nav? = null
-    val HELP = listOf(
-        "空格" to "播放 / 暂停", "Ctrl + →" to "下一首", "Ctrl + ←" to "上一首", "→ / ←" to "快进 / 快退 5 秒",
-        "Ctrl + ↑ / ↓" to "音量 + / −", "Ctrl + L" to "喜欢 / 取消喜欢", "Ctrl + P" to "打开 / 收起播放页",
-        "Ctrl + F" to "搜索", "Ctrl + Q" to "播放队列", "Ctrl + D" to "歌词栏", "Ctrl + ," to "设置", "Esc" to "返回",
-        "媒体键" to "播放 / 暂停、上一首、下一首（窗口在前台时）",
-    )
-    /** 带 Ctrl 的组合键和媒体键：输入框里也生效 */
-    fun handleCtrl(key: androidx.compose.ui.input.key.Key, ctrl: Boolean): Boolean {
-        val n = nav ?: return false
-        val K = androidx.compose.ui.input.key.Key
-        when (key) {
-            K.MediaPlayPause -> { Engine.toggle(); return true }
-            K.MediaNext -> { Engine.next(); return true }
-            K.MediaPrevious -> { Engine.prev(); return true }
-        }
-        if (!ctrl) return false
-        when (key) {
-            K.DirectionRight -> Engine.next()
-            K.DirectionLeft -> Engine.prev()
-            K.DirectionUp -> Vol.set(Vol.v + .05f)
-            K.DirectionDown -> Vol.set(Vol.v - .05f)
-            K.Spacebar -> Engine.toggle()
-            K.L -> Engine.state.value.current?.let { t -> Store.toggleLike(t) { n.toast = it }; n.toast = if (t.id in Store.likedIds.value) "已喜欢" else "已取消喜欢" }
-            K.P -> { if (Engine.state.value.current != null) { n.lyrics = false; n.player = !n.player } }
-            K.F -> { n.player = false; n.stack.clear(); n.push(Page.Search) }
-            K.Q -> n.queue = true
-            K.D -> n.side = if (n.side == 1) 0 else 1
-            K.Comma -> { n.player = false; n.stack.clear(); n.push(Page.Settings) }
-            else -> return false
-        }
-        return true
-    }
-    /** 不带修饰键的：输入框没用掉才会到这里 */
-    fun handlePlain(key: androidx.compose.ui.input.key.Key): Boolean {
-        val K = androidx.compose.ui.input.key.Key
-        when (key) {
-            K.Spacebar -> Engine.toggle()
-            K.DirectionRight -> Engine.seek(Engine.position.value + 5000)
-            K.DirectionLeft -> Engine.seek((Engine.position.value - 5000).coerceAtLeast(0))
-            else -> return false
-        }
-        return true
-    }
-}
-
-/** 标题栏搜索框 → 搜索页：把要搜的词交给搜索页 */
-object SearchBus { var query by mutableStateOf<String?>(null) }
+val sp: FiniteAnimationSpec<IntOffset> get() = Motion.hero()
+val spF: FiniteAnimationSpec<Float> get() = Motion.hero()

@@ -39,13 +39,14 @@ import kotlinx.coroutines.launch
 
 @Composable fun AccountMenu(modifier: Modifier) {
     val nav = LocalNav.current
+    val p = c
     val prof by Store.profile.collectAsState()
-    Column(modifier.width(190.dp).background(if (c.dark) c.pop else Color(0xFFF1F7F8)).nb(1.dp, c.k)) {
+    Column(modifier.width(190.dp).background(p.pop).nb(1.dp, p.k)) {
         T(prof?.name ?: "本地用户", 15, w = 800, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         val acc by PluginStore.accounts.collectAsState()
         (listOfNotNull(prof?.let { "我的主页" to Page.User(it.uid, it.name) }, "设置" to Page.Settings) +
             Plugins.enabled.filter { it.has("loginQr") || it.has("loginWeb") }.filter { acc[it.id] == null }.map { "登录${it.name}" to Page.PluginLogin(it.id) }).forEach { (t, pg) ->
-            Box(Modifier.fillMaxWidth().height(48.dp).press { nav.menu = false; nav.player = false; nav.push(pg) }.drawBehind { drawRect(Color(0x1F888888), size = androidx.compose.ui.geometry.Size(size.width, 1f)) }.padding(horizontal = 14.dp),
+            Box(Modifier.fillMaxWidth().height(48.dp).press { nav.menu = false; nav.player = false; nav.push(pg) }.drawBehind { drawRect(p.l1, size = androidx.compose.ui.geometry.Size(size.width, 1f)) }.padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart) { T(t, 15) }
         }
     }
@@ -90,7 +91,7 @@ import kotlinx.coroutines.launch
         .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
         Box(Modifier.fillMaxSize().background(p.page)) { BgLayer() }
         Column(Modifier.fillMaxSize()) {
-            AnimatedContent(pg, Modifier.weight(1f), transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(120)) }, label = "sub") { page ->
+            AnimatedContent(pg, Modifier.weight(1f), transitionSpec = { fadeIn(Motion.standard()) togetherWith fadeOut(Motion.quick()) }, label = "sub") { page ->
                 PageContent(page)
             }
             if (Engine.state.collectAsState().value.current != null) MiniBar()
@@ -169,13 +170,13 @@ import kotlinx.coroutines.launch
 @Composable fun TopActions(box: Dp, icon: Dp, avatar: Dp) {
     val nav = LocalNav.current
     val onSearch = nav.stack.lastOrNull() is Page.Search && !nav.player
-    AnimatedVisibility(!onSearch, enter = fadeIn(tween(160)) + expandHorizontally(tween(160)), exit = fadeOut(tween(120)) + shrinkHorizontally(tween(160))) {
+    AnimatedVisibility(!onSearch, enter = fadeIn(Motion.standard()) + expandHorizontally(Motion.standard()), exit = fadeOut(Motion.quick()) + shrinkHorizontally(Motion.quick())) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(box).press(.92f, true) { nav.player = false; nav.comments = null; if (nav.stack.lastOrNull() !is Page.Search) nav.push(Page.Search) }, contentAlignment = Alignment.Center) { NIcon(NIcons.search, icon) }
             Spacer(Modifier.width(6.dp))
         }
     }
-    AnimatedVisibility(!nav.player, enter = fadeIn(tween(160)), exit = fadeOut(tween(120))) {
+    AnimatedVisibility(!nav.player, enter = fadeIn(Motion.standard()), exit = fadeOut(Motion.quick())) {
         Box(Modifier.size(box).press { nav.menu = !nav.menu }, contentAlignment = Alignment.Center) { Avatar(avatar, (avatar.value * .45f).toInt()) }
     }
 }

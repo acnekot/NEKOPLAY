@@ -54,7 +54,7 @@ import androidx.compose.runtime.withFrameMillis
 @Composable fun QueueSheet() {
     val nav = LocalNav.current
     val p = c
-    AnimatedVisibility(nav.queue, enter = fadeIn(tween(220)), exit = fadeOut(tween(220))) {
+    AnimatedVisibility(nav.queue, enter = fadeIn(Motion.standard()), exit = fadeOut(Motion.quick())) {
         Box(Modifier.fillMaxSize().background(Color(0x80000000)).pointerInput(Unit) { detectTapGestures { nav.queue = false } })
     }
     AnimatedVisibility(nav.queue, Modifier.fillMaxSize(), enter = slideInVertically(sp) { it }, exit = slideOutVertically(sp) { it }) {
