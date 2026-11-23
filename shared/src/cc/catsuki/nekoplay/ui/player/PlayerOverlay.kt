@@ -62,8 +62,9 @@ import androidx.compose.runtime.withFrameMillis
             Cover(t.cover, 40.dp, t.title)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) { T(t.title, 15, w = 700, lh = 1.3f); T(t.artist, 12, p.s, lh = 1.3f) }
-            Box(Modifier.size(48.dp).press(haptic = true) { Engine.toggle() }, contentAlignment = Alignment.Center) { NIcon(if (st.playing) NIcons.pause else NIcons.play, 22.dp) }
-            Box(Modifier.size(44.dp, 48.dp).press(haptic = true) { Engine.next() }, contentAlignment = Alignment.Center) { NIcon(NIcons.next, 20.dp) }
+            Box(Modifier.size(40.dp, 48.dp).press(haptic = true) { if (st.fm) { Engine.fmTrash(); nav.toast = "不再推荐这首" } else Engine.prev() }, contentAlignment = Alignment.Center) { NIcon(if (st.fm) NIcons.trash else NIcons.prev, 19.dp) }
+            Box(Modifier.size(44.dp, 48.dp).press(haptic = true) { Engine.toggle() }, contentAlignment = Alignment.Center) { NIcon(if (st.playing) NIcons.pause else NIcons.play, 21.dp) }
+            Box(Modifier.size(40.dp, 48.dp).press(haptic = true) { Engine.next() }, contentAlignment = Alignment.Center) { NIcon(NIcons.next, 19.dp) }
         }
         var scrub by remember { mutableStateOf<Float?>(null) }
         Box(Modifier.offset(y = (-7).dp)) { ScrubBar(t.durationMs) { scrub = it } }
