@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="版本" src="https://img.shields.io/badge/版本-0.6.5-1f1f23">
+  <img alt="版本" src="https://img.shields.io/badge/版本-0.6.6-1f1f23">
   <img alt="平台" src="https://img.shields.io/badge/平台-Android%20·%20Windows%20·%20macOS%20·%20Linux%20·%20iOS-1f1f23">
   <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-Compose%20Multiplatform-7F52FF">
   <a href="https://nekoplay.catsuki.cc"><img alt="官网" src="https://img.shields.io/badge/官网-nekoplay.catsuki.cc-1A4BE0"></a>
@@ -107,6 +107,7 @@ design/    图标源文件
 
 | 版本 | 分支 | 内容 |
 |---|---|---|
+| 0.6.6 | `main` | 色彩主题、边框几何、动效曲线与空间微交互四层彻底解耦，全局动效与配色令牌规范化收口 |
 | 0.6.5 | `main` | 多风格逐字歌词引擎、自定义主题系统、可视化贝塞尔动效曲线编辑器、桌面歌词增强、曲库专辑架、启动自动检查更新与多端性能优化 |
 | 0.5.0 | `main` | 插件系统和插件订阅；本体去掉内置音源（干湿分离）；本机喜欢、本地歌单、WebDAV 音乐 |
 | 0.4.0 | `DEV` | 多个在线服务的内置对接（0.5.0 起改为可选插件）；歌曲来源标签 |
