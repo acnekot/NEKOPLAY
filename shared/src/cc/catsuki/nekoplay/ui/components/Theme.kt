@@ -220,15 +220,87 @@ object UiPref {
     fun save() { k.edit().putBoolean("buf", showBuffer).putBoolean("lblur", lyricBlur).putBoolean("kara", karaoke).putFloat("barA", barAlpha).putBoolean("lowMem", lowMem).putBoolean("tray", tray).putInt("coverPct", coverPct).putBoolean("sideAuto", autoHideSide).putInt("scale", scale).putBoolean("autoScale", autoScale).putBoolean("round", round).putString("homePlugin", homePlugin).apply() }
 }
 
-/** 歌词字号（设置里可调，歌词页 / 右栏 / 播放页都用它） */
+/** 歌词样式与字号（支持预设切换及 JSON 导入导出；歌词页 / 右栏 / 播放页共用） */
 object LyricPref {
+    val STYLES = listOf("大字流动", "Hydrogen 顺滑", "居中经典")
+    val ANCHORS = listOf("顶部", "保留上一句", "偏上", "居中")
+    val ALIGNS = listOf("左对齐", "居中")
+    var style by mutableIntStateOf(0)
     var size by mutableIntStateOf(24)
     /** 当前句停在哪：0 顶部 / 1 第二行（上面保留上一句）/ 2 偏上三分之一 / 3 居中 */
-    val ANCHORS = listOf("顶部", "保留上一句", "偏上", "居中")
     var anchor by mutableIntStateOf(1)
-    fun changeAnchor(v: Int) { anchor = v; Plat.prefs("ui").edit().putInt("lyricAnchor", v).apply() }
-    fun load() { size = Plat.prefs("ui").getInt("lyricSize", 24); anchor = Plat.prefs("ui").getInt("lyricAnchor", 1) }
-    fun set(v: Int) { size = v.coerceIn(16, 40); Plat.prefs("ui").edit().putInt("lyricSize", size).apply() }
+    /** 对齐：0 左对齐 / 1 居中 */
+    var align by mutableIntStateOf(0)
+    var gap by mutableIntStateOf(26)
+    var scrollMs by mutableIntStateOf(580)
+    var staggerMs by mutableIntStateOf(35)
+    var activeScale by mutableFloatStateOf(1.08f)
+    var idleBackMs by mutableIntStateOf(3000)
+    var accentBar by mutableStateOf(false)
+    var customName by mutableStateOf("")
+
+    private val k get() = Plat.prefs("ui")
+    fun applyPreset(idx: Int) {
+        style = idx.coerceIn(0, STYLES.lastIndex); customName = ""
+        when (style) {
+            1 -> { align = 0; gap = 28; scrollMs = 580; staggerMs = 0; activeScale = 1.06f; idleBackMs = 1000; accentBar = true; anchor = 2 }
+            2 -> { align = 1; gap = 22; scrollMs = 460; staggerMs = 0; activeScale = 1.08f; idleBackMs = 2000; accentBar = false; anchor = 3 }
+            else -> { align = 0; gap = 26; scrollMs = 520; staggerMs = 35; activeScale = 1.08f; idleBackMs = 3000; accentBar = false; anchor = 1 }
+        }
+        save()
+    }
+    fun changeAnchor(v: Int) { anchor = v.coerceIn(0, 3); save() }
+    fun changeAlign(v: Int) { align = v.coerceIn(0, 1); save() }
+    fun set(v: Int) { size = v.coerceIn(16, 40); save() }
+    fun save() {
+        k.edit().putInt("lyricStyle", style).putInt("lyricSize", size).putInt("lyricAnchor", anchor)
+            .putInt("lyricAlign", align).putInt("lyricGap", gap).putInt("lyricScrollMs", scrollMs)
+            .putInt("lyricStaggerMs", staggerMs).putFloat("lyricScale", activeScale)
+            .putInt("lyricIdleMs", idleBackMs).putBoolean("lyricBar", accentBar)
+            .putString("lyricCustomName", customName).apply()
+    }
+    fun load() {
+        style = k.getInt("lyricStyle", 0).coerceIn(0, STYLES.lastIndex)
+        size = k.getInt("lyricSize", 24).coerceIn(16, 40)
+        anchor = k.getInt("lyricAnchor", 1).coerceIn(0, 3)
+        align = k.getInt("lyricAlign", if (style == 2) 1 else 0).coerceIn(0, 1)
+        gap = k.getInt("lyricGap", if (style == 1) 28 else 26).coerceIn(10, 60)
+        scrollMs = k.getInt("lyricScrollMs", 580).coerceIn(120, 1500)
+        staggerMs = k.getInt("lyricStaggerMs", if (style == 0) 35 else 0).coerceIn(0, 120)
+        activeScale = k.getFloat("lyricScale", 1.08f).coerceIn(1f, 1.35f)
+        idleBackMs = k.getInt("lyricIdleMs", if (style == 1) 1000 else 3000).coerceIn(500, 8000)
+        accentBar = k.getBoolean("lyricBar", style == 1)
+        customName = k.getString("lyricCustomName", "") ?: ""
+    }
+    fun exportJson(): String = org.json.JSONObject()
+        .put("format", "nekoplay-lyric-style-v1")
+        .put("name", customName.ifBlank { STYLES.getOrElse(style) { "自定义" } })
+        .put("style", style).put("size", size).put("anchor", anchor).put("align", align)
+        .put("gap", gap).put("scrollMs", scrollMs).put("staggerMs", staggerMs)
+        .put("activeScale", activeScale.toDouble()).put("idleBackMs", idleBackMs)
+        .put("accentBar", accentBar).put("karaoke", UiPref.karaoke).put("blur", UiPref.lyricBlur)
+        .toString(2)
+    fun importJson(raw: String): String {
+        val o = org.json.JSONObject(raw.trim())
+        if (o.has("style")) style = o.optInt("style", style).coerceIn(0, STYLES.lastIndex)
+        if (o.has("size")) size = o.optInt("size", size).coerceIn(16, 40)
+        if (o.has("anchor")) anchor = o.optInt("anchor", anchor).coerceIn(0, 3)
+        if (o.has("align")) align = o.optInt("align", align).coerceIn(0, 1)
+        if (o.has("gap")) gap = o.optInt("gap", gap).coerceIn(10, 60)
+        if (o.has("scrollMs")) scrollMs = o.optInt("scrollMs", scrollMs).coerceIn(120, 1500)
+        if (o.has("staggerMs")) staggerMs = o.optInt("staggerMs", staggerMs).coerceIn(0, 120)
+        if (o.has("activeScale")) activeScale = o.optDouble("activeScale", activeScale.toDouble()).toFloat().coerceIn(1f, 1.35f)
+        if (o.has("idleBackMs")) idleBackMs = o.optInt("idleBackMs", idleBackMs).coerceIn(500, 8000)
+        if (o.has("accentBar")) accentBar = o.optBoolean("accentBar", accentBar)
+        if (o.has("karaoke") || o.has("blur")) {
+            if (o.has("karaoke")) UiPref.karaoke = o.optBoolean("karaoke", UiPref.karaoke)
+            if (o.has("blur")) UiPref.lyricBlur = o.optBoolean("blur", UiPref.lyricBlur)
+            UiPref.save()
+        }
+        customName = o.optString("name", "").trim().take(24)
+        save()
+        return customName.ifBlank { STYLES.getOrElse(style) { "自定义样式" } }
+    }
 }
 
 /** 带角标的封面：封面图 + 右下角蓝底白色图标；没有封面时退回图标块 */

@@ -152,6 +152,22 @@ import java.util.Calendar
        }
        "lyric" -> {
         item {
+            val copy = rememberCopy()
+            SetLine("歌词滚动样式", "选择内置滚动风格（含参考 Hydrogen-Music 的 580ms 整体顺滑滚动），或通过 JSON 导入 / 导出自定义样式") {
+                ChipRow(LyricPref.STYLES, LyricPref.style) { LyricPref.applyPreset(it) }
+                if (LyricPref.customName.isNotBlank()) T("当前导入样式：${LyricPref.customName}", 12, p.p, mono = true, modifier = Modifier.padding(top = 6.dp))
+                Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.press { copy(LyricPref.exportJson(), "歌词样式 JSON") }.nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 6.dp)) { T("导出样式 JSON", 12, p.k, 700) }
+                    Box(Modifier.press {
+                        nav.input = InputSpec("导入歌词样式", "粘贴导出的歌词样式 JSON（支持 style / size / anchor / align / gap / scrollMs / staggerMs / activeScale / accentBar 等字段）") { raw ->
+                            val name = runCatching { LyricPref.importJson(raw) }.getOrElse { nav.toast = "样式 JSON 格式有误：${it.message}"; return@InputSpec }
+                            nav.toast = "已应用歌词样式：$name"
+                        }
+                    }.background(p.k).padding(horizontal = 12.dp, vertical = 6.dp)) { T("导入样式 JSON", 12, p.tagFg, 700) }
+                }
+            }
+        }
+        item {
             SetLine("歌词字号", "歌词页、播放页右栏") {
                 T("今も頭上を回って輝く", LyricPref.size.toFloat(), p.k, 800)
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -161,6 +177,8 @@ import java.util.Calendar
             }
         }
         item { SetLine("当前句位置", "正在唱的那一句停在哪：顶部、第二行（上面保留上一句）、偏上或居中") { ChipRow(LyricPref.ANCHORS, LyricPref.anchor) { LyricPref.changeAnchor(it) } } }
+        item { SetLine("歌词对齐", "左对齐或居中排版") { ChipRow(LyricPref.ALIGNS, LyricPref.align) { LyricPref.changeAlign(it) } } }
+        item { SwitchRow("当前句指示条", "在当前演唱句左侧显示主题色竖条（Hydrogen 风格默认开启）", LyricPref.accentBar) { LyricPref.accentBar = it; LyricPref.save() } }
         item { SwitchRow("逐字高亮", "有逐字歌词的歌，当前句一个字一个字亮起来", UiPref.karaoke) { UiPref.karaoke = it; UiPref.save() } }
         item { SwitchRow("远处歌词模糊", "离当前句较远的行轻微模糊（更有层次，略耗性能）", UiPref.lyricBlur) { UiPref.lyricBlur = it; UiPref.save() } }
         if (!Plat.isDesktop) item { SwitchRow("通知栏歌词", "播放通知里显示当前这句歌词；也会发送状态栏歌词（魅族协议，配合状态栏歌词模块）", DeskLyric.notify) { DeskLyric.notify = it; DeskLyric.save() } }
