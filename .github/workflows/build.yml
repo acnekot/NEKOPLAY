@@ -46,13 +46,15 @@ jobs:
         with: { distribution: temurin, java-version: 21 }
 
       # 把播放内核 libmpv 放进 desktop/resources/<系统>/，安装包和免安装版都会带上
+      # 用 media-kit 固定版本的纯音频 libmpv（仅 ~15MB、无视频/LuaJIT/VapourSynth 组件、已有多年全球信誉），
+      # 避开 shinchiro 每日构建（~80MB、无信誉）频繁被 Windows 安全中心误报隔离的问题
       - name: 准备 libmpv（Windows）
         if: runner.os == 'Windows'
         shell: bash
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           mkdir -p desktop/resources/windows mpvtmp
-          gh release download -R shinchiro/mpv-winbuild-cmake --pattern "mpv-dev-x86_64-2*.7z" -D mpvtmp
+          gh release download 2023-09-24 -R media-kit/libmpv-win32-audio-build --pattern "mpv-dev-x86_64-*.7z" -D mpvtmp
           7z e mpvtmp/*.7z -omp libmpv-2.dll -r -y
           cp mp/libmpv-2.dll desktop/resources/windows/
       # 用 media-kit 编好的 libmpv（只含音频、通用二进制、最低 macOS 11）。
