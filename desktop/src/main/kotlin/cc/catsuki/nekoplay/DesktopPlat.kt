@@ -407,8 +407,9 @@ private class MpvAudio : Audio {
             if (fx.bass > 0) f += "bass=g=${"%.1f".format(java.util.Locale.US, fx.bass * 12)}:f=100"
             if (fx.surround > 0) f += "extrastereo=m=${"%.2f".format(java.util.Locale.US, 1 + fx.surround * 1.5f)}"
             if (fx.loud > 0) f += "volume=${"%.1f".format(java.util.Locale.US, fx.loud * 10)}dB"
-            // 有增益时防削波
-            if (f.isNotEmpty()) f += "alimiter=limit=0.95"
+            // media-kit 精简版 FFmpeg 不含 alimiter 滤镜，改用核心 volume 滤镜做柔和余量衰减防削波
+            val boost = (fx.bands.maxOrNull() ?: 0f).coerceAtLeast(0f) + fx.bass * 6f
+            if (boost > 0f && fx.loud <= 0f) f += "volume=-${"%.1f".format(java.util.Locale.US, (boost * 0.5f).coerceAtMost(6f))}dB"
         }
         lib!!.mpv_set_property_string(hh, "af", if (f.isEmpty()) "" else "lavfi=[${f.joinToString(",")}]")
     }

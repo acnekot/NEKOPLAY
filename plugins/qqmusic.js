@@ -1,6 +1,6 @@
 // @id qqmusic
 // @name QQ 音乐
-// @version 1.7.0
+// @version 1.7.1
 // @author NEKOPLAY
 // @desc QQ 音乐完整音源：搜索、播放、QRC 逐字歌词、私人 FM、每日推荐、推荐歌单、歌单广场、新碟/新歌、排行榜、MV 精选、评论与点赞、相似推荐、个人主页、听歌排行与播放上报
 // @api 1
@@ -32,14 +32,31 @@ const singerPic = (mid) => mid ? `https://y.gtimg.cn/music/photo_new/T001R500x50
 const b64 = (s) => { const t = (s || '').trim(); if (!t) return ''; if (t.startsWith('[')) return t; try { return nk.base64.decode(t); } catch (e) { return ''; } };
 const uniq = (a) => { const s = {}; return a.filter(x => x && x.id && !s[x.id] && (s[x.id] = 1)); };
 
+function cookieHeader(c) {
+  if (!c) return '';
+  const parts = [
+    `uin=${c.id}`, `qqmusic_uin=${c.id}`, `qm_keyst=${c.key}`, `qqmusic_key=${c.key}`, `tmeLoginType=${c.type}`,
+  ];
+  if (c.type === 1) {
+    parts.push(`wxuin=${c.id}`);
+    if (c.openid) parts.push(`wxopenid=${c.openid}`);
+  } else if (c.openid) {
+    parts.push(`openid=${c.openid}`);
+  }
+  return parts.join('; ');
+}
+
 /** 调网关：返回 req_0.data */
 async function call(module, method, param, extraComm) {
   const c = cred();
   const comm = { ct: 19, cv: 2201, platform: '', chid: '0', guid: guid().toUpperCase(), g_tk: c ? hash33(c.key, 5381) : 5381 };
-  if (c) Object.assign(comm, { uin: c.id, qq: String(c.id), authst: c.key, tmeLoginType: c.type });
+  if (c) {
+    Object.assign(comm, { uin: c.id, qq: String(c.id), authst: c.key, tmeLoginType: c.type });
+    if (c.openid) comm.openid = c.openid;
+  }
   Object.assign(comm, extraComm || {});
   const headers = { 'User-Agent': UA, Referer: 'https://y.qq.com/', Origin: 'https://y.qq.com' };
-  if (c) headers.Cookie = `uin=${c.id}; qqmusic_uin=${c.id}; qm_keyst=${c.key}; qqmusic_key=${c.key}; tmeLoginType=${c.type}`;
+  if (c) headers.Cookie = cookieHeader(c);
   const r = await nk.http({ url: GATE, json: { comm, req_0: { module, method, param } }, headers });
   if (r.status !== 200) throw new Error('QQ 音乐服务返回 ' + r.status);
   const r0 = r.json().req_0 || {};
@@ -93,17 +110,24 @@ async function details(mids) {
 }
 async function vkey(mid, filename) {
   const c = cred();
-  const d = await call('music.vkey.GetVkey', 'UrlGetVkey', {
+  const baseParam = {
     uin: c ? String(c.id) : '0',
     filename: [filename],
     guid: guid().toUpperCase(),
     songmid: [mid],
     songtype: [0],
-    ctx: 0,
+    ctx: 1,
     loginflag: c ? 1 : 0,
     platform: '20',
-  });
-  return ((d.midurlinfo || [])[0]) || {};
+  };
+  let info = ((await call('music.vkey.GetVkey', 'UrlGetVkey', baseParam)).midurlinfo || [])[0] || {};
+  if (!info.purl && c) {
+    try {
+      const alt = ((await call('vkey.GetVkeyServer', 'CgiGetVkey', baseParam)).midurlinfo || [])[0] || {};
+      if (alt.purl) info = alt;
+    } catch (e) {}
+  }
+  return info;
 }
 
 // ---------- QQ 扫码登录（照官方电脑版登录框的流程，cookie 按域名保存） ----------
@@ -153,6 +177,8 @@ async function finish(d, type) {
   const id = Number(d.musicid || d.str_musicid || 0);
   if (!d.musickey || !id) throw new Error('登录失败：没有拿到凭证');
   const base = { id, key: d.musickey, type };
+  if (d.openid) base.openid = d.openid;
+  if (d.refresh_key) base.refresh = d.refresh_key;
   nk.store.set('cred', base);
   await fetchProfile(base);
 }
@@ -559,7 +585,7 @@ nk.register({
     }
     if (trials[mid]) {
       const info = await vkey(mid, `RS02${trials[mid]}.mp3`);
-      if (info.purl) return { url: CDN + info.purl, ext: 'mp3', kbps: 128, level: 'standard', trial: true, message: '这首是会员歌曲，当前账号只能放 1 分钟试听片段' };
+      if (info.purl) return { url: CDN + info.purl, ext: 'mp3', kbps: 128, level: 'standard', trial: true, message: cred() ? '这首是会员/数字专辑歌曲，当前账号权限不足或登录已过期，只能放 1 分钟试听（如已开通会员请重新登录）' : '这首是会员歌曲，未登录只能放 1 分钟试听片段' };
     }
     return { error: cred() ? '没有可用的播放地址（这首歌需要 QQ 音乐会员或单独购买）' : '这首歌需要登录 QQ 音乐才能播放' };
   },
