@@ -48,6 +48,7 @@ fun main() {
     Thread {
         Thread.sleep(150)
         Boot.initDeferred()
+        (Plat.impl.vst as? DesktopVstHost)?.initSaved()
         Store.refreshAll()
     }.apply { isDaemon = true; name = "boot-deferred" }.start()
     if (System.getenv("NEKOPLAY_BENCH") == "1") {
@@ -80,7 +81,7 @@ fun main() {
     DiscordRpc.start()
     application {
         val state = rememberWindowState(size = DpSize(w.dp, h.dp), position = if (System.getenv("NEKOPLAY_W") != null) androidx.compose.ui.window.WindowPosition(0.dp, 0.dp) else androidx.compose.ui.window.WindowPosition.PlatformDefault)
-        val quit = { Engine.savePosition(); SingleInstance.release(); exitApplication() }
+        val quit = { Engine.savePosition(); (Plat.impl.vst as? DesktopVstHost)?.shutdown(); SingleInstance.release(); exitApplication() }
         var visible by remember { mutableStateOf(true) }
         // 应用图标（音符猫）：窗口、任务栏和托盘共用
         val appIcon = remember {

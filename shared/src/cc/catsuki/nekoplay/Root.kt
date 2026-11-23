@@ -61,6 +61,7 @@ sealed interface Page {
     data object Background : Page
     data object HomeLayout : Page
     data object Effects : Page
+    data object Vst : Page
     data object Fm : Page
     data object Tuning : Page
     data object KeyMap : Page

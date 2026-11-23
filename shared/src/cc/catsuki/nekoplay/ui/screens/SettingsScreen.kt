@@ -171,6 +171,9 @@ import java.util.Calendar
         item { NavRow(if (Plat.isDesktop) "音质" else "Wi-Fi 音质", "在线播放的档位，拿不到时自动降一档", Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav) } }
         if (!Plat.isDesktop) item { NavRow("流量音质", "用手机流量时换成这个档位", if (Engine.qualityCell < 0) "同 Wi-Fi" else Ncm.LEVEL_LABELS[Engine.qualityCell]) { cellQualitySheet(nav) } }
         item { NavRow("效果器", "10 段均衡器、低音增强、环绕、响度", if (FxStore.fx.on) FxStore.fx.preset else "关") { nav.push(Page.Effects) } }
+        Plat.impl.vst?.let { v ->
+            item { NavRow("VST 插件", "加载 VST3 / VST2 音效与可视化仪（如 MiniMeters），支持置顶浮窗", if (v.enabled) "${v.chain.size} 个运行中" else if (v.chain.isNotEmpty()) "已停用（${v.chain.size}）" else "关") { nav.push(Page.Vst) } }
+        }
         item { val ms = listOf(0, 150, 300, 800); SetLine("淡入淡出", "暂停、继续和切歌时音量渐变") { ChipRow(listOf("关", "短", "中", "长"), ms.indexOf(Engine.fadeMs).coerceAtLeast(0)) { Engine.setFade(ms[it]) } } }
         item { SwitchRow("无缝播放", "快播完时提前把下一首接上，歌和歌之间不会断一下（现场专辑、连续曲目）", Engine.gapless) { Engine.changeGapless(it) } }
        }

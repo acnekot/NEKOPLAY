@@ -8,10 +8,11 @@ local.properties
 .idea/
 *.iml
 
-# 打包时下载的 libmpv
+# 打包时下载的 libmpv 与单头文件 miniaudio
 desktop/resources/windows/
 desktop/resources/macos/
 desktop/resources/linux/
+native/vst/miniaudio.h
 ios/iosApp/build/
 xcuserdata/
 *.xcuserstate

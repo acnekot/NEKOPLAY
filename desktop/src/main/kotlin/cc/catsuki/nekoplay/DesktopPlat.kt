@@ -37,7 +37,10 @@ class DesktopPlat : PlatImpl {
         font("inter_700", FontWeight.W700), font("inter_800", FontWeight.W800), font("inter_900", FontWeight.W900))
     override val mono = FontFamily(font("mono_400", FontWeight.W400), font("mono_500", FontWeight.W500), font("mono_600", FontWeight.W600), font("mono_700", FontWeight.W700))
     override val liveBlur = true
-    override val audio: Audio = MpvAudio()
+    private val mpvAudio = MpvAudio()
+    override val audio: Audio = mpvAudio
+    private val vstHost by lazy { DesktopVstHost { pipe -> mpvAudio.setPcmPipe(pipe) } }
+    override val vst: VstHost get() = vstHost
 
     override fun decodeImage(path: String, maxSide: Int): ImageBitmap? {
         val img = org.jetbrains.skia.Image.makeFromEncoded(File(path).readBytes()).toComposeImageBitmap()
@@ -412,6 +415,23 @@ private class MpvAudio : Audio {
             if (boost > 0f && fx.loud <= 0f) f += "volume=-${"%.1f".format(java.util.Locale.US, (boost * 0.5f).coerceAtMost(6f))}dB"
         }
         lib!!.mpv_set_property_string(hh, "af", if (f.isEmpty()) "" else "lavfi=[${f.joinToString(",")}]")
+    }
+
+    /** 热切换音频输出：pipe 非空时输出 48kHz 立体声 float32 PCM 到 VST 宿主管道，null 恢复直出声卡 */
+    fun setPcmPipe(pipe: String?) {
+        val hh = h ?: return
+        if (pipe != null) {
+            lib!!.mpv_set_property_string(hh, "ao-pcm-waveheader", "no")
+            lib.mpv_set_property_string(hh, "ao-pcm-append", "no")
+            lib.mpv_set_property_string(hh, "ao-pcm-file", pipe)
+            lib.mpv_set_property_string(hh, "audio-samplerate", "48000")
+            lib.mpv_set_property_string(hh, "audio-format", "float")
+            lib.mpv_set_property_string(hh, "audio-channels", "stereo")
+            lib.mpv_set_property_string(hh, "ao", "pcm")
+        } else {
+            lib!!.mpv_set_property_string(hh, "ao", "")
+        }
+        cmd("ao-reload")
     }
 }
 

@@ -6,6 +6,7 @@ import cc.catsuki.nekoplay.ui.settings.DebugPage
 import cc.catsuki.nekoplay.ui.settings.DownloadsPage
 import cc.catsuki.nekoplay.ui.settings.FeaturesPage
 import cc.catsuki.nekoplay.ui.settings.FxPage
+import cc.catsuki.nekoplay.ui.settings.VstPage
 import cc.catsuki.nekoplay.ui.settings.LocalMusicPage
 import cc.catsuki.nekoplay.ui.settings.StatsPage
 
@@ -119,7 +120,7 @@ import kotlinx.coroutines.launch
             .press { nav.back() }.padding(start = 6.dp, end = 18.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { NIcon(NIcons.back, 20.dp) }
-            T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; Page.Local -> "LOCAL"; Page.Dav -> "WEBDAV"; Page.Backup -> "BACKUP"; Page.DebugLog -> "DEBUG"; is Page.ArtistAlbums -> "ALBUMS"; Page.Stats -> "STATS"; is Page.SetSub -> "SETTINGS / " + page.sec.uppercase(); Page.Feats -> "FEATURES"; Page.PluginMgr -> "PLUGINS"; is Page.PluginLogin -> "LOGIN"; Page.BtnLayout -> "PLAYER LAYOUT"; is Page.LyricCard -> "CARD" }, 12, p.s, mono = true, ls = .1f)
+            T(when (page) { is Page.Detail -> "LIST"; Page.Settings -> "SETTINGS"; Page.Login -> "LOGIN"; is Page.Artist -> "ARTIST"; is Page.Album -> "ALBUM"; is Page.User -> "USER"; is Page.Playlists -> "PLAYLISTS"; Page.Square -> "PLAYLISTS"; Page.NewAlbums -> "ALBUMS"; Page.History -> "HISTORY"; is Page.Subs -> if (page.kind == "album") "ALBUMS" else "ARTISTS"; is Page.Rank -> "RANKING"; is Page.Mv -> "MV"; Page.Mvs -> "MV"; Page.Radios -> "PODCAST"; Page.Background -> "BACKGROUND"; Page.HomeLayout -> "LAYOUT"; Page.Effects -> "EFFECTS"; Page.Vst -> "VST"; Page.Fm -> "FM"; Page.Tuning -> "MOTION"; Page.KeyMap -> "KEYS"; Page.DlList -> "DOWNLOADS"; Page.Local -> "LOCAL"; Page.Dav -> "WEBDAV"; Page.Backup -> "BACKUP"; Page.DebugLog -> "DEBUG"; is Page.ArtistAlbums -> "ALBUMS"; Page.Stats -> "STATS"; is Page.SetSub -> "SETTINGS / " + page.sec.uppercase(); Page.Feats -> "FEATURES"; Page.PluginMgr -> "PLUGINS"; is Page.PluginLogin -> "LOGIN"; Page.BtnLayout -> "PLAYER LAYOUT"; is Page.LyricCard -> "CARD" }, 12, p.s, mono = true, ls = .1f)
         }
         Box(Modifier.weight(1f)) {
             when (page) {
@@ -142,6 +143,7 @@ import kotlinx.coroutines.launch
                 Page.Background -> BgEditorPage()
                 Page.HomeLayout -> HomeLayoutPage()
                 Page.Effects -> FxPage()
+                Page.Vst -> VstPage()
                 Page.Fm -> FmPage()
                 Page.Tuning -> TuningPage()
                 Page.KeyMap -> KeysPage()

@@ -85,6 +85,10 @@ jobs:
             | xargs -I{} cp -L {} $D/
           patchelf --set-rpath '$ORIGIN' $D/*.so*
 
+      - name: 编译原生 VST 宿主库（Windows / macOS / Linux）
+        shell: bash
+        run: chmod +x native/vst/build.sh && ./native/vst/build.sh
+
       - name: 打包免安装版
         working-directory: desktop
         shell: bash

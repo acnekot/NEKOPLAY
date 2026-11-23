@@ -141,6 +141,34 @@ interface PlatImpl {
     fun heapMb(): Long = 0L
     fun memInfo(): String
     fun memAnalysis(): String
+    /** 桌面端 VST2 / VST3 实时宿主；移动端返回 null */
+    val vst: VstHost? get() = null
+}
+
+data class VstFound(val path: String, val name: String, val format: String)
+data class VstSlot(val id: Int, val path: String, val name: String, val format: String, val bypass: Boolean, val editorOpen: Boolean)
+data class VstParam(val index: Int, val id: Long, val name: String, val value: Float, val display: String)
+
+interface VstHost {
+    val available: Boolean
+    val loadError: String?
+    val enabled: Boolean
+    val onTop: Boolean
+    val customDirs: List<String>
+    val chain: List<VstSlot>
+    fun setEnabled(on: Boolean): String?
+    fun setOnTop(on: Boolean)
+    fun addDir(dir: String)
+    fun removeDir(dir: String)
+    fun scan(): List<VstFound>
+    fun addPlugin(path: String): String?
+    fun removePlugin(id: Int)
+    fun movePlugin(id: Int, newIndex: Int)
+    fun setBypass(id: Int, bypass: Boolean)
+    fun params(id: Int): List<VstParam>
+    fun setParam(id: Int, index: Int, value: Float)
+    fun openEditor(id: Int): String?
+    fun closeEditor(id: Int)
 }
 
 /** MV 播放控制（由平台实现填充） */
