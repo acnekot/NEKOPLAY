@@ -57,8 +57,8 @@ import kotlinx.coroutines.flow.map
     Row(Modifier.fillMaxSize().padding(top = 3.dp, start = 14.dp, end = 14.dp), verticalAlignment = Alignment.CenterVertically) {
         // 左：封面 + 歌名（切歌时丝滑上下滑入淡入淡出）
         AnimatedContent(t, Modifier.width(300.dp), contentKey = { it?.id ?: "" }, transitionSpec = {
-            val ms = if (AnimStyle.osu) AnimStyle.osuMs else 220
-            val ease = if (AnimStyle.osu) OsuOut else androidx.compose.animation.core.FastOutSlowInEasing
+            val ms = Motion.standardMs
+            val ease = AnimStyle.activeEasing
             (androidx.compose.animation.slideInVertically(tween(ms, easing = ease)) { it / 3 } + fadeIn(tween(ms, easing = ease))) togetherWith
                 (androidx.compose.animation.slideOutVertically(tween((ms * .7f).toInt(), easing = ease)) { -it / 3 } + fadeOut(tween((ms * .6f).toInt())))
         }, label = "barTrack") { cur ->

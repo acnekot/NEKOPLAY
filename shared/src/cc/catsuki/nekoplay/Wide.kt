@@ -59,8 +59,8 @@ import kotlinx.coroutines.flow.map
                     // 右栏（歌词 / 队列 / 评论）：纯 GPU 位移滑入滑出，不改变主内容区宽度，避免每帧全页重排掉帧
                     androidx.compose.animation.AnimatedVisibility((nav.side != 0 || nav.comments != null) && st.current != null,
                         Modifier.align(Alignment.CenterEnd),
-                        enter = androidx.compose.animation.slideInHorizontally(sp) { it } + fadeIn(if (AnimStyle.osu) tween(AnimStyle.osuMs, easing = OsuOut) else tween(150)),
-                        exit = androidx.compose.animation.slideOutHorizontally(if (AnimStyle.osu) tween((220 / Anim.f).toInt(), easing = OsuOut) else tween(180)) { it } + fadeOut(tween(130))) { SidePanel(st) }
+                        enter = androidx.compose.animation.slideInHorizontally(Motion.page()) { it } + fadeIn(Motion.standard()),
+                        exit = androidx.compose.animation.slideOutHorizontally(Motion.standard()) { it } + fadeOut(Motion.quick())) { SidePanel(st) }
                 }
             }
             PlayerBar()
@@ -92,23 +92,21 @@ import kotlinx.coroutines.flow.map
             top is Page.Playlists && top.kind == "top" -> 4
             else -> -1
         }
-        val osu = AnimStyle.osu
-        val indY = animateFloatAsState(if (navIdx >= 0) navIdx.toFloat() else 0f,
-            if (osu) tween(AnimStyle.osuMs, easing = OsuOut) else spF, label = "sby")
-        val indA = animateFloatAsState(if (navIdx >= 0) 1f else 0f,
-            if (osu) tween((200 / Anim.f).toInt(), easing = OsuOut) else tween(140), label = "sba")
+        val sliding = !AnimStyle.off
+        val indY = animateFloatAsState(if (navIdx >= 0) navIdx.toFloat() else 0f, Motion.standard(), label = "sby")
+        val indA = animateFloatAsState(if (navIdx >= 0) 1f else 0f, Motion.quick(), label = "sba")
         Box(Modifier.fillMaxWidth()) {
-            // 连贯滑动的选中高亮块：切菜单时蓝色底块顺滑滑到新位置，不再瞬间硬跳
-            if (osu) Box(Modifier.fillMaxWidth().height(44.dp).graphicsLayer {
+            // 连贯滑动的选中高亮块：切菜单时蓝色底块顺滑滑到新位置，由统一 Motion 令牌驱动
+            if (sliding) Box(Modifier.fillMaxWidth().height(44.dp).graphicsLayer {
                 translationY = indY.value * 44.dp.toPx()
                 alpha = indA.value
             }.background(p.p))
             Column(Modifier.fillMaxWidth()) {
-                SideItem(NIcons.home, "主页", navIdx == 0, osu) { nav.player = false; nav.stack.clear(); nav.tab = 0 }
-                SideItem(NIcons.library, "曲库", navIdx == 1, osu) { nav.player = false; nav.stack.clear(); nav.tab = 1 }
-                SideItem(NIcons.search, "搜索", navIdx == 2, osu) { nav.player = false; nav.stack.clear(); nav.push(Page.Search) }
-                SideItem(NIcons.radio, "私人 FM", navIdx == 3, osu) { nav.player = false; nav.stack.clear(); nav.push(Page.Fm) }
-                SideItem(NIcons.chart, "发现 · 排行榜", navIdx == 4, osu) { nav.player = false; nav.stack.clear(); nav.push(Page.Playlists("top", "", "排行榜")) }
+                SideItem(NIcons.home, "主页", navIdx == 0, sliding) { nav.player = false; nav.stack.clear(); nav.tab = 0 }
+                SideItem(NIcons.library, "曲库", navIdx == 1, sliding) { nav.player = false; nav.stack.clear(); nav.tab = 1 }
+                SideItem(NIcons.search, "搜索", navIdx == 2, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Search) }
+                SideItem(NIcons.radio, "私人 FM", navIdx == 3, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Fm) }
+                SideItem(NIcons.chart, "发现 · 排行榜", navIdx == 4, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Playlists("top", "", "排行榜")) }
             }
         }
         Spacer(Modifier.height(14.dp))
@@ -142,9 +140,10 @@ import kotlinx.coroutines.flow.map
     val p = c
     val src = remember { MutableInteractionSource() }
     val hover by src.collectIsHoveredAsState()
-    val shift = if (AnimStyle.osu) animateFloatAsState(if (hover && !on) 6f else 0f, tween(220, easing = OsuOut), label = "sh") else null
+    val shiftDp = MotionEffects.hoverShiftDp
+    val shift = if (shiftDp > 0.1f && !AnimStyle.off) animateFloatAsState(if (hover && !on) shiftDp else 0f, Motion.standard(), label = "sh") else null
     Row(Modifier.fillMaxWidth().height(44.dp).hoverable(src).press(onClick = onClick)
-        .background(if (on && !slidingBg) p.p else if (hover && !on && AnimStyle.osu) p.k.copy(alpha = .06f) else Color.Transparent)
+        .background(if (on && !slidingBg) p.p else if (hover && !on && MotionEffects.hoverTint) p.k.copy(alpha = .06f) else Color.Transparent)
         .padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.graphicsLayer { if (shift != null) translationX = shift.value.dp.toPx() }, verticalAlignment = Alignment.CenterVertically) {
             NIcon(icon, 18.dp, if (on) Color.White else p.k); Spacer(Modifier.width(12.dp)); T(label, 15, if (on) Color.White else p.k, 700)
@@ -156,9 +155,10 @@ import kotlinx.coroutines.flow.map
     val p = c
     val src = remember { MutableInteractionSource() }
     val hover by src.collectIsHoveredAsState()
-    val shift = if (AnimStyle.osu) animateFloatAsState(if (hover) 5f else 0f, tween(220, easing = OsuOut), label = "sl") else null
+    val shiftDp = MotionEffects.hoverShiftDp
+    val shift = if (shiftDp > 0.1f && !AnimStyle.off) animateFloatAsState(if (hover) shiftDp * .85f else 0f, Motion.standard(), label = "sl") else null
     Row(Modifier.fillMaxWidth().height(44.dp).hoverable(src).press(onClick = onClick)
-        .background(if (on) p.hl else if (hover && AnimStyle.osu) p.k.copy(alpha = .05f) else Color.Transparent)
+        .background(if (on) p.hl else if (hover && MotionEffects.hoverTint) p.k.copy(alpha = .05f) else Color.Transparent)
         .padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.graphicsLayer { if (shift != null) translationX = shift.value.dp.toPx() }, verticalAlignment = Alignment.CenterVertically) {
             cover(); Spacer(Modifier.width(10.dp)); T(label, 14, if (on) p.p else p.k, if (on) 700 else 500)
@@ -174,25 +174,21 @@ import kotlinx.coroutines.flow.map
     val showLib = top == null && nav.tab == 1
     var libBuilt by remember { mutableStateOf(false) }
     if (showLib) libBuilt = true
-    val osu = AnimStyle.osu
-    // 跟踪前进 / 后退方向，用于 osu! 模式下子页面之间的连贯左右推拉
+    val spatial = MotionEffects.pageScale && !AnimStyle.off
+    // 跟踪前进 / 后退方向，用于空间视差模式下子页面之间的连贯左右推拉
     var lastDepth by remember { mutableIntStateOf(0) }
     val forward = nav.stack.size >= lastDepth
     SideEffect { lastDepth = nav.stack.size }
 
-    val spec: androidx.compose.animation.core.FiniteAnimationSpec<Float> = when (AnimStyle.style) {
-        3 -> androidx.compose.animation.core.snap()
-        4 -> tween(AnimStyle.osuMs, easing = OsuOut)
-        else -> tween(140)
-    }
+    val spec: androidx.compose.animation.core.FiniteAnimationSpec<Float> = Motion.page()
     val homeAlpha = animateFloatAsState(if (showHome) 1f else 0f, spec, label = "wh")
     val libAlpha = animateFloatAsState(if (showLib) 1f else 0f, spec, label = "wl")
-    val tabSlide = if (osu) animateFloatAsState(if (nav.tab == 1) 1f else 0f, spec, label = "wts") else null
-    val subDepth = if (osu) animateFloatAsState(if (top != null) 1f else 0f, spec, label = "wsd") else null
+    val tabSlide = if (spatial) animateFloatAsState(if (nav.tab == 1) 1f else 0f, spec, label = "wts") else null
+    val subDepth = if (spatial) animateFloatAsState(if (top != null) 1f else 0f, spec, label = "wsd") else null
 
     var wPx by remember { mutableFloatStateOf(1f) }
     Box(Modifier.fillMaxSize().onSizeChanged { wPx = it.width.toFloat().coerceAtLeast(1f) }) {
-        // 主页常驻：osu! 模式下切曲库时向左顺滑推开，进子页面时向左退 14% 并微缩形成视差衔接
+        // 主页常驻：空间视差开启时切曲库向左顺滑推开，进子页面向左退 14% 并微缩形成视差衔接
         Box(Modifier.fillMaxSize().layout { m, cs -> val pl = m.measure(cs); layout(pl.width, pl.height) { if (homeAlpha.value > 0.01f) pl.place(0, 0) } }.graphicsLayer {
             alpha = homeAlpha.value
             if (tabSlide != null && subDepth != null) {
@@ -216,13 +212,14 @@ import kotlinx.coroutines.flow.map
             }
         }
         AnimatedContent(top, Modifier.fillMaxSize(), transitionSpec = {
-            if (AnimStyle.style == 3) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
-            else if (AnimStyle.osu) {
-                val ms = AnimStyle.osuMs
-                val enterT = tween<androidx.compose.ui.unit.IntOffset>(ms, easing = OsuOut)
-                val enterF = tween<Float>(ms, easing = OsuOut)
-                val exitT = tween<androidx.compose.ui.unit.IntOffset>((ms * .85f).toInt(), easing = OsuOut)
-                val exitF = tween<Float>((ms * .65f).toInt(), easing = OsuOut)
+            if (AnimStyle.off) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
+            else if (spatial) {
+                val ms = Motion.pageMs
+                val ease = AnimStyle.activeEasing
+                val enterT = tween<androidx.compose.ui.unit.IntOffset>(ms, easing = ease)
+                val enterF = tween<Float>(ms, easing = ease)
+                val exitT = tween<androidx.compose.ui.unit.IntOffset>((ms * .85f).toInt(), easing = ease)
+                val exitF = tween<Float>((ms * .65f).toInt(), easing = ease)
                 if (forward) {
                     (slideInHorizontally(enterT) { (it * .24f).toInt() } + fadeIn(enterF)) togetherWith
                         (slideOutHorizontally(exitT) { -(it * .14f).toInt() } + fadeOut(exitF))
@@ -230,7 +227,7 @@ import kotlinx.coroutines.flow.map
                     (slideInHorizontally(enterT) { -(it * .14f).toInt() } + fadeIn(enterF)) togetherWith
                         (slideOutHorizontally(exitT) { (it * .24f).toInt() } + fadeOut(exitF))
                 }
-            } else fadeIn(tween(110)) togetherWith fadeOut(tween(80))
+            } else fadeIn(Motion.quick()) togetherWith fadeOut(Motion.quick())
         }, label = "widePage") { k ->
             if (k != null) Box(Modifier.fillMaxSize()) { PageContent(k) }
         }
@@ -263,8 +260,8 @@ import kotlinx.coroutines.flow.map
         }
         AnimatedContent(nav.side, Modifier.weight(1f).fillMaxWidth(), transitionSpec = {
             val dir = if (targetState > initialState) 1 else -1
-            val ms = if (AnimStyle.osu) AnimStyle.osuMs else 200
-            val ease = if (AnimStyle.osu) OsuOut else androidx.compose.animation.core.FastOutSlowInEasing
+            val ms = Motion.standardMs
+            val ease = AnimStyle.activeEasing
             (slideInHorizontally(tween(ms, easing = ease)) { (it * .18f * dir).toInt() } + fadeIn(tween(ms, easing = ease))) togetherWith
                 (slideOutHorizontally(tween(ms, easing = ease)) { (-it * .14f * dir).toInt() } + fadeOut(tween((ms * .7f).toInt())))
         }, label = "sideTab") { tab ->

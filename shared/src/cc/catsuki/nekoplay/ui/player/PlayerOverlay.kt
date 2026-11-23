@@ -90,8 +90,8 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     val scope = rememberCoroutineScope()
     val copy = rememberCopy()
     AnimatedVisibility(nav.player,
-        enter = if (AnimStyle.osu) slideInVertically(tween(AnimStyle.osuMs, easing = OsuOut)) { it / 4 } + fadeIn(tween(AnimStyle.osuMs, easing = OsuOut)) + scaleIn(tween(AnimStyle.osuMs, easing = OsuOut), initialScale = .96f) else slideInVertically(sp) { it },
-        exit = if (AnimStyle.osu) slideOutVertically(tween((AnimStyle.osuMs * .85f).toInt(), easing = OsuOut)) { it / 4 } + fadeOut(tween((AnimStyle.osuMs * .65f).toInt(), easing = OsuOut)) + scaleOut(tween((AnimStyle.osuMs * .85f).toInt(), easing = OsuOut), targetScale = .97f) else slideOutVertically(sp) { it }) {
+        enter = if (MotionEffects.pageScale && !AnimStyle.off) slideInVertically(Motion.page()) { it / 4 } + fadeIn(Motion.page()) + scaleIn(Motion.page(), initialScale = .96f) else slideInVertically(sp) { it },
+        exit = if (MotionEffects.pageScale && !AnimStyle.off) slideOutVertically(Motion.standard()) { it / 4 } + fadeOut(Motion.quick()) + scaleOut(Motion.standard(), targetScale = .97f) else slideOutVertically(sp) { it }) {
         LaunchedEffect(Unit) { drag.snapTo(0f) }
         val st by Engine.state.collectAsState()
         val t = st.current

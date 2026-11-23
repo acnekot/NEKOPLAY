@@ -98,6 +98,21 @@ private val CURVE_PRESETS = listOf(
         }
 
         item {
+            SetLine("空间微交互（与曲线解耦）", "悬停位移、底色高亮、按压缩放与切页微缩放均独立控制，任意曲线模式下都能自由开关和调参") {
+                ParamSlider("侧栏 / 列表悬停位移", MotionEffects.hoverShiftDp, 0f..12f, if (MotionEffects.hoverShiftDp < 0.5f) "关" else "${MotionEffects.hoverShiftDp.toInt()} dp", onDone = { MotionEffects.save() }) {
+                    MotionEffects.hoverShiftDp = it.roundToInt().toFloat()
+                }
+                Spacer(Modifier.height(10.dp))
+                ParamSlider("按压缩放幅度（1.00 = 关闭）", MotionEffects.pressScale, 0.92f..1.00f, "%.3f".format(MotionEffects.pressScale), onDone = { MotionEffects.save() }) {
+                    MotionEffects.pressScale = (it * 200f).roundToInt() / 200f
+                }
+                Spacer(Modifier.height(8.dp))
+                SwitchRow("悬停底色高亮", "鼠标滑过侧边栏导航或歌单项时显示柔和底色", MotionEffects.hoverTint) { MotionEffects.hoverTint = it; MotionEffects.save() }
+                SwitchRow("播放页 / 切页微缩放", "展开或收起播放页时叠加 0.96 → 1.00 的空间缩放过渡", MotionEffects.pageScale) { MotionEffects.pageScale = it; MotionEffects.save() }
+            }
+        }
+
+        item {
             SetLine("弹簧物理参数", "用于「弹簧」模式与播放页展开等物理动效") {
                 ParamSlider("阻尼 Damping（越小越弹）", AnimStyle.springDamping, 0.35f..1.0f, "%.2f".format(AnimStyle.springDamping), onDone = { AnimStyle.save(); playPreview() }) {
                     AnimStyle.springDamping = (it * 100f).roundToInt() / 100f

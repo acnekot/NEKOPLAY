@@ -46,7 +46,35 @@ object Anim {
     val f get() = factors[level]
     fun stiff(base: Float) = base * f * f
 }
-/** 动效形式：0 弹簧 / 1 缓动 / 2 线性 / 3 关闭 / 4 osu! / 5 自定义曲线 */
+/**
+ * 空间微交互令牌（与曲线/时间引擎 AnimStyle 完全解耦）：
+ * 无论使用弹簧、缓动、osu! 还是自定义贝塞尔曲线，以下空间反馈均可独立开关与调参。
+ */
+object MotionEffects {
+    /** 鼠标悬停侧边栏 / 列表项时的横向微位移（dp，0 = 关闭） */
+    var hoverShiftDp by mutableFloatStateOf(5f)
+    /** 鼠标悬停时的轻底色高亮 */
+    var hoverTint by mutableStateOf(true)
+    /** 按下控件时的默认缩放比例（1.00 = 关闭按压缩放） */
+    var pressScale by mutableFloatStateOf(0.985f)
+    /** 播放页 / 面板展开收起时是否叠加微缩放过渡 */
+    var pageScale by mutableStateOf(true)
+
+    private val k get() = Plat.prefs("ui")
+    fun load() {
+        hoverShiftDp = k.getFloat("me_hoverShift", 5f).coerceIn(0f, 12f)
+        hoverTint = k.getBoolean("me_hoverTint", true)
+        pressScale = k.getFloat("me_pressScale", 0.985f).coerceIn(0.92f, 1.0f)
+        pageScale = k.getBoolean("me_pageScale", true)
+    }
+    fun save() {
+        k.edit().putFloat("me_hoverShift", hoverShiftDp).putBoolean("me_hoverTint", hoverTint)
+            .putFloat("me_pressScale", pressScale).putBoolean("me_pageScale", pageScale).apply()
+    }
+    fun reset() { hoverShiftDp = 5f; hoverTint = true; pressScale = 0.985f; pageScale = true; save() }
+}
+
+/** 动效形式（纯时间与缓动曲线层）：0 弹簧 / 1 缓动 / 2 线性 / 3 关闭 / 4 osu! / 5 自定义曲线 */
 object AnimStyle {
     val labels = listOf("弹簧", "缓动", "线性", "关闭", "osu!", "自定义曲线")
     var style by mutableIntStateOf(0)
@@ -68,6 +96,12 @@ object AnimStyle {
     val off get() = style == 3
     val custom get() = style == 5
     val customEasing get() = androidx.compose.animation.core.CubicBezierEasing(x1.coerceIn(0f, 1f), y1.coerceIn(-0.45f, 1.45f), x2.coerceIn(0f, 1f), y2.coerceIn(-0.45f, 1.45f))
+    val activeEasing: androidx.compose.animation.core.Easing get() = when (style) {
+        2 -> androidx.compose.animation.core.LinearEasing
+        4 -> OsuOut
+        5 -> customEasing
+        else -> androidx.compose.animation.core.FastOutSlowInEasing
+    }
 
     private val k get() = Plat.prefs("ui")
     fun load() {
@@ -82,6 +116,7 @@ object AnimStyle {
         standardBaseMs = k.getInt("anim_ms_s", 240).coerceIn(80, 600)
         pageBaseMs = k.getInt("anim_ms_p", 320).coerceIn(100, 800)
         crossfadeBaseMs = k.getInt("anim_ms_c", 400).coerceIn(100, 1000)
+        MotionEffects.load()
     }
     fun save() {
         k.edit().putInt("animStyle", style)
@@ -102,6 +137,7 @@ object AnimStyle {
         springDamping = 0.85f; springStiffness = 400f
         quickBaseMs = 120; standardBaseMs = 240; pageBaseMs = 320; crossfadeBaseMs = 400
         save()
+        MotionEffects.reset()
     }
     fun exportJson(): String = org.json.JSONObject()
         .put("format", "nekoplay-motion-v1")
@@ -109,6 +145,8 @@ object AnimStyle {
         .put("x1", x1.toDouble()).put("y1", y1.toDouble()).put("x2", x2.toDouble()).put("y2", y2.toDouble())
         .put("springDamping", springDamping.toDouble()).put("springStiffness", springStiffness.toDouble())
         .put("quickMs", quickBaseMs).put("standardMs", standardBaseMs).put("pageMs", pageBaseMs).put("crossfadeMs", crossfadeBaseMs)
+        .put("hoverShiftDp", MotionEffects.hoverShiftDp.toDouble()).put("hoverTint", MotionEffects.hoverTint)
+        .put("pressScale", MotionEffects.pressScale.toDouble()).put("pageScale", MotionEffects.pageScale)
         .toString(2)
     fun importJson(raw: String) {
         val o = org.json.JSONObject(raw.trim())
@@ -124,7 +162,11 @@ object AnimStyle {
         if (o.has("standardMs")) standardBaseMs = o.optInt("standardMs", standardBaseMs).coerceIn(80, 600)
         if (o.has("pageMs")) pageBaseMs = o.optInt("pageMs", pageBaseMs).coerceIn(100, 800)
         if (o.has("crossfadeMs")) crossfadeBaseMs = o.optInt("crossfadeMs", crossfadeBaseMs).coerceIn(100, 1000)
-        save()
+        if (o.has("hoverShiftDp")) MotionEffects.hoverShiftDp = o.optDouble("hoverShiftDp", MotionEffects.hoverShiftDp.toDouble()).toFloat().coerceIn(0f, 12f)
+        if (o.has("hoverTint")) MotionEffects.hoverTint = o.optBoolean("hoverTint", MotionEffects.hoverTint)
+        if (o.has("pressScale")) MotionEffects.pressScale = o.optDouble("pressScale", MotionEffects.pressScale.toDouble()).toFloat().coerceIn(0.92f, 1.0f)
+        if (o.has("pageScale")) MotionEffects.pageScale = o.optBoolean("pageScale", MotionEffects.pageScale)
+        save(); MotionEffects.save()
     }
     val ms get() = (pageBaseMs / Anim.f).toInt().coerceAtLeast(1)
     val osuMs get() = ((pageBaseMs + 40) / Anim.f).toInt().coerceAtLeast(1)
@@ -134,7 +176,7 @@ val OsuOut = androidx.compose.animation.core.CubicBezierEasing(0.16f, 1f, 0.3f, 
 val DecelOut = androidx.compose.animation.core.CubicBezierEasing(0f, 0f, 0.2f, 1f)
 
 /**
- * 统一动效令牌（支持自定义贝塞尔曲线、弹簧物理与各类时长独立调节）：
+ * 统一动效令牌（所有组件统一消费此层，禁止在 UI 里直接判断 if (AnimStyle.osu)）：
  */
 object Motion {
     val quickMs get() = if (AnimStyle.off) 0 else (AnimStyle.quickBaseMs / Anim.f).toInt().coerceAtLeast(1)
@@ -143,16 +185,16 @@ object Motion {
     val crossfadeMs get() = if (AnimStyle.off) 0 else (AnimStyle.crossfadeBaseMs / Anim.f).toInt().coerceAtLeast(1)
     fun <T> quick(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
         if (AnimStyle.off) androidx.compose.animation.core.snap()
-        else androidx.compose.animation.core.tween(quickMs, easing = if (AnimStyle.custom) AnimStyle.customEasing else DecelOut)
+        else androidx.compose.animation.core.tween(quickMs, easing = if (AnimStyle.style in listOf(2, 4, 5)) AnimStyle.activeEasing else DecelOut)
     fun <T> standard(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
         if (AnimStyle.off) androidx.compose.animation.core.snap()
-        else androidx.compose.animation.core.tween(standardMs, easing = if (AnimStyle.custom) AnimStyle.customEasing else androidx.compose.animation.core.FastOutSlowInEasing)
+        else androidx.compose.animation.core.tween(standardMs, easing = AnimStyle.activeEasing)
     fun <T> page(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
         if (AnimStyle.off) androidx.compose.animation.core.snap()
-        else androidx.compose.animation.core.tween(pageMs, easing = if (AnimStyle.custom) AnimStyle.customEasing else OsuOut)
+        else androidx.compose.animation.core.tween(pageMs, easing = AnimStyle.activeEasing)
     fun <T> hero(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
         if (AnimStyle.off) androidx.compose.animation.core.snap()
-        else if (AnimStyle.custom) androidx.compose.animation.core.tween(pageMs, easing = AnimStyle.customEasing)
+        else if (AnimStyle.style != 0) androidx.compose.animation.core.tween(pageMs, easing = AnimStyle.activeEasing)
         else spring(dampingRatio = AnimStyle.springDamping, stiffness = Anim.stiff(AnimStyle.springStiffness))
 }
 private fun <T> styled(stiff: Float): androidx.compose.animation.core.FiniteAnimationSpec<T> = when (AnimStyle.style) {

@@ -77,12 +77,11 @@ import kotlinx.coroutines.launch
 @Composable fun Modifier.press(scale: Float = 1f, haptic: Boolean = false, onLong: (() -> Unit)? = null, onClick: () -> Unit): Modifier {
     val src = remember { MutableInteractionSource() }
     val down by src.collectIsPressedAsState()
-    val osu = AnimStyle.osu
-    val a = animateFloatAsState(if (down) .72f else 1f, if (osu) tween(if (down) 35 else 240, easing = OsuOut) else tween(if (down) 60 else 200), label = "a")
-    val effScale = if (scale != 1f) scale else if (osu) .985f else 1f
-    val sc = if (effScale != 1f) animateFloatAsState(if (down) effScale else 1f,
-        if (osu) tween(if (down) 45 else 280, easing = OsuOut)
-        else spring(.9f, Anim.stiff(if (down) Spring.StiffnessHigh else Spring.StiffnessMediumLow)), label = "s") else null
+    val a = animateFloatAsState(if (down) .72f else 1f, if (AnimStyle.off) androidx.compose.animation.core.snap() else tween(if (down) 45 else Motion.standardMs, easing = AnimStyle.activeEasing), label = "a")
+    val effScale = if (scale != 1f) scale else MotionEffects.pressScale
+    val sc = if (effScale < 0.999f && !AnimStyle.off) animateFloatAsState(if (down) effScale else 1f,
+        if (AnimStyle.style != 0) tween(if (down) 45 else Motion.standardMs, easing = AnimStyle.activeEasing)
+        else spring(AnimStyle.springDamping, Anim.stiff(if (down) Spring.StiffnessHigh else AnimStyle.springStiffness)), label = "s") else null
     val h = LocalHapticFeedback.current
     return this.graphicsLayer { alpha = a.value; if (sc != null) { scaleX = sc.value; scaleY = sc.value } }.combinedClickable(src, null,
         onLongClick = onLong?.let { { h.performHapticFeedback(HapticFeedbackType.LongPress); it() } }) {
@@ -187,8 +186,8 @@ val LocalCompactAction = compositionLocalOf { false }
 @Composable fun NSwitch(on: Boolean, onChange: (Boolean) -> Unit) {
     val curOn by rememberUpdatedState(on)
     val curChange by rememberUpdatedState(onChange)
-    val x by animateDpAsState(if (on) 23.dp else 3.dp, if (AnimStyle.osu) tween(220, easing = OsuOut) else spring(1f, Anim.stiff(Spring.StiffnessMedium)), label = "sw")
-    val bg by androidx.compose.animation.animateColorAsState(if (on) c.p else Color.Transparent, tween(180), label = "swb")
+    val x by animateDpAsState(if (on) 23.dp else 3.dp, Motion.standard(), label = "sw")
+    val bg by androidx.compose.animation.animateColorAsState(if (on) c.p else Color.Transparent, Motion.quick(), label = "swb")
     Box(Modifier.size(52.dp, 44.dp).pointerInput(Unit) { detectTapGestures { curChange(!curOn) } }, contentAlignment = Alignment.Center) {
         Box(Modifier.size(44.dp, 24.dp).background(bg).nbf(1.dp, c.k)) {
             Box(Modifier.offset(x = x, y = 3.dp).size(16.dp).background(if (on) Color.White else c.k))
@@ -227,8 +226,8 @@ val LocalCompactAction = compositionLocalOf { false }
     val fg = if (current) p.p else p.k
     val hSrc = remember { MutableInteractionSource() }
     val hovered by hSrc.collectIsHoveredAsState()
-    val curAnim = animateFloatAsState(if (current) 1f else 0f, if (AnimStyle.osu) tween(240, easing = OsuOut) else tween(180), label = "trc")
-    val hovAnim = animateFloatAsState(if (hovered && !current) 1f else 0f, tween(if (hovered) 100 else 180), label = "trh")
+    val curAnim = animateFloatAsState(if (current) 1f else 0f, Motion.standard(), label = "trc")
+    val hovAnim = animateFloatAsState(if (hovered && !current && MotionEffects.hoverTint) 1f else 0f, Motion.quick(), label = "trh")
     Row(Modifier.fillMaxWidth().height(64.dp).hoverable(hSrc).press(onLong = onLong, onClick = onClick).drawBehind {
         val ext = 10.dp.toPx()
         val ca = curAnim.value

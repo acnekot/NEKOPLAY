@@ -123,7 +123,6 @@ object ThemeStore {
 
     fun select(id: String) {
         activeId = id
-        active()?.let { Look.set(if (it.flat) 1 else 0) }
         persist()
     }
 
@@ -131,7 +130,6 @@ object ThemeStore {
         val p = pack.copy(builtin = false)
         customs = customs.filter { it.id != p.id } + p
         activeId = p.id
-        Look.set(if (p.flat) 1 else 0)
         persist()
     }
 
