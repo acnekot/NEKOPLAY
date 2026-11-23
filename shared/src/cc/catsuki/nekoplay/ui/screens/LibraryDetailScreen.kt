@@ -59,6 +59,8 @@ import java.util.Calendar
     // 主插件（首页来源）的账号；其它插件的歌单在最下面
     val main = Plugins.main()
     val subAlbums by produceState<List<Album>?>(null, prof, ver, main?.id) { if (prof != null && main?.has("subAlbums") == true) runCatching { value = Ncm.subAlbums() } }
+    var albumCard by remember { mutableStateOf(Plat.prefs("ui").getInt("lib_album_style", 0) == 0) }
+    var albumAll by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp)) {
         item {
             Column {
@@ -107,24 +109,71 @@ import java.util.Calendar
         }
         val made = if (net) others.filter { it.mine } else emptyList(); val faved = if (net) others.filter { !it.mine } else emptyList()
         val albums = if (net) subAlbums ?: emptyList() else emptyList()
-        if (albums.isNotEmpty()) item {
-            Column(Modifier.padding(top = 26.dp, bottom = 6.dp)) {
-                TagRow("ALBUMS · 专辑", 12.dp) { T("${two(albums.size)} 张", 13, c.s, mono = true) }
-                Spacer(Modifier.height(14.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(albums, key = { "al" + it.id }) { al ->
-                        Column(Modifier.width(124.dp).press(onLong = {
-                            nav.sheet = SheetSpec(al.name, al.artist, listOf(SheetItem("取消收藏", danger = true) {
-                                Store.run { try { Ncm.subAlbum(al.id, false); nav.toast = "已取消收藏"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "操作失败：${e.message}" } }
-                            }))
-                        }) { nav.push(Page.Album(al.id, al.name, al.pic)) }) {
-                            Cover(al.pic, 124.dp, al.name)
-                            Spacer(Modifier.height(8.dp))
-                            T(al.name, 14, w = 700, lines = 1)
-                            val sub = al.artist.ifEmpty { if (al.size > 0) "${al.size} 首" else "" }
-                            if (sub.isNotEmpty()) T(sub, 12, c.s, lines = 1, modifier = Modifier.padding(top = 2.dp))
+        if (albums.isNotEmpty()) {
+            fun openAl(al: Album) = nav.push(Page.Album(al.id, al.name, al.pic))
+            fun longAl(al: Album) {
+                nav.sheet = SheetSpec(al.name, al.artist, listOf(SheetItem("取消收藏", danger = true) {
+                    Store.run { try { Ncm.subAlbum(al.id, false); nav.toast = "已取消收藏"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "操作失败：${e.message}" } }
+                }))
+            }
+            item {
+                Column(Modifier.padding(top = 26.dp, bottom = 6.dp)) {
+                    TagRow("ALBUMS · 专辑", 12.dp) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            T("${two(albums.size)} 张", 12, c.s, mono = true)
+                            LinkBtn(if (albumCard) "列表" else "卡片", 12) {
+                                albumCard = !albumCard
+                                Plat.prefs("ui").edit().putInt("lib_album_style", if (albumCard) 0 else 1).apply()
+                            }
+                            if (albumCard || albums.size > 5) {
+                                LinkBtn(if (albumAll) "收起" else "显示全部", 12) { albumAll = !albumAll }
+                            }
                         }
                     }
+                    if (albumCard) {
+                        Spacer(Modifier.height(14.dp))
+                        if (!albumAll) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                items(albums, key = { "al" + it.id }) { al ->
+                                    Column(Modifier.width(124.dp).press(onLong = { longAl(al) }) { openAl(al) }) {
+                                        Cover(al.pic, 124.dp, al.name)
+                                        Spacer(Modifier.height(8.dp))
+                                        T(al.name, 14, w = 700, lines = 1)
+                                        val sub = al.artist.ifEmpty { if (al.size > 0) "${al.size} 首" else "" }
+                                        if (sub.isNotEmpty()) T(sub, 12, c.s, lines = 1, modifier = Modifier.padding(top = 2.dp))
+                                    }
+                                }
+                            }
+                        } else {
+                            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                                val cols = ((maxWidth + 12.dp) / 136.dp).toInt().coerceAtLeast(2)
+                                val cardW = (maxWidth - 12.dp * (cols - 1)) / cols
+                                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    albums.chunked(cols).forEach { row ->
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            row.forEach { al ->
+                                                Column(Modifier.width(cardW).press(onLong = { longAl(al) }) { openAl(al) }) {
+                                                    Cover(al.pic, cardW, al.name)
+                                                    Spacer(Modifier.height(8.dp))
+                                                    T(al.name, 14, w = 700, lines = 1)
+                                                    val sub = al.artist.ifEmpty { if (al.size > 0) "${al.size} 首" else "" }
+                                                    if (sub.isNotEmpty()) T(sub, 12, c.s, lines = 1, modifier = Modifier.padding(top = 2.dp))
+                                                }
+                                            }
+                                            repeat(cols - row.size) { Spacer(Modifier.width(cardW)) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (!albumCard) {
+                val shown = if (albumAll) albums else albums.take(5)
+                items(shown, key = { "al_row_" + it.id }) { al ->
+                    ListRow({ Cover(al.pic, 56.dp, al.name) }, al.name, "专辑 · " + listOf(al.artist, if (al.size > 0) "${al.size} 首" else "").filter { it.isNotEmpty() }.joinToString(" · "),
+                        onLong = { longAl(al) }) { openAl(al) }
                 }
             }
         }
