@@ -224,7 +224,7 @@ object UiPref {
 
 /** 歌词样式与字号（支持预设切换及 JSON 导入导出；歌词页 / 右栏 / 播放页共用） */
 object LyricPref {
-    val STYLES = listOf("大字流动", "Hydrogen 顺滑", "居中经典", "AMLL 逐字流")
+    val STYLES = listOf("大字流动", "平滑跟进", "居中经典", "逐字浮光")
     val ANCHORS = listOf("顶部", "保留上一句", "偏上", "居中")
     val ALIGNS = listOf("左对齐", "居中")
     var style by mutableIntStateOf(0)

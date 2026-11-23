@@ -154,7 +154,7 @@ import java.util.Calendar
        "lyric" -> {
         item {
             val copy = rememberCopy()
-            SetLine("歌词滚动样式", "选择内置滚动风格（含参考 Hydrogen-Music 的 580ms 整体顺滑滚动），或通过 JSON 导入 / 导出自定义样式") {
+            SetLine("歌词滚动样式", "选择内置滚动风格（含 580ms 平滑跟进与逐字浮光效果），或通过 JSON 导入 / 导出自定义样式") {
                 ChipRow(LyricPref.STYLES, LyricPref.style) { LyricPref.applyPreset(it) }
                 if (LyricPref.customName.isNotBlank()) T("当前导入样式：${LyricPref.customName}", 12, p.p, mono = true, modifier = Modifier.padding(top = 6.dp))
                 Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
