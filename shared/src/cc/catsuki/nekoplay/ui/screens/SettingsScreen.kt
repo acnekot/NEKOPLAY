@@ -242,6 +242,7 @@ import java.util.Calendar
        }
        "about" -> {
         item { NavRow("版本", null, Updater.current, clickable = false) {} }
+        item { SwitchRow("启动时检查更新", "打开应用时自动检查新版本并弹窗提醒", Updater.autoOn) { Updater.setAuto(it) } }
         item {
             Column(Modifier.fillMaxWidth().padding(vertical = 10.dp).bottomLine().padding(bottom = 12.dp)) {
                 T("更新通道", 16); T("正式版：GitHub Release；测试版：main 分支最新一次 Actions 打包", 13, p.s, lines = 2, lh = 1.4f)
@@ -264,7 +265,7 @@ import java.util.Calendar
                             else -> "已经是最新（${info.title}）"
                         }, 13, if (info?.found == true) p.p else p.s, lines = 2, lh = 1.4f)
                     }
-                    LinkBtn("检查", 14) { if (!Updater.checking) scope.launch { runCatching { Updater.check() } } }
+                    LinkBtn("检查", 14) { if (!Updater.checking) scope.launch { runCatching { Updater.check() }.onSuccess { if (it.found) Updater.dialog = it } } }
                 }
                 if (info != null && info.found) {
                     if (info.notes.isNotBlank()) T(info.notes, 12, p.s, lines = 8, lh = 1.4f, modifier = Modifier.padding(top = 8.dp))

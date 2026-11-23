@@ -134,15 +134,17 @@ object Boot {
 @Composable fun Root(chrome: (@Composable () -> Unit)? = null) {
     val nav = remember { Nav() }
     LaunchedEffect(Unit) { Downloads.onMessage = { nav.toast = it } }
-    // 启动时检查更新（一天一次），有新版本提示一下
-    LaunchedEffect(Unit) { delay(4000); Updater.autoCheck()?.let { nav.toast = "有新版本 ${it.title}：设置 → 关于 → 检查更新" } }
+    // 启动自动检查更新：首页渲染稳定后静默请求，有新版本弹出带动效的更新提示框
+    LaunchedEffect(Unit) { delay(2500); Updater.autoCheck() }
     SideEffect { Keys.nav = nav }
     LaunchedEffect(Unit) { withFrameNanos { Perf.markHomeReady() } }
     val st by Engine.state.collectAsState()
     val err by Engine.error.collectAsState()
     LaunchedEffect(err) { if (err != null) { nav.toast = err; Engine.error.value = null } }
     LaunchedEffect(nav.toast) { if (nav.toast != null) { delay(2200); nav.toast = null } }
-    Plat.impl.BackHandler(nav.input != null || nav.sheet != null || nav.comments != null || nav.menu || nav.queue || nav.player || nav.stack.isNotEmpty() || nav.tab == 1) { nav.back() }
+    Plat.impl.BackHandler(Updater.dialog != null || nav.input != null || nav.sheet != null || nav.comments != null || nav.menu || nav.queue || nav.player || nav.stack.isNotEmpty() || nav.tab == 1) {
+        if (Updater.dialog != null) Updater.dialog = null else nav.back()
+    }
     val hasTrack = st.current != null
 
     CompositionLocalProvider(LocalNav provides nav) {
@@ -198,6 +200,7 @@ object Boot {
             if (!wide) CommentSheet() // PC 宽屏：评论放在右栏
             ActionSheet(wide)
             InputDialog()
+            UpdateDialog(wide)
             AnimatedVisibility(nav.toast != null, Modifier.align(Alignment.BottomCenter).padding(bottom = if (hasTrack) 150.dp else 90.dp, start = 24.dp, end = 24.dp).navigationBarsPadding(),
                 enter = fadeIn(tween(200, easing = OsuOut)) + slideInVertically(tween(240, easing = OsuOut)) { it / 2 } + scaleIn(tween(220, easing = OsuOut), initialScale = .95f),
                 exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { it / 3 }) {

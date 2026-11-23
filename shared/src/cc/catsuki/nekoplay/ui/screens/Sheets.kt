@@ -5,6 +5,7 @@ import cc.catsuki.nekoplay.ui.settings.downloadSheet
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -21,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -273,6 +275,102 @@ fun qualitySheet(nav: Nav) {
     }.height(48.dp).background(bg).nbf(1.dp, p.k).padding(horizontal = 14.dp).animateContentSize(tween(220)), contentAlignment = Alignment.Center) {
         androidx.compose.animation.AnimatedContent(v, transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) }, label = "ft") { x ->
             T(if (x) on else "+ $off", 15, fg, 700)
+        }
+    }
+}
+
+// ======================= 启动更新弹窗（带动效） =======================
+
+@Composable fun UpdateDialog(wide: Boolean) {
+    val nav = LocalNav.current
+    val p = c
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    var last by remember { mutableStateOf<Updater.Info?>(null) }
+    Updater.dialog?.let { last = it }
+    val show = Updater.dialog != null
+    // 顶部强调条扫过 + 内容阶梯渐入（受 AnimStyle.off 与速度档位统一控制）
+    val sweep = remember { androidx.compose.animation.core.Animatable(0f) }
+    val step = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(show) {
+        if (show) {
+            if (AnimStyle.off) { sweep.snapTo(1f); step.snapTo(1f) }
+            else {
+                sweep.snapTo(0f); step.snapTo(0f)
+                launch { sweep.animateTo(1f, tween((420 / Anim.f).toInt().coerceAtLeast(1), easing = OsuOut)) }
+                launch { step.animateTo(1f, tween((360 / Anim.f).toInt().coerceAtLeast(1), easing = OsuOut)) }
+            }
+        }
+    }
+    val pulse = if (show && !AnimStyle.off) {
+        val inf = androidx.compose.animation.core.rememberInfiniteTransition(label = "updPulse")
+        inf.animateFloat(0.35f, 1f, androidx.compose.animation.core.infiniteRepeatable(
+            tween(950, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            androidx.compose.animation.core.RepeatMode.Reverse,
+        ), label = "dot").value
+    } else 1f
+
+    AnimatedVisibility(show, enter = fadeIn(Motion.standard()), exit = fadeOut(Motion.quick())) {
+        Box(Modifier.fillMaxSize().background(Color(if (wide) 0x5C000000 else 0x80000000))
+            .pointerInput(Unit) { detectTapGestures { Updater.dialog = null } })
+    }
+    AnimatedVisibility(show, Modifier.fillMaxSize(),
+        enter = fadeIn(Motion.standard()) + scaleIn(Motion.hero(), initialScale = .88f) + slideInVertically(Motion.hero()) { it / 8 },
+        exit = fadeOut(Motion.quick()) + scaleOut(Motion.quick(), targetScale = .94f) + slideOutVertically(Motion.quick()) { it / 12 }) {
+        val info = last ?: return@AnimatedVisibility
+        val s1 = (step.value * 1.4f).coerceIn(0f, 1f)
+        val s2 = ((step.value - 0.18f) * 1.4f).coerceIn(0f, 1f)
+        val s3 = ((step.value - 0.34f) * 1.55f).coerceIn(0f, 1f)
+        Box(Modifier.fillMaxSize().padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
+            Column(Modifier.widthIn(max = if (wide) 440.dp else 380.dp).fillMaxWidth()
+                .background(p.sheet).nb(1.dp, p.k)
+                .pointerInput(Unit) { detectTapGestures { } }) {
+                // 顶部扫描强调条
+                Box(Modifier.fillMaxWidth().height(3.dp).background(p.l2)) {
+                    Box(Modifier.fillMaxWidth(sweep.value).fillMaxHeight().background(p.p))
+                }
+                Column(Modifier.padding(20.dp)) {
+                    // 头部：徽章 + 版本号对比 + 关闭按钮
+                    Row(Modifier.fillMaxWidth().graphicsLayer { alpha = s1; translationY = (1f - s1) * 10f }, verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.background(p.p).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(6.dp).background(Color.White.copy(alpha = pulse), androidx.compose.foundation.shape.CircleShape))
+                            Spacer(Modifier.width(6.dp))
+                            T(if (Updater.nightly) "NIGHTLY" else "UPDATE", 11, Color.White, 800, mono = true, ls = .06f)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        T("发现新版本", 18, p.k, 800, modifier = Modifier.weight(1f))
+                        Box(Modifier.size(32.dp).press { Updater.dialog = null }, contentAlignment = Alignment.Center) {
+                            NIcon(NIcons.close, 16.dp, p.s)
+                        }
+                    }
+                    Row(Modifier.padding(top = 10.dp).graphicsLayer { alpha = s1; translationY = (1f - s1) * 10f }, verticalAlignment = Alignment.CenterVertically) {
+                        T("v$APP_VERSION", 13, p.s, 600, mono = true)
+                        T("  →  ", 13, p.s, 700, mono = true)
+                        T(info.title, 14, p.p, 800, mono = true)
+                    }
+                    // 更新说明区（可滚动）
+                    Box(Modifier.padding(top = 14.dp).fillMaxWidth().heightIn(min = 64.dp, max = 210.dp)
+                        .graphicsLayer { alpha = s2; translationY = (1f - s2) * 12f }
+                        .background(p.page).border(1.dp, p.l2).verticalScroll(rememberScrollState()).padding(12.dp)) {
+                        T(info.notes.ifBlank { "包含新功能与稳定性修复，建议更新体验。" }, 13, p.k, lines = 40, lh = 1.55f)
+                    }
+                    if (Updater.nightly) {
+                        T("测试版下载的是 zip 压缩包，解压后安装即可。", 11, p.s, modifier = Modifier.padding(top = 6.dp).graphicsLayer { alpha = s2 })
+                    }
+                    // 操作按钮区
+                    Column(Modifier.padding(top = 16.dp).graphicsLayer { alpha = s3; translationY = (1f - s3) * 12f }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PrimaryBar("立即下载更新", NIcons.download, Modifier.fillMaxWidth()) {
+                            val target = info.url ?: info.page
+                            Updater.dialog = null
+                            runCatching { uri.openUri(target) }.onFailure { nav.toast = "打不开浏览器" }
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(Modifier.weight(1f)) { OutlineBtn("查看详情", 40.dp, 13) { Updater.dialog = null; runCatching { uri.openUri(info.page) } } }
+                            Box(Modifier.weight(1f)) { OutlineBtn("跳过此版本", 40.dp, 13) { Updater.skip(info.title); nav.toast = "已跳过 ${info.title}" } }
+                            Box(Modifier.weight(1f)) { OutlineBtn("稍后再说", 40.dp, 13) { Updater.dialog = null } }
+                        }
+                    }
+                }
+            }
         }
     }
 }

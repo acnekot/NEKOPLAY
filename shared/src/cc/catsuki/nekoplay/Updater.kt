@@ -25,11 +25,20 @@ object Updater {
 
     private val prefs by lazy { Plat.prefs("update") }
     var nightly by mutableStateOf(false); private set
+    var autoOn by mutableStateOf(true); private set
+    var skipped by mutableStateOf(""); private set
     var checking by mutableStateOf(false); private set
     var latest by mutableStateOf<Info?>(null); private set
+    var dialog by mutableStateOf<Info?>(null)
     var error by mutableStateOf<String?>(null); private set
 
-    fun load() { nightly = prefs.getBoolean("nightly", false) }
+    fun load() {
+        nightly = prefs.getBoolean("nightly", false)
+        autoOn = prefs.getBoolean("auto", true)
+        skipped = prefs.getString("skip", "") ?: ""
+    }
+    fun setAuto(v: Boolean) { autoOn = v; prefs.edit().putBoolean("auto", v).apply() }
+    fun skip(title: String) { skipped = title; dialog = null; prefs.edit().putString("skip", title).apply() }
     fun useNightly(v: Boolean) { nightly = v; latest = null; error = null; prefs.edit().putBoolean("nightly", v).apply() }
 
     /** 本机这一版的说明：正式版只显示版本号，测试版带上提交号 */
@@ -115,10 +124,13 @@ object Updater {
         return sec
     }
 
-    /** 启动时自动检查：一天最多一次，出错不打扰 */
+    /** 启动时自动检查：默认开启，10 分钟内不重复请求，已跳过的版本不再弹窗，出错不打扰 */
     suspend fun autoCheck(): Info? {
         load()
-        if (System.currentTimeMillis() - prefs.getLong("last", 0) < 24 * 3600_000L) return null
-        return runCatching { check() }.getOrNull()?.takeIf { it.found }
+        if (!autoOn) return null
+        if (System.currentTimeMillis() - prefs.getLong("last", 0) < 10 * 60_000L) return null
+        val info = runCatching { check() }.getOrNull()?.takeIf { it.found && it.title != skipped } ?: return null
+        dialog = info
+        return info
     }
 }
