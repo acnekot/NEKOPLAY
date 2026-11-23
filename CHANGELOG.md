@@ -7,7 +7,10 @@
 
 ## [0.6.4] - 2026-11-23
 
-Windows 纯音频内核切换（规避安全中心误删）、均衡器崩溃修复与 QQ 音乐插件 `1.7.1`。
+Windows 纯音频内核切换（规避安全中心误删）、均衡器崩溃修复、QQ 音乐插件 `1.7.1` 与桌面端 VST3/VST2 插件宿主（Beta）。
+
+### 新增
+- 桌面端新增实时 VST3 / VST2 插件宿主（Beta）：内嵌轻量原生 C++ 宿主库（`libnekoplay_vst`），支持 `libmpv` PCM 管线热切换、串行插件链排序/旁通/参数调校，以及置顶悬浮原生插件窗口（适配 MiniMeters / FabFilter Pro-Q / SPAN 等可视化与音效插件）
 
 ### 变更
 - Windows 端播放内核切换为 `media-kit` 固定版本纯音频 `libmpv`（`2023-09-24`，体积从 ~80MB 降至 15.5MB），避免 `shinchiro` 每日构建频繁被 Windows 安全中心误报隔离
