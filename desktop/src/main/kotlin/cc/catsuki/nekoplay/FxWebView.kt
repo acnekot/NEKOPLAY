@@ -6,9 +6,7 @@ import androidx.compose.ui.awt.SwingPanel
 
 /**
  * Linux 的内嵌网页：JavaFX WebView 放进 JFXPanel。
- * - Windows 用系统 WebView2（见 DesktopWebView）。
- * - macOS 禁用进程内 JavaFX：JavaFX Glass 会接管 AWT 的 NSApplication/AppKit 主线程并与 Skiko Metal 冲突导致整个应用卡死；
- *   macOS 上 QQ 音乐等插件直接使用原生「QQ 扫码 / 微信扫码」或粘贴 Cookie，秒开且完全不卡死。
+ * - Windows 与 macOS 均禁用内嵌 WebView，QQ 音乐等插件统一使用原生「QQ 扫码 / 微信扫码」或粘贴 Cookie，秒开且无 WebView 兼容问题。
  */
 object FxWebView {
     val available: Boolean by lazy {

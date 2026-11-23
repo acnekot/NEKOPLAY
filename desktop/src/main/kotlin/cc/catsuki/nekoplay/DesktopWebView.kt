@@ -46,7 +46,8 @@ object DesktopWebView {
             Native.load(f.absolutePath, WV::class.java)
         }.onFailure { Debug.log("webview", 0, 0, "load", it.toString()) }.getOrNull()
     }
-    val available get() = lib != null
+    /** Windows 对齐 macOS，禁用内嵌 WebView2，QQ 音乐等插件统一走原生扫码 / Cookie 登录 */
+    val available get() = false
 
     /** 一个嵌入的网页：Canvas 第一次画出来时在自己的线程里建 WebView2 并跑消息循环 */
     class View(private val stopOn: String?, private val onUrl: (String) -> Unit) : Canvas() {

@@ -105,7 +105,7 @@ class DesktopPlat : PlatImpl {
         }
     }
 
-    // 内嵌网页（插件的网页登录）：Windows 用系统的 WebView2，macOS / Linux 用 JavaFX WebView
+    // 内嵌网页（插件的网页登录）：Windows 与 macOS 均对齐禁用内嵌 WebView，统一走原生扫码 / Cookie 登录；仅 Linux 保留 JavaFX WebView
     override val hasWebView get() = DesktopWebView.available || FxWebView.available
     @Composable override fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean, onInfo: (String) -> Unit, stopOn: String?, intercept: (String) -> Boolean) {
         if (DesktopWebView.available) DesktopWebPage(url, modifier, stopOn, onInfo, intercept)
