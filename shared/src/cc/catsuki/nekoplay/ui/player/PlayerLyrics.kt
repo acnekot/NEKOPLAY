@@ -98,7 +98,8 @@ val LocalLyricsActive = compositionLocalOf { true }
     val cur by remember(l, offset) {
         Engine.position.map { Lrc.indexAt(l, it + offset) }.distinctUntilChanged()
     }.collectAsState(Lrc.indexAt(l, Engine.position.value + offset))
-    LyricsFlow(l, cur, showTr, offset, onBlank)
+    if (LyricPref.style == 3) AmllLyricsFlow(l, cur, showTr, offset, onBlank)
+    else LyricsFlow(l, cur, showTr, offset, onBlank)
 }
 
 /**

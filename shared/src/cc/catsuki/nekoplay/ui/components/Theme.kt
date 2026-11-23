@@ -222,7 +222,7 @@ object UiPref {
 
 /** 歌词样式与字号（支持预设切换及 JSON 导入导出；歌词页 / 右栏 / 播放页共用） */
 object LyricPref {
-    val STYLES = listOf("大字流动", "Hydrogen 顺滑", "居中经典")
+    val STYLES = listOf("大字流动", "Hydrogen 顺滑", "居中经典", "AMLL 逐字流")
     val ANCHORS = listOf("顶部", "保留上一句", "偏上", "居中")
     val ALIGNS = listOf("左对齐", "居中")
     var style by mutableIntStateOf(0)
@@ -245,6 +245,7 @@ object LyricPref {
         when (style) {
             1 -> { align = 0; gap = 28; scrollMs = 580; staggerMs = 0; activeScale = 1.06f; idleBackMs = 1000; accentBar = true; anchor = 2 }
             2 -> { align = 1; gap = 22; scrollMs = 460; staggerMs = 0; activeScale = 1.08f; idleBackMs = 2000; accentBar = false; anchor = 3 }
+            3 -> { align = 0; gap = 30; scrollMs = 540; staggerMs = 50; activeScale = 1.04f; idleBackMs = 2600; accentBar = false; anchor = 2 }
             else -> { align = 0; gap = 26; scrollMs = 520; staggerMs = 35; activeScale = 1.08f; idleBackMs = 3000; accentBar = false; anchor = 1 }
         }
         save()
