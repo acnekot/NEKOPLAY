@@ -49,7 +49,7 @@ fun trackActions(nav: Nav, t: Track, fromPl: String? = null) {
             if (Features.on("card")) add(SheetItem("歌词卡片") { nav.player = false; nav.push(Page.LyricCard(t)) })
             if (Features.on("offset") && Engine.state.value.current?.id == t.id) add(SheetItem("歌词偏移") { offsetSheet(nav, t) })
             add(SheetItem("效果器 / 均衡器") { nav.player = false; nav.push(Page.Effects) })
-            if (Plat.impl.vst != null) add(SheetItem("VST 插件 / 可视化仪") { nav.player = false; nav.push(Page.Vst) })
+            if (Plat.impl.vst != null) add(SheetItem("VST 插件 / 可视化仪 (Beta)") { nav.player = false; nav.push(Page.Vst) })
         })
         return
     }

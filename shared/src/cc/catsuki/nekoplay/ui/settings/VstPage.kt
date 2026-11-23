@@ -60,8 +60,14 @@ import kotlinx.coroutines.withContext
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp, 12.dp, 18.dp, 120.dp)) {
         item {
-            T("VST 插件", Fs.PAGE, w = 800)
-            T("支持实时加载 VST3 / VST2 音频效果器与可视化仪（如 MiniMeters / Pro-Q / SPAN），音频经 48kHz PCM 管线实时处理。", 13, p.s, lines = 3, lh = 1.45f, modifier = Modifier.padding(top = 6.dp, bottom = 14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                T("VST 插件", Fs.PAGE, w = 800)
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.background(p.p).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                    T("BETA", 10, Color.White, 800, mono = true, ls = .06f)
+                }
+            }
+            T("实验性功能：支持实时加载 VST3 / VST2 音频效果器与可视化仪（如 MiniMeters / Pro-Q / SPAN），音频经 48kHz PCM 管线实时处理。", 13, p.s, lines = 3, lh = 1.45f, modifier = Modifier.padding(top = 6.dp, bottom = 14.dp))
         }
 
         if (!host.available) {
