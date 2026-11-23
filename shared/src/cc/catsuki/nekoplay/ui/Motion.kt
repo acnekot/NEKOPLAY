@@ -46,49 +46,122 @@ object Anim {
     val f get() = factors[level]
     fun stiff(base: Float) = base * f * f
 }
-/** 动效形式：0 弹簧（带一点回弹感的物理动画）/ 1 缓动（先快后慢）/ 2 线性 / 3 关闭（瞬间切换）/ 4 osu!（极速起手 + 丝滑指数缓出，带微缩放） */
+/** 动效形式：0 弹簧 / 1 缓动 / 2 线性 / 3 关闭 / 4 osu! / 5 自定义曲线 */
 object AnimStyle {
-    val labels = listOf("弹簧", "缓动", "线性", "关闭", "osu!")
+    val labels = listOf("弹簧", "缓动", "线性", "关闭", "osu!", "自定义曲线")
     var style by mutableIntStateOf(0)
+    // 自定义贝塞尔曲线控制点（支持 y 轴 -0.45..1.45 过冲）
+    var x1 by mutableFloatStateOf(0.16f)
+    var y1 by mutableFloatStateOf(1.00f)
+    var x2 by mutableFloatStateOf(0.30f)
+    var y2 by mutableFloatStateOf(1.00f)
+    // 自定义弹簧物理参数
+    var springDamping by mutableFloatStateOf(0.85f)
+    var springStiffness by mutableFloatStateOf(400f)
+    // 各类动画基准时长（ms）
+    var quickBaseMs by mutableIntStateOf(120)
+    var standardBaseMs by mutableIntStateOf(240)
+    var pageBaseMs by mutableIntStateOf(320)
+    var crossfadeBaseMs by mutableIntStateOf(400)
+
     val osu get() = style == 4
     val off get() = style == 3
-    fun load() { style = Plat.prefs("ui").getInt("animStyle", 0).coerceIn(0, labels.lastIndex) }
-    fun set(v: Int) { style = v.coerceIn(0, labels.lastIndex); Plat.prefs("ui").edit().putInt("animStyle", style).apply() }
-    val ms get() = (320 / Anim.f).toInt()
-    val osuMs get() = (360 / Anim.f).toInt()
+    val custom get() = style == 5
+    val customEasing get() = androidx.compose.animation.core.CubicBezierEasing(x1.coerceIn(0f, 1f), y1.coerceIn(-0.45f, 1.45f), x2.coerceIn(0f, 1f), y2.coerceIn(-0.45f, 1.45f))
+
+    private val k get() = Plat.prefs("ui")
+    fun load() {
+        style = k.getInt("animStyle", 0).coerceIn(0, labels.lastIndex)
+        x1 = k.getFloat("anim_x1", 0.16f).coerceIn(0f, 1f)
+        y1 = k.getFloat("anim_y1", 1.00f).coerceIn(-0.45f, 1.45f)
+        x2 = k.getFloat("anim_x2", 0.30f).coerceIn(0f, 1f)
+        y2 = k.getFloat("anim_y2", 1.00f).coerceIn(-0.45f, 1.45f)
+        springDamping = k.getFloat("anim_sd", 0.85f).coerceIn(0.35f, 1f)
+        springStiffness = k.getFloat("anim_ss", 400f).coerceIn(100f, 1200f)
+        quickBaseMs = k.getInt("anim_ms_q", 120).coerceIn(40, 400)
+        standardBaseMs = k.getInt("anim_ms_s", 240).coerceIn(80, 600)
+        pageBaseMs = k.getInt("anim_ms_p", 320).coerceIn(100, 800)
+        crossfadeBaseMs = k.getInt("anim_ms_c", 400).coerceIn(100, 1000)
+    }
+    fun save() {
+        k.edit().putInt("animStyle", style)
+            .putFloat("anim_x1", x1).putFloat("anim_y1", y1).putFloat("anim_x2", x2).putFloat("anim_y2", y2)
+            .putFloat("anim_sd", springDamping).putFloat("anim_ss", springStiffness)
+            .putInt("anim_ms_q", quickBaseMs).putInt("anim_ms_s", standardBaseMs)
+            .putInt("anim_ms_p", pageBaseMs).putInt("anim_ms_c", crossfadeBaseMs).apply()
+    }
+    fun set(v: Int) { style = v.coerceIn(0, labels.lastIndex); save() }
+    fun setCurve(a: Float, b: Float, c: Float, d: Float, switchCustom: Boolean = true) {
+        x1 = a.coerceIn(0f, 1f); y1 = b.coerceIn(-0.45f, 1.45f); x2 = c.coerceIn(0f, 1f); y2 = d.coerceIn(-0.45f, 1.45f)
+        if (switchCustom) style = 5
+        save()
+    }
+    fun reset() {
+        style = 0; Anim.level = 1; k.edit().putInt("anim", 1).apply()
+        x1 = 0.16f; y1 = 1f; x2 = 0.30f; y2 = 1f
+        springDamping = 0.85f; springStiffness = 400f
+        quickBaseMs = 120; standardBaseMs = 240; pageBaseMs = 320; crossfadeBaseMs = 400
+        save()
+    }
+    fun exportJson(): String = org.json.JSONObject()
+        .put("format", "nekoplay-motion-v1")
+        .put("style", style).put("speedLevel", Anim.level)
+        .put("x1", x1.toDouble()).put("y1", y1.toDouble()).put("x2", x2.toDouble()).put("y2", y2.toDouble())
+        .put("springDamping", springDamping.toDouble()).put("springStiffness", springStiffness.toDouble())
+        .put("quickMs", quickBaseMs).put("standardMs", standardBaseMs).put("pageMs", pageBaseMs).put("crossfadeMs", crossfadeBaseMs)
+        .toString(2)
+    fun importJson(raw: String) {
+        val o = org.json.JSONObject(raw.trim())
+        if (o.has("style")) style = o.optInt("style", style).coerceIn(0, labels.lastIndex)
+        if (o.has("speedLevel")) { Anim.level = o.optInt("speedLevel", Anim.level).coerceIn(0, Anim.labels.lastIndex); k.edit().putInt("anim", Anim.level).apply() }
+        if (o.has("x1")) x1 = o.optDouble("x1", x1.toDouble()).toFloat().coerceIn(0f, 1f)
+        if (o.has("y1")) y1 = o.optDouble("y1", y1.toDouble()).toFloat().coerceIn(-0.45f, 1.45f)
+        if (o.has("x2")) x2 = o.optDouble("x2", x2.toDouble()).toFloat().coerceIn(0f, 1f)
+        if (o.has("y2")) y2 = o.optDouble("y2", y2.toDouble()).toFloat().coerceIn(-0.45f, 1.45f)
+        if (o.has("springDamping")) springDamping = o.optDouble("springDamping", springDamping.toDouble()).toFloat().coerceIn(0.35f, 1f)
+        if (o.has("springStiffness")) springStiffness = o.optDouble("springStiffness", springStiffness.toDouble()).toFloat().coerceIn(100f, 1200f)
+        if (o.has("quickMs")) quickBaseMs = o.optInt("quickMs", quickBaseMs).coerceIn(40, 400)
+        if (o.has("standardMs")) standardBaseMs = o.optInt("standardMs", standardBaseMs).coerceIn(80, 600)
+        if (o.has("pageMs")) pageBaseMs = o.optInt("pageMs", pageBaseMs).coerceIn(100, 800)
+        if (o.has("crossfadeMs")) crossfadeBaseMs = o.optInt("crossfadeMs", crossfadeBaseMs).coerceIn(100, 1000)
+        save()
+    }
+    val ms get() = (pageBaseMs / Anim.f).toInt().coerceAtLeast(1)
+    val osuMs get() = ((pageBaseMs + 40) / Anim.f).toInt().coerceAtLeast(1)
 }
 /** osu! stable 招牌 OutExpo/OutQuint 缓出曲线：瞬间冲出、长尾丝滑刹停、零回弹 */
 val OsuOut = androidx.compose.animation.core.CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
 val DecelOut = androidx.compose.animation.core.CubicBezierEasing(0f, 0f, 0.2f, 1f)
 
 /**
- * 0.7.0 统一动效令牌（受 Anim 速度档位与 AnimStyle 关闭开关统一控制）：
- * - quick (120ms 减速)：按钮按下、开关、图标切换
- * - standard (240ms 标准缓动)：弹窗、菜单、面板展开
- * - page (320ms 强调缓动)：切页、进出详情
- * - crossfade (400ms)：换歌封面与背景交叉淡化
- * - hero (弹簧 阻尼 0.85)：迷你播放条 ↔ 播放页、封面放大
+ * 统一动效令牌（支持自定义贝塞尔曲线、弹簧物理与各类时长独立调节）：
  */
 object Motion {
-    val quickMs get() = if (AnimStyle.off) 0 else (120 / Anim.f).toInt().coerceAtLeast(1)
-    val standardMs get() = if (AnimStyle.off) 0 else (240 / Anim.f).toInt().coerceAtLeast(1)
-    val pageMs get() = if (AnimStyle.off) 0 else (320 / Anim.f).toInt().coerceAtLeast(1)
-    val crossfadeMs get() = if (AnimStyle.off) 0 else (400 / Anim.f).toInt().coerceAtLeast(1)
+    val quickMs get() = if (AnimStyle.off) 0 else (AnimStyle.quickBaseMs / Anim.f).toInt().coerceAtLeast(1)
+    val standardMs get() = if (AnimStyle.off) 0 else (AnimStyle.standardBaseMs / Anim.f).toInt().coerceAtLeast(1)
+    val pageMs get() = if (AnimStyle.off) 0 else (AnimStyle.pageBaseMs / Anim.f).toInt().coerceAtLeast(1)
+    val crossfadeMs get() = if (AnimStyle.off) 0 else (AnimStyle.crossfadeBaseMs / Anim.f).toInt().coerceAtLeast(1)
     fun <T> quick(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
-        if (AnimStyle.off) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(quickMs, easing = DecelOut)
+        if (AnimStyle.off) androidx.compose.animation.core.snap()
+        else androidx.compose.animation.core.tween(quickMs, easing = if (AnimStyle.custom) AnimStyle.customEasing else DecelOut)
     fun <T> standard(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
-        if (AnimStyle.off) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(standardMs, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+        if (AnimStyle.off) androidx.compose.animation.core.snap()
+        else androidx.compose.animation.core.tween(standardMs, easing = if (AnimStyle.custom) AnimStyle.customEasing else androidx.compose.animation.core.FastOutSlowInEasing)
     fun <T> page(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
-        if (AnimStyle.off) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(pageMs, easing = OsuOut)
+        if (AnimStyle.off) androidx.compose.animation.core.snap()
+        else androidx.compose.animation.core.tween(pageMs, easing = if (AnimStyle.custom) AnimStyle.customEasing else OsuOut)
     fun <T> hero(): androidx.compose.animation.core.FiniteAnimationSpec<T> =
-        if (AnimStyle.off) androidx.compose.animation.core.snap() else spring(dampingRatio = 0.85f, stiffness = Anim.stiff(Spring.StiffnessMediumLow))
+        if (AnimStyle.off) androidx.compose.animation.core.snap()
+        else if (AnimStyle.custom) androidx.compose.animation.core.tween(pageMs, easing = AnimStyle.customEasing)
+        else spring(dampingRatio = AnimStyle.springDamping, stiffness = Anim.stiff(AnimStyle.springStiffness))
 }
 private fun <T> styled(stiff: Float): androidx.compose.animation.core.FiniteAnimationSpec<T> = when (AnimStyle.style) {
     1 -> androidx.compose.animation.core.tween(AnimStyle.ms, easing = androidx.compose.animation.core.FastOutSlowInEasing)
     2 -> androidx.compose.animation.core.tween(AnimStyle.ms, easing = androidx.compose.animation.core.LinearEasing)
     3 -> androidx.compose.animation.core.snap()
     4 -> androidx.compose.animation.core.tween(AnimStyle.osuMs, easing = OsuOut)
-    else -> spring(dampingRatio = .92f, stiffness = Anim.stiff(stiff))
+    5 -> androidx.compose.animation.core.tween(AnimStyle.ms, easing = AnimStyle.customEasing)
+    else -> spring(dampingRatio = AnimStyle.springDamping, stiffness = Anim.stiff(AnimStyle.springStiffness.coerceAtLeast(stiff * 0.5f)))
 }
 val sp: androidx.compose.animation.core.FiniteAnimationSpec<IntOffset> get() = styled(Spring.StiffnessMediumLow)
 val spF: androidx.compose.animation.core.FiniteAnimationSpec<Float> get() = styled(Spring.StiffnessMediumLow)
