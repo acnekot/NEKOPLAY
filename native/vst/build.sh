@@ -30,7 +30,8 @@ else
   mkdir -p "$(dirname "$OUT")"
   g++ -std=c++17 -O2 -shared \
     nekoplay_vst.cpp vst2_host.cpp vst3_host.cpp gui_win.cpp \
-    -lole32 -luuid -luser32 -lgdi32 -static-libgcc -static-libstdc++ \
+    -lole32 -luuid -luser32 -lgdi32 \
+    -static-libgcc -static-libstdc++ -Wl,-Bstatic -lwinpthread -Wl,-Bdynamic \
     -o "$OUT"
   echo "Built $OUT"
 fi
