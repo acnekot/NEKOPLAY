@@ -314,6 +314,7 @@ private class MpvAudio : Audio {
     @Volatile private var opened = false
     @Volatile private var playing = false
     @Volatile private var ended = false
+    @Volatile private var resetState = false
     @Volatile private var pos = 0L
     @Volatile private var bufPos = 0L
 
@@ -324,6 +325,7 @@ private class MpvAudio : Audio {
             while (true) {
                 Thread.sleep(when { !opened -> 800L; !playing -> 500L; else -> 200L })
                 if (lib == null || h == null || !opened) continue
+                if (resetState) { resetState = false; lastPlaying = false; lastBuf = false }
                 val paused = str("pause") == "yes"
                 val eof = str("eof-reached") == "yes"
                 // 无缝播放：mpv 自己切到了列表里的下一首 → 删掉上一首，通知 Engine
@@ -364,7 +366,7 @@ private class MpvAudio : Audio {
         // 抛异常由 Engine 显示提示，不会自动跳下一首（避免整个队列连环报错）
         if (lib == null || h == null) throw Exception("播放内核 libmpv 加载失败" + if (lib != null) "（mpv_create 失败）" else if (loadErrors.isNotEmpty()) "：" + loadErrors.joinToString("；") else "（程序目录里没有找到 libmpv）")
         if (url == null) throw Exception("桌面版暂无本地缓存")
-        ended = false; opened = true; failed = false; pos = startMs; openedAt = System.currentTimeMillis()
+        ended = false; opened = true; failed = false; playing = false; resetState = true; pos = startMs; openedAt = System.currentTimeMillis()
         lib.mpv_set_property_string(h, "pause", if (autoplay) "no" else "yes")
         val src = if (url.startsWith("file:")) File(java.net.URI(url)).absolutePath else url
         // mpv 0.38 起 loadfile 多了一个「插入位置」参数；Mac 自带的 libmpv 比较老，第三个参数就是选项
@@ -378,7 +380,7 @@ private class MpvAudio : Audio {
     }
     override fun clearNext() { if (lib == null || h == null) return; val n = str("playlist-count")?.toIntOrNull() ?: 0; for (i in n - 1 downTo 1) cmd("playlist-remove", i.toString()) }
     override fun play() { h?.let { lib!!.mpv_set_property_string(it, "pause", "no") } }
-    override fun pause() { h?.let { lib!!.mpv_set_property_string(it, "pause", "yes") } }
+    override fun pause() { playing = false; h?.let { lib!!.mpv_set_property_string(it, "pause", "yes") } }
     override fun seek(ms: Long) { cmd("seek", (ms / 1000.0).toString(), "absolute"); pos = ms; ended = false }
     override val isPlaying get() = playing
     override val idle get() = !opened

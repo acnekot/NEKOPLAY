@@ -127,6 +127,14 @@ object Engine {
         fadeJob = scope.launch { ramp(0f, 1f, fadeMs) }
     }
 
+    private fun startRampIn() {
+        if (!rampOnPlay) return
+        rampOnPlay = false
+        fadeJob?.cancel()
+        if (fadeMs == 0) audio.volume = Vol.v
+        else fadeJob = scope.launch { ramp(0f, 1f, fadeMs) }
+    }
+
     fun init() {
         prefs = Plat.prefs("ui")
         quality = prefs!!.getInt("q2", 3)
@@ -136,7 +144,7 @@ object Engine {
         audio.listener = object : Audio.Listener {
             override fun onPlaying(p: Boolean) {
                 state.value = state.value.copy(playing = p)
-                if (p && rampOnPlay) { rampOnPlay = false; fadeJob?.cancel(); fadeJob = scope.launch { ramp(0f, 1f, fadeMs) } }
+                if (p) startRampIn()
             }
             override fun onBuffering(b: Boolean) { state.value = state.value.copy(loading = b) }
             override fun onEnded() = this@Engine.onEnded()
@@ -155,6 +163,7 @@ object Engine {
                 if (!audio.idle) {
                     val p = audio.position
                     if (audio.isPlaying || position.value != p) position.value = p
+                    if (audio.isPlaying && rampOnPlay) startRampIn()
                 }
                 runCatching { buffered.value = if (state.value.cached) Long.MAX_VALUE else audio.buffered }
                 if (tick % 4 == 0) {
@@ -214,21 +223,22 @@ object Engine {
                 val dl = Downloads.file(t.id)
                 if (t.src != null) {
                     audio.open(srcUrl(t.src), "loc_${t.id}", position.value, state.value.want, t); opened = true
-                    state.value = state.value.copy(format = t.src.substringAfterLast('.', "").takeIf { it.length in 2..4 }?.lowercase() ?: "", kbps = 0, cached = true)
+                    state.value = state.value.copy(loading = false, format = t.src.substringAfterLast('.', "").takeIf { it.length in 2..4 }?.lowercase() ?: "", kbps = 0, cached = true)
                 } else if (dl != null) {
                     if (t.durationMs > 0) localKbps = (dl.length() * 8 / t.durationMs).toInt()
                     audio.open(dl.toURI().toString(), "dl_${t.id}", position.value, state.value.want, t); opened = true
-                    state.value = state.value.copy(format = dl.extension.lowercase(), kbps = 0, cached = true)
+                    state.value = state.value.copy(loading = false, format = dl.extension.lowercase(), kbps = 0, cached = true)
                 } else if (hit != null) {
                     audio.open(null, cacheKey(t.id, hit.first), position.value, state.value.want, t); opened = true
-                    state.value = state.value.copy(format = hit.second, kbps = 0, cached = true)
+                    state.value = state.value.copy(loading = false, format = hit.second, kbps = 0, cached = true)
                 } else {
                     val s = Ncm.stream(t.id, q)
                     s.trial?.let { error.value = it }   // 只能放试听：轮到这首真正播放时才提示
                     audio.open(s.url, cacheKey(t.id, s.level), position.value, state.value.want, t); opened = true
                     prefs?.edit()?.putString("fmt_${cacheKey(t.id, s.level)}", s.format)?.apply()
-                    state.value = state.value.copy(format = s.format, kbps = s.kbps, cached = false)
+                    state.value = state.value.copy(loading = false, format = s.format, kbps = s.kbps, cached = false)
                 }
+                if (state.value.want && audio.isPlaying) startRampIn()
                 prefetchNext()
                 Store.saveQueue(state.value.queue, i, position.value)
             } catch (e: Exception) {
