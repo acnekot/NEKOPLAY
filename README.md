@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="版本" src="https://img.shields.io/badge/版本-0.5.0-1f1f23">
+  <img alt="版本" src="https://img.shields.io/badge/版本-0.6.4-1f1f23">
   <img alt="平台" src="https://img.shields.io/badge/平台-Android%20·%20Windows%20·%20macOS%20·%20Linux%20·%20iOS-1f1f23">
   <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-Compose%20Multiplatform-7F52FF">
 </p>
@@ -24,16 +24,41 @@ NEKOPLAY 是一个**本地音乐播放器**：播放你自己设备上或自己�
 软件本身**不提供、不存储、不分发任何音乐内容**，也不内置任何在线音乐服务。
 如需使用在线服务，可以自行导入插件（JS 脚本）；插件以你的身份（未登录，或登录你自己的账号）访问对应服务，能获取的内容以该服务对你开放的权限为准。详见下方[插件说明](#插件)和[免责声明](#免责声明)。
 
+## 界面预览
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/demo/desktop-home-light.png" alt="桌面端浅色主页" width="100%">
+      <br><sub><b>桌面端 · 宽屏主页（浅色）</b></sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/demo/desktop-player-dark.png" alt="桌面端深色播放与歌词页" width="100%">
+      <br><sub><b>桌面端 · 全屏播放与歌词（深色）</b></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/demo/desktop-vst-beta.png" alt="桌面端 VST3/VST2 实时插件链" width="100%">
+      <br><sub><b>桌面端 · VST3 / VST2 实时插件宿主（Beta）</b></sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/demo/mobile-home.png" alt="移动端自适应布局" width="44%">
+      <br><sub><b>移动端 · 响应式布局（Android / iOS / 窄窗）</b></sub>
+    </td>
+  </tr>
+</table>
+
 ## 功能
 
 **本体**
 - 本地音乐：手机读媒体库，电脑扫「音乐」文件夹，同名 `.lrc` 当歌词
 - WebDAV 音乐：直接浏览网盘文件夹播放，文件名「歌手 - 歌名」自动拆开
 - 本机喜欢 / 本地歌单：不用登录；本地歌和没登录的来源点喜欢都记在这里
-- 播放：1GB 播放缓存、音质选择、无缝切歌、定时关闭、效果器 / 均衡器
+- 播放：1GB 播放缓存、音质选择、无缝切歌、定时关闭、效果器 / 均衡器、**VST3 / VST2 实时插件宿主（Beta，桌面端）**
 - 歌词：逐字歌词、翻译、歌词偏移、桌面歌词（PC）、歌词卡片
 - 界面：手机布局和 PC 宽屏三栏布局按窗口宽度自动切换；主题、取色、自定义背景、首页模块自由排序和并排组合
-- 数据：听歌统计、下载、WebDAV / 本地配置备份（包括插件脚本）
+- 数据与维护：听歌统计、下载、WebDAV / 本地配置备份（包括插件脚本）、启动自动检查更新
 
 <a id="插件"></a>
 **插件**
@@ -87,6 +112,7 @@ design/    图标源文件
 
 | 版本 | 分支 | 内容 |
 |---|---|---|
+| 0.6.4 | `main` | 桌面端 VST3 / VST2 实时插件宿主（Beta，支持置顶浮窗）、启动自动检查更新、单实例托盘唤醒与多端性能优化 |
 | 0.5.0 | `main` | 插件系统和插件订阅；本体去掉内置音源（干湿分离）；本机喜欢、本地歌单、WebDAV 音乐 |
 | 0.4.0 | `DEV` | 多个在线服务的内置对接（0.5.0 起改为可选插件）；歌曲来源标签 |
 | 0.3.0 | — | Kotlin + Compose 原生版：手机 / PC 双布局、逐字歌词、评论、桌面歌词、效果器 |
