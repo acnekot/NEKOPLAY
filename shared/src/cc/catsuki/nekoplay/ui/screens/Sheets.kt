@@ -355,7 +355,7 @@ fun qualitySheet(nav: Nav) {
                         T(info.notes.ifBlank { "包含新功能与稳定性修复，建议更新体验。" }, 13, p.k, lines = 40, lh = 1.55f)
                     }
                     if (Updater.nightly) {
-                        T("测试版下载的是 zip 压缩包，解压后安装即可。", 11, p.s, modifier = Modifier.padding(top = 6.dp).graphicsLayer { alpha = s2 })
+                        T("当前为预发布测试通道，直接下载对应平台安装包覆盖安装即可。", 11, p.s, modifier = Modifier.padding(top = 6.dp).graphicsLayer { alpha = s2 })
                     }
                     // 操作按钮区
                     Column(Modifier.padding(top = 16.dp).graphicsLayer { alpha = s3; translationY = (1f - s3) * 12f }, verticalArrangement = Arrangement.spacedBy(8.dp)) {

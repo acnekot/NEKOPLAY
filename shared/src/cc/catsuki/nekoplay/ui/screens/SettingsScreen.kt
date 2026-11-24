@@ -267,7 +267,7 @@ import java.util.Calendar
         item { SwitchRow("启动时检查更新", "打开应用时自动检查新版本并弹窗提醒", Updater.autoOn) { Updater.setAuto(it) } }
         item {
             Column(Modifier.fillMaxWidth().padding(vertical = 10.dp).bottomLine().padding(bottom = 12.dp)) {
-                T("更新通道", 16); T("正式版：GitHub Release；测试版：main 分支最新一次 Actions 打包", 13, p.s, lines = 2, lh = 1.4f)
+                T("更新通道", 16); T("正式版：GitHub Release；测试版：GitHub Pre-release 预发布包", 13, p.s, lines = 2, lh = 1.4f)
                 Spacer(Modifier.height(10.dp))
                 ChipRow(listOf("正式版", "测试版 nightly"), if (Updater.nightly) 1 else 0) { Updater.useNightly(it == 1) }
             }
@@ -295,7 +295,7 @@ import java.util.Calendar
                         info.url?.let { u -> PrimaryBar("下载", NIcons.download, Modifier.weight(1f)) { runCatching { uri.openUri(u) }.onFailure { nav.toast = "打不开浏览器" } }; Spacer(Modifier.width(8.dp)) }
                         OutlineBtn("查看页面", pad = 14.dp) { runCatching { uri.openUri(info.page) } }
                     }
-                    if (Updater.nightly) T("测试版下载的是 zip，解压后安装里面的文件", 11, p.s, modifier = Modifier.padding(top = 6.dp))
+                    if (Updater.nightly) T("预发布包包含最新修复与试验功能，直接下载对应平台安装包即可", 11, p.s, modifier = Modifier.padding(top = 6.dp))
                 }
             }
         }

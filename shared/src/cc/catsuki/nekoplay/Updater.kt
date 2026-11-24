@@ -11,14 +11,11 @@ import org.json.JSONObject
 
 /**
  * 检查更新：
- * - 正式版（默认）：GitHub Release 的最新版本，版本号比本机新就提示，下载对应平台的安装包
- * - 测试版 nightly：main 分支上最新一次打包成功的 GitHub Actions，提交号和本机不同就提示；
- *   Actions 的产物要登录 GitHub 才能下，这里经 nightly.link 转成直链
+ * - 正式版（默认）：GitHub Release 的最新正式版，版本号比本机新就提示，下载对应平台的安装包
+ * - 测试版 nightly：GitHub Pre-release 预发布包，直接下载对应平台的安装包（不再经由 Actions / nightly.link）
  */
 object Updater {
     private const val REPO = "acnekot/NEKOPLAY"
-    private const val WORKFLOW = "build.yml"
-    private const val BRANCH = "main"
 
     /** found：有更新；url：下载地址；page：网页（看说明 / 手动下载） */
     class Info(val found: Boolean, val title: String, val notes: String, val url: String?, val page: String)
@@ -71,11 +68,15 @@ object Updater {
         return i.takeIf { it >= 0 }?.let { names[it] }
     }
 
-    /** Actions 产物名：和 build.yml / ios.yml 里上传的名字对应 */
-    private fun artifactName(): String = when (Plat.impl.name) {
-        "android" -> "NEKOPLAY-Android"
-        "ios" -> "NEKOPLAY-iOS"
-        else -> System.getProperty("os.name").orEmpty().lowercase().let { os -> when { "win" in os -> "NEKOPLAY-Windows"; "mac" in os -> "NEKOPLAY-macOS"; else -> "NEKOPLAY-Linux" } }
+    private fun pickAsset(o: JSONObject): String? {
+        val assets = o.optJSONArray("assets") ?: JSONArray()
+        val names = (0 until assets.length()).map { assets.getJSONObject(it).optString("name") }
+        return pick(names)?.let { n ->
+            (0 until assets.length()).map { assets.getJSONObject(it) }
+                .first { it.optString("name") == n }
+                .optString("browser_download_url")
+                .takeIf { it.isNotEmpty() }
+        }
     }
 
     suspend fun check(): Info {
@@ -90,24 +91,25 @@ object Updater {
     private suspend fun checkRelease(): Info {
         val o = JSONObject(api("releases/latest"))
         val tag = o.optString("tag_name").removePrefix("v")
-        val assets = o.optJSONArray("assets") ?: JSONArray()
-        val names = (0 until assets.length()).map { assets.getJSONObject(it).optString("name") }
-        val url = pick(names)?.let { n -> (0 until assets.length()).map { assets.getJSONObject(it) }.first { it.optString("name") == n }.optString("browser_download_url") }
-        return Info(PluginSubs.newer(tag, APP_VERSION), "v$tag", o.optString("body").take(1500), url, o.optString("html_url"))
+        return Info(PluginSubs.newer(tag, APP_VERSION), "v$tag", o.optString("body").take(1500), pickAsset(o), o.optString("html_url"))
     }
 
     private suspend fun checkNightly(): Info {
-        val runs = JSONObject(api("actions/workflows/$WORKFLOW/runs?branch=$BRANCH&status=success&per_page=1")).optJSONArray("workflow_runs")
-        val r = runs?.optJSONObject(0) ?: throw NcmError("main 分支还没有打包成功的测试版")
-        val sha = r.optString("head_sha")
-        val id = r.optLong("id")
-        val msg = r.optJSONObject("head_commit")?.optString("message").orEmpty()
-        val date = r.optString("updated_at").take(16).replace('T', ' ')
-        // 提交号不同、而且那次提交比本机这版新，才算有更新（本机可能是从别的分支打的更新的包）
-        val t = epoch(r.optJSONObject("head_commit")?.optString("timestamp").orEmpty())
-        val found = BuildMeta.COMMIT.isEmpty() || (!sha.startsWith(BuildMeta.COMMIT.take(7)) && (BuildMeta.COMMIT_TIME == 0L || t > BuildMeta.COMMIT_TIME))
-        return Info(found, "nightly · ${sha.take(7)}", "$date UTC\n$msg".take(1500),
-            "https://nightly.link/$REPO/actions/runs/$id/${artifactName()}.zip", r.optString("html_url"))
+        val arr = JSONArray(api("releases?per_page=20"))
+        val list = (0 until arr.length()).map { arr.getJSONObject(it) }.filter { !it.optBoolean("draft") }
+        val o = list.firstOrNull { it.optBoolean("prerelease") } ?: throw NcmError("还没有发布过预发布版")
+        val tag = o.optString("tag_name").removePrefix("v")
+        val baseVer = tag.substringBefore('-')
+        val pubTime = epoch(o.optString("published_at").ifEmpty { o.optString("created_at") })
+        val sha = o.optString("target_commitish")
+        val sameCommit = sha.length >= 7 && BuildMeta.COMMIT.length >= 7 && sha.startsWith(BuildMeta.COMMIT.take(7))
+        val found = when {
+            sameCommit -> false
+            PluginSubs.newer(baseVer, APP_VERSION) -> true
+            baseVer == APP_VERSION -> BuildMeta.COMMIT_TIME == 0L || (pubTime > 0L && pubTime > BuildMeta.COMMIT_TIME + 120)
+            else -> false
+        }
+        return Info(found, "v$tag", o.optString("body").take(1500), pickAsset(o), o.optString("html_url"))
     }
 
     /** "2026-11-20T17:44:00Z" / "+08:00" → 秒（不依赖 java.time，iOS 也能用） */
