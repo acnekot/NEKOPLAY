@@ -5,7 +5,7 @@
 <h1 align="center">NEKOPLAY</h1>
 
 <p align="center">
-  BenchLab 风格的音乐播放器 · Kotlin + Compose Multiplatform<br>
+  简约风格的音乐播放器 · Kotlin + Compose Multiplatform<br>
   安卓 / Windows / macOS / Linux / iOS 共用一套界面
 </p>
 
@@ -67,7 +67,7 @@ NEKOPLAY 是一个**本地音乐播放器**：播放你自己设备上或自己�
 
 ## 下载
 
-正式版在 [Releases](https://github.com/acnekot/NEKOPLAY/releases) 下载；测试版在 GitHub Actions 的「打包全部版本」工作流里：
+正式版与测试版（Nightly Pre-release）均在 [Releases](https://github.com/acnekot/NEKOPLAY/releases) 下载：
 
 | 平台 | 文件 |
 |---|---|
@@ -133,6 +133,19 @@ design/    图标源文件
 | [Inter](https://rsms.me/inter/)、[JetBrains Mono](https://www.jetbrains.com/lp/mono/) | 字体 | SIL OFL 1.1 |
 
 部分示例插件中的接口参数参考了社区开源项目（MIT License），对应版权声明保留在各脚本文件开头。
+
+## 致谢与参考
+
+感谢以下优秀开源项目为 NEKOPLAY 的实现提供了技术参考与底层支持：
+
+| 仓库 / 项目 | 参考与使用的内容 |
+|---|---|
+| [bbplayer-app/BBPlayer](https://github.com/bbplayer-app/BBPlayer) | 示例插件中的 WBI 请求签名流程、DASH 音频流解析、多页列表与合集加载及字幕歌词适配思路 |
+| [ppy/osu-framework](https://github.com/ppy/osu-framework) | 动效预设中 `OutExpo / OutQuint` 极速起手、长尾丝滑刹停的缓出曲线手感 |
+| [media-kit/libmpv-win32-audio-build](https://github.com/media-kit/libmpv-win32-audio-build) | Windows 桌面端纯音频 `libmpv` 精简动态库预编译产物 |
+| [JetBrains/compose-multiplatform](https://github.com/JetBrains/compose-multiplatform) | 跨平台共享声明式 UI 渲染架构与桌面端原生安装包打包方案 |
+| [dokar3/quickjs-kt](https://github.com/dokar3/quickjs-kt) | 跨平台 QuickJS 脚本沙盒运行时与插件桥接能力 |
+| [androidx/media](https://github.com/androidx/media) | 安卓端 Media3 播放引擎、本地磁盘缓存与系统通知栏媒体会话集成 |
 
 ## 软件许可协议
 
