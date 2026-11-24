@@ -1,7 +1,9 @@
 package cc.catsuki.nekoplay
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -21,6 +23,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
@@ -43,7 +46,12 @@ private data class FlowItem(
     val presetTracks: List<Track>? = null,
 )
 
-/** 经典 iOS 6 Cover Flow 风格 3D 封面墙：3D 透视斜切 + 镜面倒影 + 点击中心 180° 翻转看曲目 + 底部快滑条 */
+private fun smoothStep(x: Float): Float {
+    val t = x.coerceIn(0f, 1f)
+    return t * t * (3f - 2f * t)
+}
+
+/** 经典 iOS 6 Apple Music Cover Flow 3D 封面墙：纯黑镜面舞台 + 平行 70° 侧翼唱片架 + 精确底部镜面倒影 + 惯性甩动 + 点击中心 180° 翻转看曲目 */
 @Composable fun CoverFlowPage() {
     val nav = LocalNav.current
     val p = c
@@ -99,7 +107,9 @@ private data class FlowItem(
         val clamped = targetIdx.coerceIn(0, items.lastIndex).toFloat()
         if (flippedKey != null && items.getOrNull(clamped.roundToInt())?.key != flippedKey) flippedKey = null
         snapJob?.cancel()
-        snapJob = scope.launch { pos.animateTo(clamped, Motion.hero()) }
+        snapJob = scope.launch {
+            pos.animateTo(clamped, if (AnimStyle.off) androidx.compose.animation.core.snap() else spring(dampingRatio = 0.84f, stiffness = Anim.stiff(Spring.StiffnessLow)))
+        }
     }
 
     val curIdx = if (items.isEmpty()) 0 else pos.value.roundToInt().coerceIn(0, items.lastIndex)
@@ -123,14 +133,11 @@ private data class FlowItem(
         backLoading = false
     }
 
-    val stageBg = remember {
-        Brush.verticalGradient(listOf(Color(0xFF0A0C10), Color(0xFF141821), Color(0xFF090B0E)))
-    }
     val reflMask = remember {
-        Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.36f), 0.52f to Color.Black.copy(alpha = 0.08f), 1f to Color.Transparent)
+        Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.48f), 0.45f to Color.Black.copy(alpha = 0.14f), 1f to Color.Transparent)
     }
 
-    Column(Modifier.fillMaxSize().background(stageBg)) {
+    Column(Modifier.fillMaxSize().background(Color.Black)) {
         // 顶部筛选条（全部 / 专辑 / 歌单 / 最近）
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             listOf("全部", "专辑", "歌单", "最近").forEachIndexed { idx, label ->
@@ -154,18 +161,25 @@ private data class FlowItem(
             return@Column
         }
 
-        // 核心 3D 封面舞台（支持横向拖拽、桌面滚轮与点击）
+        // 核心 3D 封面舞台（纯黑镜面地板 + 惯性甩动 + 滚轮 + 点击）
         Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()
             .onSizeChanged { stageW = it.width.toFloat(); stageH = it.height.toFloat() }
             .pointerInput(items.size) {
+                val vt = VelocityTracker()
                 detectHorizontalDragGestures(
-                    onDragStart = { snapJob?.cancel(); flippedKey = null },
-                    onDragEnd = { snapTo(pos.value.roundToInt()) },
+                    onDragStart = { vt.resetTracking(); snapJob?.cancel(); flippedKey = null },
+                    onDragEnd = {
+                        val vx = vt.calculateVelocity().x
+                        val stepPx = (stageW * 0.22f).coerceIn(100f * density, 240f * density)
+                        val flingCards = (-vx / (stepPx * 4.2f)).coerceIn(-5f, 5f)
+                        snapTo((pos.value + flingCards).roundToInt())
+                    },
                     onDragCancel = { snapTo(pos.value.roundToInt()) },
                 ) { change, dragAmount ->
                     change.consume()
-                    val stepPx = (stageW * 0.24f).coerceIn(110f * density, 260f * density)
-                    val next = (pos.value - dragAmount / stepPx).coerceIn(-0.35f, items.lastIndex + 0.35f)
+                    vt.addPosition(change.uptimeMillis, change.position)
+                    val stepPx = (stageW * 0.22f).coerceIn(100f * density, 240f * density)
+                    val next = (pos.value - dragAmount / stepPx).coerceIn(-0.28f, items.lastIndex + 0.28f)
                     scope.launch { pos.snapTo(next) }
                 }
             }
@@ -185,41 +199,46 @@ private data class FlowItem(
             }, contentAlignment = Alignment.Center) {
 
             val coverDp: Dp = with(LocalDensity.current) {
-                (minOf(stageW * 0.56f, stageH * 0.54f).coerceIn(170f * density, 310f * density)).toDp()
+                (minOf(stageW * 0.44f, stageH * 0.56f).coerceIn(160f * density, 300f * density)).toDp()
             }
             val coverPx = with(LocalDensity.current) { coverDp.toPx() }
-            val centerOffPx = coverPx * 0.60f
-            val stackStepPx = coverPx * 0.26f
+            // 经典 iOS 6 几何参数：中心封面完全无遮挡，两侧 70° 平行立起如唱片架
+            val centerGapPx = coverPx * 0.78f
+            val stackStepPx = coverPx * 0.21f
+            val reflH = coverDp * 0.40f
 
-            // 舞台玻璃反光地平线
-            Box(Modifier.align(Alignment.Center).offset(y = coverDp * 0.52f).fillMaxWidth().height(1.dp)
-                .background(Brush.horizontalGradient(listOf(Color.Transparent, Color(0x28FFFFFF), Color.Transparent))))
-
-            // 仅渲染当前视口左右各 5 张封面，保证大曲库也 120fps 零压力
-            val minI = (curIdx - 5).coerceAtLeast(0)
-            val maxI = (curIdx + 5).coerceAtMost(items.lastIndex)
+            // 左右各渲染 6 张封面，居中卡最高 zIndex
+            val minI = (curIdx - 6).coerceAtLeast(0)
+            val maxI = (curIdx + 6).coerceAtMost(items.lastIndex)
             for (i in minI..maxI) {
                 val item = items[i]
                 val d = i - pos.value
                 val ad = abs(d)
+                val s = smoothStep(ad) // 0 = 正中，1 = 侧翼到位
                 val isCenter = i == curIdx && ad < 0.35f
                 val isFlipped = isCenter && flippedKey == item.key
                 val flipDeg by animateFloatAsState(if (isFlipped) 180f else 0f, Motion.page(), label = "cfFlip_$i")
 
-                val sideAngle = (-58f * sign(d) * ad.coerceAtMost(1f))
-                val tx = if (ad <= 1f) d * centerOffPx else sign(d) * (centerOffPx + (ad - 1f) * stackStepPx)
-                val sc = 1f - 0.22f * ad.coerceAtMost(1f) - 0.03f * (ad - 1f).coerceAtLeast(0f)
-                val alphaVal = (1f - 0.16f * ad).coerceIn(0.22f, 1f)
+                // 左侧封面 (d < 0) 向右内折 (+70°)，右侧封面 (d > 0) 向左内折 (-70°)
+                val wingAngle = -70f * sign(d) * s
+                val tx = if (ad <= 1f) {
+                    sign(d) * centerGapPx * smoothStep(ad)
+                } else {
+                    sign(d) * (centerGapPx + (ad - 1f) * stackStepPx)
+                }
+                // 中心 1.00，侧翼统一 0.80 保持平行唱片脊线，不出现诡异阶梯缩放
+                val sc = 1f - 0.20f * s
+                val alphaVal = if (ad <= 4f) 1f else (1f - (ad - 4f) * 0.35f).coerceIn(0f, 1f)
                 val z = 100f - ad * 10f
 
                 Column(
                     Modifier.zIndex(z)
                         .graphicsLayer {
                             translationX = tx
-                            translationY = -coverPx * 0.08f
+                            translationY = coverPx * 0.14f
                             scaleX = sc; scaleY = sc
-                            rotationY = if (isCenter) sideAngle + flipDeg else sideAngle
-                            cameraDistance = 13f * density
+                            rotationY = if (isCenter) wingAngle + flipDeg else wingAngle
+                            cameraDistance = 12f * density
                             alpha = alphaVal
                         }
                         .pointerInput(item.key, isCenter, curIdx) {
@@ -231,14 +250,15 @@ private data class FlowItem(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     // 封面主体（翻转超过 90° 时切为背面曲目清单）
-                    Box(Modifier.size(coverDp).border(1.dp, Color(if (isCenter) 0x55FFFFFF else 0x22FFFFFF)).background(Color(0xFF181C24))) {
+                    Box(Modifier.size(coverDp).border(1.dp, Color(if (isCenter) 0x44FFFFFF else 0x1AFFFFFF)).background(Color(0xFF12141A))) {
                         if (flipDeg <= 90f) {
                             Cover(item.cover, coverDp, item.title, border = false, decodeSize = 512.dp)
-                            if (ad > 0.05f) {
-                                Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = (ad * 0.28f).coerceAtMost(0.55f))))
+                            if (s > 0.02f) {
+                                // 侧翼暗角遮罩：越靠外越暗，强化经典剧场聚光感
+                                val veil = (0.18f * s + 0.08f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.68f)
+                                Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = veil)))
                             }
                         } else {
-                            // 背面需要再水平翻转 180° 让文字正向可读
                             CoverBackTracklist(item, backTracks, backLoading, onClose = { flippedKey = null }, onOpenDetail = {
                                 when (item.kind) {
                                     "album" -> nav.push(Page.Album(item.id, item.title, item.cover))
@@ -249,19 +269,18 @@ private data class FlowItem(
                             })
                         }
                     }
-                    // 经典 iOS 6 镜面倒影（翻转时淡出）
-                    val reflH = coverDp * 0.38f
-                    Box(Modifier.size(coverDp, reflH).clipToBounds().graphicsLayer { alpha = (1f - flipDeg / 90f).coerceIn(0f, 1f) }) {
-                        Box(Modifier.size(coverDp)
-                            .graphicsLayer {
-                                scaleY = -1f
-                                translationY = -coverPx + reflH.toPx()
-                                compositingStrategy = CompositingStrategy.Offscreen
-                            }
-                            .drawWithContent {
-                                drawContent()
-                                drawRect(brush = reflMask, blendMode = BlendMode.DstIn)
-                            }) {
+                    Spacer(Modifier.height(1.dp))
+                    // 精确 iOS 6 底部镜面倒影：外层未翻转容器做顶部→底部渐隐，内层原位 scaleY = -1f 精准镜像封面底边
+                    Box(Modifier.size(coverDp, reflH).clipToBounds()
+                        .graphicsLayer {
+                            alpha = (1f - flipDeg / 90f).coerceIn(0f, 1f)
+                            compositingStrategy = CompositingStrategy.Offscreen
+                        }
+                        .drawWithContent {
+                            drawContent()
+                            drawRect(brush = reflMask, blendMode = BlendMode.DstIn)
+                        }) {
+                        Box(Modifier.requiredSize(coverDp).align(Alignment.TopCenter).graphicsLayer { scaleY = -1f }) {
                             Cover(item.cover, coverDp, item.title, border = false, decodeSize = 256.dp)
                         }
                     }
