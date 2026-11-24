@@ -60,7 +60,8 @@ import kotlinx.coroutines.launch
     val p = c
     val copy = rememberCopy()
     val tops = remember(l) { FloatArray(l.size) { -1f } }
-    var measured by remember(l) { mutableStateOf(0) }
+    var measuredCount by remember(l) { mutableIntStateOf(0) }
+    var readyMeasured by remember(l) { mutableStateOf(false) }
     val offs = remember(l) { List(l.size) { Animatable(0f) } }
     var settled by remember(l) { mutableStateOf(false) }
     var lastCur by remember(l) { mutableIntStateOf(-1) }
@@ -70,8 +71,8 @@ import kotlinx.coroutines.launch
     val density = LocalDensity.current.density
     val centered = LyricPref.align == 1
 
-    LaunchedEffect(cur, measured, vh, LyricPref.anchor, LyricPref.staggerMs, LyricPref.gap) {
-        if (measured < l.size) return@LaunchedEffect
+    LaunchedEffect(cur, readyMeasured, vh, LyricPref.anchor, LyricPref.staggerMs, LyricPref.gap) {
+        if (!readyMeasured) return@LaunchedEffect
         val top = tops.getOrElse(cur) { 0f }
         val lineH = (tops.getOrNull(cur + 1)?.let { it - top - gap } ?: (LyricPref.size * 1.6f * density)).coerceAtLeast(10f)
         val target = when (LyricPref.anchor) {
@@ -173,7 +174,15 @@ import kotlinx.coroutines.launch
                 val blurDp by animateDpAsState(targetBlur, tween(280), label = "ab")
 
                 Box(Modifier.fillMaxWidth()
-                    .onPlaced { val y = it.positionInParent().y; if (tops[i] != y) { tops[i] = y; measured++ } }
+                    .onPlaced {
+                        val y = it.positionInParent().y
+                        val first = tops[i] < 0f
+                        tops[i] = y
+                        if (first) {
+                            measuredCount++
+                            if (measuredCount >= l.size) readyMeasured = true
+                        }
+                    }
                     .graphicsLayer {
                         translationY = offs[i].value + manual.value
                         this.alpha = if (ready) alpha else 0f
@@ -219,7 +228,7 @@ import kotlinx.coroutines.launch
     }
 }
 
-/** AMLL 逐字柔和扫光 + 轻微上浮（FlowRow 自动换行，单字按进度柔和亮起并上浮 2dp） */
+/** 逐字柔和扫光 + 轻微上浮（单层 TextStyle Brush 渐变，避免嵌套 Offscreen/DstIn 在安卓上裁切上半部分） */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable private fun AmllWordLine(line: LyricLine, offset: Long, centered: Boolean) {
     val p = c
@@ -238,33 +247,29 @@ import kotlinx.coroutines.launch
             }
         }
     }
-    val baseSt = TextStyle(fontSize = LyricPref.size.sp, fontWeight = FontWeight(800), fontFamily = Typo.family, lineHeight = (LyricPref.size * 1.28f).sp)
-    val liftPx = with(LocalDensity.current) { (LyricPref.size * 0.075f).dp.toPx() }
+    val baseSt = TextStyle(fontSize = LyricPref.size.sp, fontWeight = FontWeight(800), fontFamily = Typo.family, lineHeight = (LyricPref.size * 1.38f).sp)
+    val liftPx = with(LocalDensity.current) { (LyricPref.size * 0.065f).dp.toPx() }
+    val dim = p.k.copy(alpha = 0.30f)
     FlowRow(horizontalArrangement = if (centered) Arrangement.Center else Arrangement.Start) {
         words.forEach { w ->
             val dur = w.d.coerceAtLeast(120L).toFloat()
             val prog = ((now - w.t).toFloat() / dur).coerceIn(0f, 1f)
             val lift = -liftPx * FastOutSlowInEasing.transform(prog)
-            val glow = if (prog > 0.05f) Shadow(p.k.copy(alpha = 0.28f * prog), Offset.Zero, 14f * prog) else null
-            Box(Modifier.graphicsLayer { translationY = lift }) {
-                BasicText(w.s, style = baseSt.copy(color = p.k.copy(alpha = 0.30f)), maxLines = 1)
-                if (prog > 0f) {
-                    BasicText(w.s, style = baseSt.copy(color = p.k, shadow = glow), maxLines = 1,
-                        modifier = Modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
-                            drawContent()
-                            if (prog < 0.999f) {
-                                val edge = (size.width * 0.35f).coerceAtLeast(8f)
-                                val head = (size.width + edge) * prog
-                                val startX = (head - edge).coerceAtLeast(0f)
-                                val brush = Brush.horizontalGradient(
-                                    0f to Color.Black,
-                                    (startX / size.width.coerceAtLeast(1f)).coerceIn(0f, 1f) to Color.Black,
-                                    (head / size.width.coerceAtLeast(1f)).coerceIn(0f, 1f) to Color.Transparent,
-                                )
-                                drawRect(brush = brush, blendMode = BlendMode.DstIn)
-                            }
-                        })
+            val glow = if (prog > 0.08f) Shadow(p.k.copy(alpha = 0.24f * prog), Offset.Zero, 10f * prog) else null
+            val st = when {
+                prog <= 0.001f -> baseSt.copy(color = dim)
+                prog >= 0.999f -> baseSt.copy(color = p.k, shadow = glow)
+                else -> {
+                    val s1 = (prog * 1.35f - 0.35f).coerceIn(0f, 1f)
+                    val s2 = (prog * 1.35f).coerceIn(s1, 1f)
+                    baseSt.copy(
+                        brush = Brush.horizontalGradient(0f to p.k, s1 to p.k, s2 to dim, 1f to dim),
+                        shadow = glow,
+                    )
                 }
+            }
+            Box(Modifier.graphicsLayer { translationY = lift }) {
+                BasicText(w.s, style = st, maxLines = 1)
             }
         }
     }

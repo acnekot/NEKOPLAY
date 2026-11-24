@@ -114,7 +114,8 @@ private val HydrogenEase = androidx.compose.animation.core.CubicBezierEasing(0.4
     val p = c
     val copy = rememberCopy()
     val tops = remember(l) { FloatArray(l.size) { -1f } }
-    var measured by remember(l) { mutableStateOf(0) }
+    var measuredCount by remember(l) { mutableIntStateOf(0) }
+    var readyMeasured by remember(l) { mutableStateOf(false) }
     val offs = remember(l) { List(l.size) { Animatable(0f) } }
     var settled by remember(l) { mutableStateOf(false) }
     var lastCur by remember(l) { mutableIntStateOf(-1) }
@@ -124,8 +125,8 @@ private val HydrogenEase = androidx.compose.animation.core.CubicBezierEasing(0.4
     val density = LocalDensity.current.density
     val centered = LyricPref.align == 1
     // 当前句的停靠位置按设置来：顶部 / 第二行（保留上一句）/ 偏上 / 居中
-    LaunchedEffect(cur, measured, vh, LyricPref.anchor, LyricPref.style, LyricPref.scrollMs, LyricPref.staggerMs, LyricPref.gap) {
-        if (measured < l.size) return@LaunchedEffect
+    LaunchedEffect(cur, readyMeasured, vh, LyricPref.anchor, LyricPref.style, LyricPref.scrollMs, LyricPref.staggerMs, LyricPref.gap) {
+        if (!readyMeasured) return@LaunchedEffect
         val top = tops.getOrElse(cur) { 0f }
         val lineH = (tops.getOrNull(cur + 1)?.let { it - top - gap } ?: (LyricPref.size * 1.6f * density)).coerceAtLeast(10f)
         val target = when (LyricPref.anchor) {
@@ -204,7 +205,15 @@ private val HydrogenEase = androidx.compose.animation.core.CubicBezierEasing(0.4
                 val targetAlpha = if (browsing) (if (dist == 0) 1f else .7f) else if (LyricPref.style == 1) when (dist) { 0 -> 1f; 1 -> .42f; 2 -> .28f; else -> .18f } else when (dist) { 0 -> 1f; 1 -> .5f; 2 -> .36f; else -> .26f }
                 val a = animateFloatAsState(targetAlpha, tween(260, easing = HydrogenEase), label = "la")
                 Box(Modifier.fillMaxWidth()
-                    .onPlaced { val y = it.positionInParent().y; if (tops[i] != y) { tops[i] = y; measured++ } }
+                    .onPlaced {
+                        val y = it.positionInParent().y
+                        val first = tops[i] < 0f
+                        tops[i] = y
+                        if (first) {
+                            measuredCount++
+                            if (measuredCount >= l.size) readyMeasured = true
+                        }
+                    }
                     .graphicsLayer { translationY = offs[i].value + manual.value; alpha = if (ready) a.value else 0f }
                     .then(if (UiPref.lyricBlur && !browsing && dist in 2..5 && Plat.impl.liveBlur) Modifier.blur(1.2.dp) else Modifier)
                     .padding(bottom = with(LocalDensity.current) { gap.toDp() }),
