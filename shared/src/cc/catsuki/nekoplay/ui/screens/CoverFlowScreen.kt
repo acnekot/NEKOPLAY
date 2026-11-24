@@ -202,9 +202,9 @@ private fun smoothStep(x: Float): Float {
                 (minOf(stageW * 0.44f, stageH * 0.56f).coerceIn(160f * density, 300f * density)).toDp()
             }
             val coverPx = with(LocalDensity.current) { coverDp.toPx() }
-            // 经典 iOS 6 几何参数：中心封面完全无遮挡，两侧 ±66° 向内折向中心如唱片架
-            val centerGapPx = coverPx * 0.72f
-            val stackStepPx = coverPx * 0.21f
+            // 经典 iOS 6 几何参数：中心封面无遮挡，两侧外缘靠前、内缘向内折向中心形成 V 型唱片架
+            val centerGapPx = coverPx * 0.78f
+            val stackStepPx = coverPx * 0.22f
             val reflH = coverDp * 0.36f
 
             // 左右各渲染 6 张封面，居中卡最高 zIndex
@@ -219,8 +219,8 @@ private fun smoothStep(x: Float): Float {
                 val isFlipped = isCenter && flippedKey == item.key
                 val flipDeg by animateFloatAsState(if (isFlipped) 180f else 0f, Motion.page(), label = "cfFlip_$i")
 
-                // 左侧封面 (d < 0) 外缘朝前内缘向后 (-66°)，右侧封面 (d > 0) 对称 (+66°)，两侧朝中心合拢
-                val wingAngle = 66f * sign(d) * s
+                // 左侧封面 (d < 0) 外缘靠前内缘向后 (+64°)，右侧封面 (d > 0) 对称 (-64°)，经典 iOS 6 内折视角
+                val wingAngle = -64f * sign(d) * s
                 val tx = if (ad <= 1f) {
                     sign(d) * centerGapPx * smoothStep(ad)
                 } else {
