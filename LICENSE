@@ -1,0 +1,64 @@
+NEKOPLAY 软件许可协议（保留全部所有权）
+NEKOPLAY Software License — All Rights Reserved
+
+Copyright (c) 2024-2026 acnekot. All Rights Reserved.
+版权所有 (c) 2024-2026 acnekot。作者保留全部所有权。
+
+================================================================================
+中文条款
+================================================================================
+
+本软件（NEKOPLAY，包括但不限于源代码、界面设计、图标资源、文档、构建脚本及官方发布的安装包）
+的全部著作权及其他知识产权均归作者（acnekot）所有。本仓库代码仅作公开展示与个人学习查阅，
+不构成任何形式的开源许可证授权。
+
+1. 允许的使用范围
+   - 您可免费下载并安装作者通过官方渠道（本仓库 GitHub Releases 及官方网站）发布的成品软件，
+     仅限个人非商业使用。
+   - 您可在线浏览本仓库内容以供个人学习参考。
+
+2. 明确禁止的行为（未经作者事先书面授权）
+   - 禁止对本项目进行 Fork 后的二次开发、修改、衍生创作或重新打包发布。
+   - 禁止复制、分发、出售、出租、转授权本软件或其源代码、资源文件的全部或部分。
+   - 禁止将本软件或其代码用于任何商业用途、集成至其他项目，或移除/篡改版权声明与作者标识。
+   - 作者不提供任何形式的 Fork 授权、二次开发支持或衍生版本技术支持。
+
+3. 第三方组件说明
+   - 本软件所引用或随安装包附带的第三方开源库与字体组件，其版权归各自原作者所有，
+     并继续遵循其各自的开源许可证（详见 README.md「第三方组件」章节）。
+
+4. 免责声明
+   - 本软件按「现状」（AS IS）提供，作者不对软件的适用性、完整性或无错误性作任何明示或暗示的担保。
+   - 因使用或无法使用本软件所产生的任何直接或间接损失，作者不承担责任。
+
+================================================================================
+English Terms
+================================================================================
+
+All copyright, intellectual property, and ownership rights in and to NEKOPLAY
+(including without limitation its source code, UI design, assets, documentation,
+build scripts, and official releases) are exclusively retained by the author
+(acnekot). Public visibility of this repository does NOT grant any open-source
+license.
+
+1. Permitted Use
+   - You may download and use official builds distributed by the author solely
+     for personal, non-commercial use.
+   - You may view the repository contents for personal reference only.
+
+2. Prohibited Actions (Without Prior Written Permission from the Author)
+   - No forking for derivative works, modification, secondary development, or
+     repackaging/redistribution of this software or its source code.
+   - No copying, publishing, selling, sublicensing, or commercial exploitation
+     of any part of this software or its assets.
+   - The author does not grant permission or provide support for forks or
+     derivative/secondary development.
+
+3. Third-Party Components
+   - Third-party open-source libraries and fonts included or referenced by this
+     software remain subject to their respective licenses (see README.md).
+
+4. Disclaimer
+   - This software is provided "AS IS", without warranty of any kind, express or
+     implied. In no event shall the author be liable for any claim, damages, or
+     other liability arising from the use of this software.
