@@ -139,6 +139,8 @@ object Boot {
     LaunchedEffect(Unit) { withFrameNanos { Perf.markHomeReady() } }
     val st by Engine.state.collectAsState()
     val err by Engine.error.collectAsState()
+    val openPlayer by PlayerBus.openSeq.collectAsState()
+    LaunchedEffect(openPlayer) { if (openPlayer > 0 && Engine.state.value.current != null) nav.player = true }
     LaunchedEffect(err) { if (err != null) { nav.toast = err; Engine.error.value = null } }
     LaunchedEffect(nav.toast) { if (nav.toast != null) { delay(2200); nav.toast = null } }
     Plat.impl.BackHandler(Updater.dialog != null || nav.input != null || nav.sheet != null || nav.comments != null || nav.menu || nav.queue || nav.player || nav.stack.isNotEmpty() || nav.tab == 1) {

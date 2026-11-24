@@ -60,3 +60,9 @@ object Keys {
 object SearchBus {
     var query by mutableStateOf<String?>(null)
 }
+
+/** 外部入口（系统通知栏 / 锁屏 / 桌面组件）→ 直接拉起播放页 */
+object PlayerBus {
+    val openSeq = kotlinx.coroutines.flow.MutableStateFlow(0)
+    fun open() { openSeq.value += 1 }
+}

@@ -56,7 +56,9 @@ class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     override fun onCreate() {
         super.onCreate()
-        session = MediaSession.Builder(this, AndroidPlat.exoAudio.player).build()
+        session = MediaSession.Builder(this, AndroidPlat.exoAudio.player)
+            .setSessionActivity(MainActivity.openPlayerPendingIntent(this, 100))
+            .build()
     }
     override fun onGetSession(info: MediaSession.ControllerInfo) = session
     override fun onTaskRemoved(rootIntent: Intent?) {

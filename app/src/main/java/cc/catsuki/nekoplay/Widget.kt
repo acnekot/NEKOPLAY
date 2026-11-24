@@ -67,7 +67,7 @@ object WidgetSync {
             setOnClickPendingIntent(R.id.w_prev, pi(NekoWidget.A_PREV, 1))
             setOnClickPendingIntent(R.id.w_play, pi(NekoWidget.A_TOGGLE, 2))
             setOnClickPendingIntent(R.id.w_next, pi(NekoWidget.A_NEXT, 3))
-            setOnClickPendingIntent(R.id.w_root, PendingIntent.getActivity(ctx, 4, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
+            setOnClickPendingIntent(R.id.w_root, MainActivity.openPlayerPendingIntent(ctx, 4))
             cover?.takeIf { it.first == t?.cover }?.let { setImageViewBitmap(R.id.w_cover, it.second) } ?: setImageViewResource(R.id.w_cover, R.mipmap.ic_launcher)
         }
         mgr.updateAppWidget(ids, v)

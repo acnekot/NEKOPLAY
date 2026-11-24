@@ -40,6 +40,7 @@ object LyricNotify {
                 if (line.isEmpty()) { nm.cancel(ID); continue }
                 val b = (if (Build.VERSION.SDK_INT >= 26) Notification.Builder(ctx, CH) else @Suppress("DEPRECATION") Notification.Builder(ctx))
                     .setSmallIcon(R.mipmap.ic_launcher_mono).setTicker(line).setContentTitle(line).setContentText("${t.title} - ${t.artist}")
+                    .setContentIntent(MainActivity.openPlayerPendingIntent(ctx, 101))
                     .setOngoing(true).setOnlyAlertOnce(true).setShowWhen(false)
                 val n = b.build()
                 n.flags = n.flags or FLAG_ALWAYS_SHOW_TICKER or FLAG_ONLY_UPDATE_TICKER
