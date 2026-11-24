@@ -1,5 +1,6 @@
 // @id kugou
 // @name 酷狗音乐
+// @type source
 // @version 1.1.0
 // @author NEKOPLAY
 // @desc 酷狗音源：搜索（单曲/专辑/歌单/热搜/联想）、播放、歌词、推荐歌单、新歌速递、每日推荐、排行榜，扫码登录后看自己的歌单

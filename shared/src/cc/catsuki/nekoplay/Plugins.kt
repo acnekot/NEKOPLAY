@@ -43,6 +43,52 @@ object Plugins {
     fun on(id: String): Boolean { ensureLoaded(); return id !in off && list.value.any { it.id == id } }
     fun get(id: String): JsSource? { ensureLoaded(); return list.value.firstOrNull { it.id == id } }
     val enabled get(): List<JsSource> { ensureLoaded(); return list.value.filter { it.id !in off } }
+    /** 音源插件（全部 / 已启用） */
+    val sources get(): List<JsSource> { ensureLoaded(); return list.value.filter { it.isSource } }
+    val enabledSources get(): List<JsSource> { ensureLoaded(); return enabled.filter { it.isSource } }
+    /** 功能插件（全部 / 已启用） */
+    val features get(): List<JsSource> { ensureLoaded(); return list.value.filter { it.isFeature } }
+    val enabledFeatures get(): List<JsSource> { ensureLoaded(); return enabled.filter { it.isFeature } }
+
+    /** 向所有启用的功能插件派发轻量生命周期事件（如 onTrackChange / onPlayState） */
+    fun emitEvent(fn: String, payload: JSONObject) {
+        val targets = enabledFeatures.filter { it.caps.isEmpty() || it.has(fn) }
+        if (targets.isEmpty()) return
+        kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
+            targets.forEach { s -> runCatching { if (s.start() && s.has(fn)) s.call(fn, payload) } }
+        }
+    }
+    /** 功能插件歌词后处理管道（如罗马音/排版清洗/翻译增强） */
+    suspend fun transformLyric(track: Track, data: LyricData): LyricData {
+        val targets = enabledFeatures.filter { it.caps.isEmpty() || it.has("transformLyric") }
+        if (targets.isEmpty()) return data
+        var cur = data
+        val tObj = JSONObject().put("id", track.id).put("title", track.title).put("artist", track.artist).put("album", track.album)
+        for (s in targets) {
+            runCatching {
+                if (!s.start() || !s.has("transformLyric")) return@runCatching
+                val lObj = JSONObject().put("lrc", cur.lrc).put("tr", cur.tr ?: "").put("yrc", cur.yrc ?: "")
+                val r = s.call("transformLyric", tObj, lObj) as? JSONObject ?: return@runCatching
+                cur = LyricData(
+                    r.optString("lrc", cur.lrc),
+                    r.optString("tr").takeIf { it.isNotBlank() && it != "null" } ?: cur.tr,
+                    r.optString("yrc").takeIf { it.isNotBlank() && it != "null" } ?: cur.yrc,
+                )
+            }
+        }
+        return cur
+    }
+    /** 手动触发功能插件的 action(track) 动作 */
+    suspend fun runFeatureAction(id: String, track: Track?): String? {
+        val s = get(id)?.takeIf { on(it.id) && it.isFeature } ?: return null
+        if (!s.start() || !s.has("action")) return null
+        val tObj = track?.let { JSONObject().put("id", it.id).put("title", it.title).put("artist", it.artist).put("album", it.album) }
+        return when (val r = s.call("action", tObj)) {
+            is JSONObject -> r.optString("message").ifEmpty { r.toString() }
+            is String -> r
+            else -> "已执行「${s.name}」"
+        }
+    }
     fun set(id: String, v: Boolean) { off = if (v) off - id else off + id; prefs.edit().putStringSet("off", off).apply(); if (!v) get(id)?.close()
         kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { if (v) get(id)?.start(); PluginStore.refresh().join(); Store.refreshAll() } }
 
@@ -91,14 +137,14 @@ object Plugins {
     /** 主插件偏好提供者（由 UI 层注入，避免 data 层反向依赖界面偏好） */
     var preferredHomeId: () -> String = { "" }
     fun main(): JsSource? {
-        val en = enabled
+        val en = enabledSources
         val pref = preferredHomeId()
         return en.firstOrNull { it.id == pref } ?: en.firstOrNull { it.id == "netease" } ?: en.firstOrNull { it.has("account") } ?: en.firstOrNull()
     }
-    /** 提供某个功能的插件：先看主插件，再找第一个实现了它的 */
+    /** 提供某个功能的音源插件：先看主插件，再找第一个实现了它的音源插件 */
     suspend fun provider(cap: String): JsSource? {
         main()?.let { if (it.start() && it.has(cap)) return it }
-        return enabled.firstOrNull { it.start() && it.has(cap) }
+        return enabledSources.firstOrNull { it.start() && it.has(cap) }
     }
 
     fun track(pid: String, o: JSONObject) = Track(wrap(pid, o.opt("id")), o.optString("title"), o.optString("artist").ifEmpty { "未知艺人" }, o.optString("album"),
@@ -151,7 +197,8 @@ object Plugins {
         val o = callFor(id, "lyric", raw(id)) as? JSONObject ?: throw NcmError("暂无歌词")
         val l = LyricData(o.optString("lrc"), o.optString("tr").takeIf { it.isNotBlank() && it != "null" }, o.optString("yrc").takeIf { it.isNotBlank() && it != "null" })
         if (l.lrc.isBlank() && l.yrc == null) throw NcmError("暂无歌词")
-        return l
+        val cur = Engine.state.value.current?.takeIf { it.id == id } ?: Track(id, "", "", "", 0, null)
+        return transformLyric(cur, l)
     }
     suspend fun playlistTracks(id: String): List<Track> = tracksOf(pidOf(id), of(id).call("playlist", raw(id)))
     suspend fun album(id: String): Pair<Album, List<Track>> {
@@ -173,4 +220,22 @@ object Plugins {
 
     /** 来源的显示名：组件上的小标签用；本地文件返回 null */
     fun sourceName(id: String): String? = if (isPlugin(id)) nameOf(pidOf(id)) else null
+}
+
+/** 音源插件的账号与歌单缓存（数据层状态，与 PluginUi 解耦） */
+object PluginStore {
+    fun logout(id: String) = io.launch { runCatching { Plugins.get(id)?.call("logout") }; refresh() }
+    val accounts = kotlinx.coroutines.flow.MutableStateFlow<Map<String, String>>(emptyMap())
+    val playlists = kotlinx.coroutines.flow.MutableStateFlow<Map<String, List<Playlist>>>(emptyMap())
+    private val io = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+    fun refresh() = io.launch {
+        val acc = HashMap<String, String>(); val pls = HashMap<String, List<Playlist>>()
+        for (s in Plugins.enabledSources) {
+            if (!s.start() || !s.has("account")) continue
+            val a = runCatching { s.call("account") as? JSONObject }.getOrNull() ?: continue
+            acc[s.id] = a.optString("name")
+            if (s.has("myPlaylists")) runCatching { Plugins.myPlaylists(s.id) }.onSuccess { pls[s.id] = it }
+        }
+        accounts.value = acc; playlists.value = pls
+    }
 }

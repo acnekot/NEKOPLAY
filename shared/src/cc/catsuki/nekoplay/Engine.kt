@@ -147,6 +147,7 @@ object Engine {
             override fun onPlaying(p: Boolean) {
                 state.value = state.value.copy(playing = p)
                 if (p) startRampIn()
+                Plugins.emitEvent("onPlayState", org.json.JSONObject().put("playing", p).put("id", state.value.current?.id ?: ""))
             }
             override fun onBuffering(b: Boolean) { state.value = state.value.copy(loading = b) }
             override fun onEnded() = this@Engine.onEnded()
@@ -244,6 +245,7 @@ object Engine {
                     state.value = state.value.copy(loading = false, format = s.format, kbps = s.kbps, cached = false)
                 }
                 position.value = startAt
+                Plugins.emitEvent("onTrackChange", org.json.JSONObject().put("id", t.id).put("title", t.title).put("artist", t.artist).put("album", t.album))
                 if (state.value.want && audio.isPlaying) startRampIn()
                 prefetchNext()
                 Store.saveQueue(state.value.queue, i, startAt)

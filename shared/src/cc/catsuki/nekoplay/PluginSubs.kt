@@ -19,7 +19,9 @@ object PluginSubs {
     /** 官方订阅：仓库里的 plugins/index.json（raw 打不开时自动换 jsDelivr） */
     const val OFFICIAL = "https://raw.githubusercontent.com/acnekot/NEKOPLAY/main/plugins/index.json"
 
-    class Item(val id: String, val name: String, val version: String, val author: String, val desc: String, val url: String, val from: String)
+    class Item(val id: String, val name: String, val version: String, val author: String, val desc: String, val url: String, val from: String, val type: String = "source") {
+        val isFeature: Boolean get() = type.equals("feature", ignoreCase = true)
+    }
     class Sub(val url: String, val name: String, val items: List<Item>, val error: String?)
 
     private val prefs by lazy { Plat.prefs("plugins") }
@@ -76,7 +78,7 @@ object PluginSubs {
                             val items = Plugins.arr(o.optJSONArray("plugins")).mapNotNull { p ->
                                 val id = p.optString("id"); val url = p.optString("url")
                                 if (id.isEmpty() || url.isEmpty()) null
-                                else Item(id, p.optString("name").ifEmpty { id }, p.optString("version", "0"), p.optString("author"), p.optString("desc"), resolve(u, url), name)
+                                else Item(id, p.optString("name").ifEmpty { id }, p.optString("version", "0"), p.optString("author"), p.optString("desc"), resolve(u, url), name, p.optString("type", "source"))
                             }
                             Sub(u, name, items, null)
                         } catch (e: Exception) { Sub(u, u, emptyList(), e.message ?: e.toString()) }

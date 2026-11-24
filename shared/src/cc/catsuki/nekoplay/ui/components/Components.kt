@@ -216,7 +216,7 @@ val LocalCompactAction = compositionLocalOf { false }
 
 /** 来源小标签：开着不止一个音源时，在歌手前面标出这首歌来自哪里 */
 @Composable fun SourceTag(t: Track) {
-    if (Plugins.enabled.size < 2) return
+    if (Plugins.enabledSources.size < 2) return
     val name = when { t.id.startsWith("dav:") -> "WebDAV"; t.local -> "本地"; else -> Plugins.sourceName(t.id) ?: return }
     Box(Modifier.padding(end = 6.dp).border(1.dp, c.l2).padding(horizontal = 4.dp)) { T(name, 9, c.s, 700, lh = 1.4f) }
 }

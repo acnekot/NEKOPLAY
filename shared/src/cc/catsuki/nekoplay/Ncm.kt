@@ -57,7 +57,7 @@ object Ncm {
     fun pic(u: String?): String? = if (u.isNullOrEmpty()) null else u.replace("http:", "https:").substringBefore('?')
 
     /** 有没有可用的在线插件 */
-    val available get() = Plugins.enabled.isNotEmpty()
+    val available get() = Plugins.enabledSources.isNotEmpty()
     /** 主插件登录了没有 */
     val loggedIn get() = Plugins.main()?.let { PluginStore.accounts.value.containsKey(it.id) } ?: false
 

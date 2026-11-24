@@ -1,5 +1,6 @@
 // @id netease
 // @name 网易云音乐
+// @type source
 // @version 1.0.1
 // @author NEKOPLAY
 // @desc 网易云音源：搜索、播放、逐字歌词、日推、私人 FM、歌单广场、排行榜、评论、MV、电台、云盘，扫码登录后同步歌单和喜欢

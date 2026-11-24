@@ -254,7 +254,7 @@ import java.util.Calendar
 /** 首页内容来源：一个插件，或者全部开着的插件混在一起 */
 object HomeSrc {
     const val MIX = "mix"
-    private val sources get() = Plugins.enabled
+    private val sources get() = Plugins.enabledSources
     /** 选了但没开的插件退回第一个开着的 */
     val current: String get() = UiPref.homePlugin.let { v -> val s = sources.map { it.id }; if (v == MIX && s.size > 1) MIX else if (v in s) v else s.firstOrNull { it == "netease" } ?: s.firstOrNull() ?: "" }
     /** 首页要展示的插件 */

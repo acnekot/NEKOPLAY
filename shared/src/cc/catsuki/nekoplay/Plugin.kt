@@ -34,13 +34,28 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  * 本体不带任何在线音源；音源是用户导入的 .js 脚本，在内置的 QuickJS 里运行。
  * 脚本和本体之间只传 JSON 字符串，接口说明见 docs/source-api.md。
  */
+/** 插件大类：音源插件（提供曲库/搜索/播放/歌词）与功能插件（监听播放事件、处理歌词、提供扩展动作） */
+enum class PluginKind(val id: String, val label: String) {
+    SOURCE("source", "音源插件"),
+    FEATURE("feature", "功能插件"),
+}
+
 class JsSource(val file: File) {
-    /** 脚本开头注释里的信息：// @id qq  // @name QQ 音乐  // @version 1.0.0  // @author xx  // @desc xx */
+    /** 脚本开头注释里的信息：// @id qq  // @name xx  // @type source|feature  // @version 1.0.0  // @author xx  // @desc xx */
     val meta: Map<String, String> = Regex("""^\s*//\s*@(\w+)\s+(.+)$""", RegexOption.MULTILINE).findAll(file.readText().take(4000))
         .associate { it.groupValues[1] to it.groupValues[2].trim() }
     val id: String get() = meta["id"] ?: file.nameWithoutExtension
     val name: String get() = meta["name"] ?: id
     val version: String get() = meta["version"] ?: "0"
+    /** 插件类型：默认 source；支持 // @type feature 显式声明，未写时若仅实现了功能钩子也自动识别为功能插件 */
+    val kind: PluginKind get() = when (meta["type"]?.lowercase()) {
+        "feature", "ext", "extension", "tool" -> PluginKind.FEATURE
+        "source", "music", "audio" -> PluginKind.SOURCE
+        else -> if (caps.isNotEmpty() && "stream" !in caps && "search" !in caps &&
+            listOf("onTrackChange", "onPlayState", "transformLyric", "action").any { it in caps }) PluginKind.FEATURE else PluginKind.SOURCE
+    }
+    val isSource: Boolean get() = kind == PluginKind.SOURCE
+    val isFeature: Boolean get() = kind == PluginKind.FEATURE
     /** 能搜的类型（头注释「// @search track,album,…」），没写就当单曲 / 专辑 / 歌单 */
     val searchTypes: Set<String> get() = meta["search"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet() ?: setOf("track", "album", "playlist")
 

@@ -13,6 +13,7 @@ for f in sorted(os.listdir(here)):
             meta.setdefault(m.group(1), m.group(2))
     if 'id' not in meta:
         continue
-    items.append({k: meta[k] for k in ('id', 'name', 'version', 'author', 'desc') if k in meta} | {'url': f})
+    meta.setdefault('type', 'source')
+    items.append({k: meta[k] for k in ('id', 'name', 'type', 'version', 'author', 'desc') if k in meta} | {'url': f})
 json.dump({'name': 'NEKOPLAY 官方插件', 'plugins': items}, open(os.path.join(here, 'index.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
 print(f'{len(items)} 个插件写入 index.json')

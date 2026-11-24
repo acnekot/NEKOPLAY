@@ -1,5 +1,6 @@
 // @id qqmusic
 // @name QQ 音乐
+// @type source
 // @version 1.7.1
 // @author NEKOPLAY
 // @desc QQ 音乐完整音源：搜索、播放、QRC 逐字歌词、私人 FM、每日推荐、推荐歌单、歌单广场、新碟/新歌、排行榜、MV 精选、评论与点赞、相似推荐、个人主页、听歌排行与播放上报

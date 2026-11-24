@@ -19,24 +19,29 @@ private val CAP_NAMES = linkedMapOf(
     "search" to "搜索", "stream" to "播放", "lyric" to "歌词", "playlist" to "歌单", "album" to "专辑", "artist" to "歌手",
     "toplists" to "排行榜", "myPlaylists" to "我的歌单", "like" to "收藏", "loginQr" to "扫码登录", "loginWeb" to "网页登录",
     "daily" to "每日推荐", "fm" to "私人 FM", "comments" to "评论", "recMvs" to "MV", "hotRadios" to "电台", "cloud" to "云盘",
+    "onTrackChange" to "切歌监听", "onPlayState" to "播控监听", "transformLyric" to "歌词处理", "action" to "快捷动作",
 )
 
-/** 设置 → 插件：导入 / 开关 / 删除 JS 插件 */
+/** 设置 → 插件：分为「音源插件」与「功能插件」两类管理 */
 @Composable fun PluginsPage() {
     val nav = LocalNav.current
     val p = c
     val scope = rememberCoroutineScope()
     val list by Plugins.list.collectAsState()
+    var tab by remember { mutableIntStateOf(0) } // 0 全部 / 1 音源插件 / 2 功能插件
     var url by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    fun done(r: Result<JsSource>) { busy = false; r.onSuccess { nav.toast = "已导入「${it.name}」${it.version}"; Store.refreshAll() }.onFailure { nav.toast = "导入失败：${it.message}" } }
+    val shown = remember(list, tab) { when (tab) { 1 -> list.filter { it.isSource }; 2 -> list.filter { it.isFeature }; else -> list } }
+    fun done(r: Result<JsSource>) { busy = false; r.onSuccess { nav.toast = "已导入${it.kind.label}「${it.name}」${it.version}"; Store.refreshAll() }.onFailure { nav.toast = "导入失败：${it.message}" } }
     val picker = Plat.impl.filePicker { bytes -> busy = true; scope.launch { done(runCatching { Plugins.import(bytes.decodeToString()) }) } }
     LazyColumn(Modifier.widthIn(max = 860.dp).fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 28.dp)) {
         item {
             Column {
                 Tag("PLUGINS"); Spacer(Modifier.height(4.dp))
                 T("插件", Fs.HERO, w = 800, lh = 1.3f)
-                T("在线音源和其它服务都以 JS 插件的形式导入，本体不带任何音源。插件能做什么由它实现的接口决定，搜索、首页、曲库会自动出现对应的功能", 13, p.s, lines = 4, lh = 1.5f)
+                T("插件分为「音源插件」（提供曲库、搜索、播放与歌词）和「功能插件」（监听播放状态、歌词后处理与扩展动作），本体不内置任何在线音源", 13, p.s, lines = 4, lh = 1.5f)
+                Spacer(Modifier.height(12.dp))
+                ChipRow(listOf("全部 (${list.size})", "音源插件 (${list.count { it.isSource }})", "功能插件 (${list.count { it.isFeature }})"), tab) { tab = it }
                 Spacer(Modifier.height(14.dp))
                 ActionRow {
                     if (picker != null) PrimaryBar(if (busy) "导入中…" else "从文件导入", NIcons.plus, Modifier.weight(1f)) { if (!busy) picker() }
@@ -56,20 +61,24 @@ private val CAP_NAMES = linkedMapOf(
                 Spacer(Modifier.height(18.dp)); Rule()
             }
         }
-        pluginSubsSection(nav)
+        pluginSubsSection(nav, tab)
         item {
             Column {
-                Column(Modifier.padding(top = 26.dp, bottom = 4.dp)) { TagRow("INSTALLED", 12.dp) { T("${two(list.size)} 个", 13, p.s, mono = true) } }
-                if (list.isEmpty()) T("还没有插件。没有插件时只能播放本地音乐和 WebDAV 里的歌", 13, p.s, lines = 3, modifier = Modifier.padding(vertical = 14.dp))
+                val head = when (tab) { 1 -> "SOURCE PLUGINS · 音源插件"; 2 -> "FEATURE PLUGINS · 功能插件"; else -> "INSTALLED · 已安装" }
+                Column(Modifier.padding(top = 26.dp, bottom = 4.dp)) { TagRow(head, 12.dp) { T("${two(shown.size)} 个", 13, p.s, mono = true) } }
+                if (shown.isEmpty()) T(if (tab == 2) "还没有功能插件。可在脚本开头声明 // @type feature 导入扩展功能插件" else "还没有插件。没有音源插件时只能播放本地音乐和 WebDAV 里的歌", 13, p.s, lines = 3, modifier = Modifier.padding(vertical = 14.dp))
             }
         }
-        items(list, key = { it.id }) { s ->
+        items(shown, key = { it.id }) { s ->
             val on = Plugins.on(s.id)
             Column(Modifier.fillMaxWidth().bottomLine().padding(vertical = 14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            T(s.name, 16, if (on) p.k else p.s, 800)
+                            Box(Modifier.background(if (s.isFeature) p.k else p.p).padding(horizontal = 5.dp, vertical = 1.dp)) {
+                                T(if (s.isFeature) "功能" else "音源", 9, if (s.isFeature) p.tagFg else androidx.compose.ui.graphics.Color.White, 800)
+                            }
+                            Spacer(Modifier.width(7.dp)); T(s.name, 16, if (on) p.k else p.s, 800)
                             Spacer(Modifier.width(8.dp)); T("v" + s.version, 11, p.s, mono = true)
                         }
                         val sub = listOfNotNull(s.meta["author"]?.let { "作者 $it" }, s.meta["desc"]).joinToString(" · ")
@@ -89,6 +98,10 @@ private val CAP_NAMES = linkedMapOf(
                     if (on && s.has("loginQr")) {
                         if (acc[s.id] == null) LinkBtn("登录", 13) { nav.push(Page.PluginLogin(s.id)) }
                         else LinkBtn("退出 ${acc[s.id]}", 13) { confirmLogout(nav, s.name) { scope.launch { runCatching { s.call("logout") }; PluginStore.refresh() } } }
+                        Spacer(Modifier.width(14.dp))
+                    }
+                    if (on && s.isFeature && s.has("action")) {
+                        LinkBtn("执行", 13) { scope.launch { nav.toast = runCatching { Plugins.runFeatureAction(s.id, Engine.state.value.current) ?: "已执行" }.getOrElse { "执行失败：${it.message}" } } }
                         Spacer(Modifier.width(14.dp))
                     }
                     LinkBtn("重新加载", 13) { scope.launch { s.close().join(); if (s.start()) nav.toast = "已重新加载" else nav.toast = "加载失败：${s.error}" } }
@@ -262,23 +275,6 @@ private val CAP_NAMES = linkedMapOf(
     }
 }
 
-object PluginStore {
-    fun logout(id: String) = io.launch { runCatching { Plugins.get(id)?.call("logout") }; refresh() }
-    val accounts = kotlinx.coroutines.flow.MutableStateFlow<Map<String, String>>(emptyMap())      // 插件 id → 账号名
-    val playlists = kotlinx.coroutines.flow.MutableStateFlow<Map<String, List<Playlist>>>(emptyMap())
-    private val io = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
-    fun refresh() = io.launch {
-        val acc = HashMap<String, String>(); val pls = HashMap<String, List<Playlist>>()
-        for (s in Plugins.enabled) {
-            if (!s.start() || !s.has("account")) continue
-            val a = runCatching { s.call("account") as? org.json.JSONObject }.getOrNull() ?: continue
-            acc[s.id] = a.optString("name")
-            if (s.has("myPlaylists")) runCatching { Plugins.myPlaylists(s.id) }.onSuccess { pls[s.id] = it }
-        }
-        accounts.value = acc; playlists.value = pls
-    }
-}
-
 /** 曲库里的插件区：登录了的显示歌单，没登录的显示登录入口 */
 fun androidx.compose.foundation.lazy.LazyListScope.pluginLibrary(nav: Nav, except: String? = null) {
     item {
@@ -298,8 +294,8 @@ fun androidx.compose.foundation.lazy.LazyListScope.pluginLibrary(nav: Nav, excep
 }
 
 
-/** 插件页里的订阅区：订阅地址管理 + 订阅里可以安装 / 更新的插件 */
-private fun androidx.compose.foundation.lazy.LazyListScope.pluginSubsSection(nav: Nav) {
+/** 插件页里的订阅区：订阅地址管理 + 订阅里可以安装 / 更新的插件（跟随上方音源/功能分类筛选） */
+private fun androidx.compose.foundation.lazy.LazyListScope.pluginSubsSection(nav: Nav, tab: Int) {
     item(key = "subs") {
         val p = c
         val scope = rememberCoroutineScope()
@@ -363,12 +359,17 @@ private fun androidx.compose.foundation.lazy.LazyListScope.pluginSubsSection(nav
                         }
                     }
                     sub?.error?.let { T("拉取失败：$it", 12, p.bad, lines = 2) }
-                    sub?.items?.forEach { i ->
+                    sub?.items?.filter { when (tab) { 1 -> !it.isFeature; 2 -> it.isFeature; else -> true } }?.forEach { i ->
                         val have = list.firstOrNull { it.id == i.id }
                         val upd = have != null && PluginSubs.newer(i.version, have.version)
                         Row(Modifier.fillMaxWidth().bottomLine().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) { T(i.name, 14, w = 700); Spacer(Modifier.width(8.dp)); T("v" + i.version, 11, p.s, mono = true) }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.background(if (i.isFeature) p.k else p.p).padding(horizontal = 5.dp, vertical = 1.dp)) {
+                                        T(if (i.isFeature) "功能" else "音源", 9, if (i.isFeature) p.tagFg else androidx.compose.ui.graphics.Color.White, 800)
+                                    }
+                                    Spacer(Modifier.width(7.dp)); T(i.name, 14, w = 700); Spacer(Modifier.width(8.dp)); T("v" + i.version, 11, p.s, mono = true)
+                                }
                                 val line = listOfNotNull(i.author.takeIf { it.isNotEmpty() }?.let { "作者 $it" }, i.desc.takeIf { it.isNotEmpty() }).joinToString(" · ")
                                 if (line.isNotEmpty()) T(line, 12, p.s, lines = 2, lh = 1.4f)
                             }

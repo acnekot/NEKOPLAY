@@ -1,5 +1,6 @@
 // @id bilibili
 // @name 哔哩哔哩
+// @type source
 // @version 1.1.0
 // @author NEKOPLAY
 // @desc 哔哩哔哩音源（参考 BBPlayer）：WBI 签名、视频/UP主搜索、DASH 音频流（支持 Hi-Res FLAC）、分P与UP主合集、多页加载全部投稿与收藏夹、音乐区排行榜、CC 字幕歌词，扫码登录后同步收藏夹与稍后再看

@@ -9,7 +9,7 @@ object SearchSource {
     var key by mutableStateOf("")
     val plugin: String? get() = key.ifEmpty { null }
     /** (名字, 插件 id) */
-    val options: List<Pair<String, String>> get() = Plugins.enabled.filter { it.has("search") || it.caps.isEmpty() }.map { it.name to it.id }
+    val options: List<Pair<String, String>> get() = Plugins.enabledSources.filter { it.has("search") || it.caps.isEmpty() }.map { it.name to it.id }
     val labels get() = options.map { it.first }
     /** 当前选的来源没了就换成第一个（首页来源优先） */
     fun fix() {

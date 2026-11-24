@@ -73,8 +73,8 @@ import java.util.Calendar
             }
         }
         // 每个能登录的插件一行；首页来源（主插件）的账号就是上面这个
-        if (Plugins.enabled.isEmpty()) item { NavRow("还没有音源插件", "本体只带本地播放；到「插件」导入网易云、QQ 音乐等脚本", null) { nav.push(Page.PluginMgr) } }
-        Plugins.enabled.filter { it.has("account") || it.has("loginQr") }.forEach { s ->
+        if (Plugins.enabledSources.isEmpty()) item { NavRow("还没有音源插件", "本体只带本地播放；到「插件」导入音源插件或功能插件脚本", null) { nav.push(Page.PluginMgr) } }
+        Plugins.enabledSources.filter { it.has("account") || it.has("loginQr") }.forEach { s ->
             item(key = "acc" + s.id) {
                 val acc by PluginStore.accounts.collectAsState()
                 val name = acc[s.id]
