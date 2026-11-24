@@ -134,29 +134,29 @@ private fun smoothStep(x: Float): Float {
     }
 
     val reflMask = remember {
-        Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.48f), 0.45f to Color.Black.copy(alpha = 0.14f), 1f to Color.Transparent)
+        Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.34f), 0.48f to Color.Black.copy(alpha = 0.08f), 1f to Color.Transparent)
     }
 
-    Column(Modifier.fillMaxSize().background(Color.Black)) {
-        // 顶部筛选条（全部 / 专辑 / 歌单 / 最近）
+    Column(Modifier.fillMaxSize()) {
+        // 顶部筛选条（完全融入当前主题与毛玻璃背景）
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             listOf("全部", "专辑", "歌单", "最近").forEachIndexed { idx, label ->
                 val on = filter == idx
                 Box(Modifier.padding(end = 8.dp).press { filter = idx; flippedKey = null; scope.launch { pos.snapTo(0f) } }
-                    .background(if (on) p.p else Color(0x1FFFFFFF))
+                    .background(if (on) p.p else p.k.copy(alpha = 0.08f))
                     .padding(horizontal = 12.dp, vertical = 5.dp)) {
-                    T(label, 12, if (on) Color.White else Color(0xCCFFFFFF), 700)
+                    T(label, 12, if (on) Color.White else p.k, 700)
                 }
             }
             Spacer(Modifier.weight(1f))
             if (items.isNotEmpty()) {
-                T("${curIdx + 1} / ${items.size}", 12, Color(0x99FFFFFF), 600, mono = true)
+                T("${curIdx + 1} / ${items.size}", 12, p.s, 600, mono = true)
             }
         }
 
         if (items.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                T("还没有可展示的封面，先播放几首歌或收藏专辑吧", 14, Color(0x99FFFFFF))
+                T("还没有可展示的封面，先播放几首歌或收藏专辑吧", 14, p.s)
             }
             return@Column
         }
@@ -202,10 +202,10 @@ private fun smoothStep(x: Float): Float {
                 (minOf(stageW * 0.44f, stageH * 0.56f).coerceIn(160f * density, 300f * density)).toDp()
             }
             val coverPx = with(LocalDensity.current) { coverDp.toPx() }
-            // 经典 iOS 6 几何参数：中心封面完全无遮挡，两侧 70° 平行立起如唱片架
-            val centerGapPx = coverPx * 0.78f
+            // 经典 iOS 6 几何参数：中心封面完全无遮挡，两侧 ±66° 向内折向中心如唱片架
+            val centerGapPx = coverPx * 0.72f
             val stackStepPx = coverPx * 0.21f
-            val reflH = coverDp * 0.40f
+            val reflH = coverDp * 0.36f
 
             // 左右各渲染 6 张封面，居中卡最高 zIndex
             val minI = (curIdx - 6).coerceAtLeast(0)
@@ -219,16 +219,16 @@ private fun smoothStep(x: Float): Float {
                 val isFlipped = isCenter && flippedKey == item.key
                 val flipDeg by animateFloatAsState(if (isFlipped) 180f else 0f, Motion.page(), label = "cfFlip_$i")
 
-                // 左侧封面 (d < 0) 向右内折 (+70°)，右侧封面 (d > 0) 向左内折 (-70°)
-                val wingAngle = -70f * sign(d) * s
+                // 左侧封面 (d < 0) 外缘朝前内缘向后 (-66°)，右侧封面 (d > 0) 对称 (+66°)，两侧朝中心合拢
+                val wingAngle = 66f * sign(d) * s
                 val tx = if (ad <= 1f) {
                     sign(d) * centerGapPx * smoothStep(ad)
                 } else {
                     sign(d) * (centerGapPx + (ad - 1f) * stackStepPx)
                 }
-                // 中心 1.00，侧翼统一 0.80 保持平行唱片脊线，不出现诡异阶梯缩放
+                // 中心 1.00，侧翼统一 0.80 保持平行唱片脊线
                 val sc = 1f - 0.20f * s
-                val alphaVal = if (ad <= 4f) 1f else (1f - (ad - 4f) * 0.35f).coerceIn(0f, 1f)
+                val alphaVal = if (ad <= 3.5f) 1f else (1f - (ad - 3.5f) * 0.38f).coerceIn(0f, 1f)
                 val z = 100f - ad * 10f
 
                 Column(
@@ -250,12 +250,11 @@ private fun smoothStep(x: Float): Float {
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     // 封面主体（翻转超过 90° 时切为背面曲目清单）
-                    Box(Modifier.size(coverDp).border(1.dp, Color(if (isCenter) 0x44FFFFFF else 0x1AFFFFFF)).background(Color(0xFF12141A))) {
+                    Box(Modifier.size(coverDp).border(1.dp, p.k.copy(alpha = if (isCenter) 0.22f else 0.10f)).background(p.sheet)) {
                         if (flipDeg <= 90f) {
                             Cover(item.cover, coverDp, item.title, border = false, decodeSize = 512.dp)
                             if (s > 0.02f) {
-                                // 侧翼暗角遮罩：越靠外越暗，强化经典剧场聚光感
-                                val veil = (0.18f * s + 0.08f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.68f)
+                                val veil = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f)
                                 Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = veil)))
                             }
                         } else {
@@ -288,12 +287,12 @@ private fun smoothStep(x: Float): Float {
             }
         }
 
-        // 底部专辑信息 + 操作 + iOS 6 经典底部快滑条
+        // 底部专辑信息 + 操作 + 底部快滑条（使用主题色令牌）
         if (curItem != null) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                T(curItem.title, 18, Color.White, 800, lines = 1, align = TextAlign.Center)
+                T(curItem.title, 18, p.k, 800, lines = 1, align = TextAlign.Center)
                 Spacer(Modifier.height(2.dp))
-                T(curItem.sub, 12, Color(0xA6FFFFFF), 500, lines = 1, align = TextAlign.Center)
+                T(curItem.sub, 12, p.s, 500, lines = 1, align = TextAlign.Center)
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.press {
@@ -315,8 +314,8 @@ private fun smoothStep(x: Float): Float {
                         T("立即播放", 12, Color.White, 700)
                     }
                     Box(Modifier.press { flippedKey = if (flippedKey == curItem.key) null else curItem.key }
-                        .background(Color(0x22FFFFFF)).padding(horizontal = 14.dp, vertical = 7.dp)) {
-                        T(if (flippedKey == curItem.key) "翻回封面" else "翻转曲目", 12, Color.White, 600)
+                        .nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 7.dp)) {
+                        T(if (flippedKey == curItem.key) "翻回封面" else "翻转曲目", 12, p.k, 600)
                     }
                     if (curItem.kind != "tracks") {
                         Box(Modifier.press {
@@ -325,8 +324,8 @@ private fun smoothStep(x: Float): Float {
                                 "pl" -> nav.push(Page.Detail("pl", curItem.id, curItem.title, curItem.cover))
                                 "lpl" -> nav.push(Page.Detail("lpl", curItem.id, curItem.title))
                             }
-                        }.background(Color(0x18FFFFFF)).padding(horizontal = 14.dp, vertical = 7.dp)) {
-                            T("进入详情", 12, Color(0xDDFFFFFF), 600)
+                        }.nbf(1.dp, p.l2).padding(horizontal = 14.dp, vertical = 7.dp)) {
+                            T("进入详情", 12, p.k, 600)
                         }
                     }
                 }
@@ -351,28 +350,28 @@ private fun smoothStep(x: Float): Float {
     onOpenDetail: () -> Unit,
 ) {
     val p = c
-    Column(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }.background(Color(0xFF141822)).padding(12.dp)) {
+    Column(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }.background(p.sheet.copy(alpha = 0.96f)).padding(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                T(item.title, 13, Color.White, 800, lines = 1)
-                T(item.sub, 10, Color(0x99FFFFFF), lines = 1)
+                T(item.title, 13, p.k, 800, lines = 1)
+                T(item.sub, 10, p.s, lines = 1)
             }
-            Box(Modifier.press(onClick = onClose).background(Color(0x22FFFFFF)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                T("返回", 10, Color.White, 700)
+            Box(Modifier.press(onClick = onClose).nbf(1.dp, p.l2).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                T("返回", 10, p.k, 700)
             }
         }
         Spacer(Modifier.height(8.dp))
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x22FFFFFF)))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(p.l1))
         when {
-            loading -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { T("LOADING…", 11, Color(0x88FFFFFF), mono = true) }
+            loading -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { T("LOADING…", 11, p.s, mono = true) }
             tracks.isNullOrEmpty() -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Box(Modifier.press(onClick = onOpenDetail).background(p.p).padding(horizontal = 12.dp, vertical = 6.dp)) { T("查看完整详情", 11, Color.White, 700) }
             }
             else -> LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(vertical = 4.dp)) {
                 itemsIndexed(tracks) { idx, t ->
                     Row(Modifier.fillMaxWidth().press { Engine.playList(tracks, idx) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                        T(two(idx + 1), 10, Color(0x77FFFFFF), mono = true, modifier = Modifier.width(22.dp))
-                        T(t.title, 12, Color.White, 600, lines = 1, modifier = Modifier.weight(1f))
+                        T(two(idx + 1), 10, p.s, mono = true, modifier = Modifier.width(22.dp))
+                        T(t.title, 12, p.k, 600, lines = 1, modifier = Modifier.weight(1f))
                     }
                 }
             }
