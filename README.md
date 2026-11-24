@@ -140,6 +140,7 @@ design/    图标源文件
 
 | 仓库 / 项目 | 参考与使用的内容 |
 |---|---|
+| [ldx123000/Hydrogen-Music](https://github.com/ldx123000/Hydrogen-Music) | 歌词「平滑跟进」滚动样式的 `580ms cubic-bezier(0.4, 0, 0.12, 1)` 缓动曲线、松手回弹节奏与当前句左侧高亮指示条设计 |
 | [bbplayer-app/BBPlayer](https://github.com/bbplayer-app/BBPlayer) | 示例插件中的 WBI 请求签名流程、DASH 音频流解析、多页列表与合集加载及字幕歌词适配思路 |
 | [ppy/osu-framework](https://github.com/ppy/osu-framework) | 动效预设中 `OutExpo / OutQuint` 极速起手、长尾丝滑刹停的缓出曲线手感 |
 | [media-kit/libmpv-win32-audio-build](https://github.com/media-kit/libmpv-win32-audio-build) | Windows 桌面端纯音频 `libmpv` 精简动态库预编译产物 |
