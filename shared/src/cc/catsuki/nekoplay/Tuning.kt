@@ -15,7 +15,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
@@ -38,11 +40,13 @@ private val CURVE_PRESETS = listOf(
     val scope = rememberCoroutineScope()
     val preview = remember { Animatable(0f) }
     var previewForward by remember { mutableStateOf(true) }
+    var previewJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     fun playPreview() {
-        scope.launch {
-            val target = if (previewForward) 1f else 0f
-            previewForward = !previewForward
+        previewJob?.cancel()
+        val target = if (previewForward) 1f else 0f
+        previewForward = !previewForward
+        previewJob = scope.launch {
             preview.animateTo(target, spF)
         }
     }
@@ -60,8 +64,8 @@ private val CURVE_PRESETS = listOf(
             SetLine("可视化曲线编辑器", "拖动蓝色 P1 与粉色 P2 控制点实时调整 cubic-bezier 曲线（纵轴支持拉出 0~1 范围产生过冲回弹）") {
                 BezierCurveEditor(
                     x1 = AnimStyle.x1, y1 = AnimStyle.y1, x2 = AnimStyle.x2, y2 = AnimStyle.y2,
-                    onChange = { a, b, c2, d -> AnimStyle.setCurve(a, b, c2, d, switchCustom = true) },
-                    onDragEnd = { playPreview() },
+                    onChange = { a, b, c2, d -> AnimStyle.setCurve(a, b, c2, d, switchCustom = true, persist = false) },
+                    onDragEnd = { AnimStyle.save(); playPreview() },
                 )
                 Spacer(Modifier.height(10.dp))
                 T(
@@ -78,11 +82,16 @@ private val CURVE_PRESETS = listOf(
                     }
                 }
                 Spacer(Modifier.height(14.dp))
-                // 实时试播轨道
+                // 实时试播轨道（纯 GPU graphicsLayer 位移，0 重组 / 0 重排，完整展示过冲不截断）
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    BoxWithConstraints(Modifier.weight(1f).height(34.dp).background(p.sheet).nbf(1.dp, p.l2).padding(horizontal = 6.dp), contentAlignment = Alignment.CenterStart) {
-                        val travel = (maxWidth - 26.dp).coerceAtLeast(1.dp)
-                        Box(Modifier.offset(x = travel * preview.value.coerceIn(-0.08f, 1.08f)).size(22.dp).background(p.p))
+                    var trackPx by remember { mutableFloatStateOf(0f) }
+                    Box(Modifier.weight(1f).height(34.dp).background(p.sheet).nbf(1.dp, p.l2)
+                        .onSizeChanged { trackPx = it.width.toFloat() }
+                        .padding(horizontal = 24.dp), contentAlignment = Alignment.CenterStart) {
+                        Box(Modifier.size(22.dp).graphicsLayer {
+                            val travel = (trackPx - 48.dp.toPx() - 22.dp.toPx()).coerceAtLeast(1f)
+                            translationX = travel * preview.value
+                        }.background(p.p))
                     }
                     Box(Modifier.press { playPreview() }.background(p.p).padding(horizontal = 14.dp, vertical = 8.dp)) {
                         T("试播动效", 12, Color.White, 700)

@@ -59,6 +59,8 @@ object Engine {
     private var rampOnPlay = false
     /** 这次 load 已经把新歌交给播放器了 */
     private var opened = false
+    /** 正在加载的新歌目标起始进度（防止取地址期间轮询读到上一首的残留进度） */
+    private var pendingStartMs = 0L
     fun setFade(ms: Int) { fadeMs = ms; prefs?.edit()?.putInt("fade", ms)?.apply() }
 
     // ---------- 无缝播放 ----------
@@ -156,11 +158,11 @@ object Engine {
             var t0 = System.currentTimeMillis(); var tick = 0
             while (isActive) {
                 if (!audio.isPlaying) {
-                    if (!audio.idle) { val p = audio.position; if (position.value != p) position.value = p }
+                    if (!audio.idle && opened) { val p = audio.position; if (position.value != p) position.value = p }
                     state.first { it.playing }
                     t0 = System.currentTimeMillis()
                 }
-                if (!audio.idle) {
+                if (!audio.idle && opened) {
                     val p = audio.position
                     if (audio.isPlaying || position.value != p) position.value = p
                     if (audio.isPlaying && rampOnPlay) startRampIn()
@@ -207,11 +209,13 @@ object Engine {
         reportId = t.id
         if (autoplay && Ncm.loggedIn && !t.local) scope.launch { Ncm.scrobbleStart(t.id) }
         dropNext()
+        val safeStart = startMs.coerceAtLeast(0L)
         state.value = state.value.copy(index = i, loading = true, format = "", kbps = 0, want = autoplay)
         opened = false
+        pendingStartMs = safeStart
         audio.pause() // 换歌时先停掉上一首，避免取地址期间旧歌还在响
         info.value = null; localKbps = 0
-        position.value = startMs
+        position.value = safeStart
         Store.addRecent(t)
         loadJob?.cancel()
         // 切歌淡入：先静音，真正出声时再渐变上来
@@ -221,26 +225,28 @@ object Engine {
                 // 已经完整缓存过（同档位或更高档位）：直接读本地，不联网
                 val hit = cachedLevel(t.id)
                 val dl = Downloads.file(t.id)
+                val startAt = pendingStartMs
                 if (t.src != null) {
-                    audio.open(srcUrl(t.src), "loc_${t.id}", position.value, state.value.want, t); opened = true
+                    audio.open(srcUrl(t.src), "loc_${t.id}", startAt, state.value.want, t); opened = true
                     state.value = state.value.copy(loading = false, format = t.src.substringAfterLast('.', "").takeIf { it.length in 2..4 }?.lowercase() ?: "", kbps = 0, cached = true)
                 } else if (dl != null) {
                     if (t.durationMs > 0) localKbps = (dl.length() * 8 / t.durationMs).toInt()
-                    audio.open(dl.toURI().toString(), "dl_${t.id}", position.value, state.value.want, t); opened = true
+                    audio.open(dl.toURI().toString(), "dl_${t.id}", startAt, state.value.want, t); opened = true
                     state.value = state.value.copy(loading = false, format = dl.extension.lowercase(), kbps = 0, cached = true)
                 } else if (hit != null) {
-                    audio.open(null, cacheKey(t.id, hit.first), position.value, state.value.want, t); opened = true
+                    audio.open(null, cacheKey(t.id, hit.first), startAt, state.value.want, t); opened = true
                     state.value = state.value.copy(loading = false, format = hit.second, kbps = 0, cached = true)
                 } else {
                     val s = Ncm.stream(t.id, q)
                     s.trial?.let { error.value = it }   // 只能放试听：轮到这首真正播放时才提示
-                    audio.open(s.url, cacheKey(t.id, s.level), position.value, state.value.want, t); opened = true
+                    audio.open(s.url, cacheKey(t.id, s.level), startAt, state.value.want, t); opened = true
                     prefs?.edit()?.putString("fmt_${cacheKey(t.id, s.level)}", s.format)?.apply()
                     state.value = state.value.copy(loading = false, format = s.format, kbps = s.kbps, cached = false)
                 }
+                position.value = startAt
                 if (state.value.want && audio.isPlaying) startRampIn()
                 prefetchNext()
-                Store.saveQueue(state.value.queue, i, position.value)
+                Store.saveQueue(state.value.queue, i, startAt)
             } catch (e: Exception) {
                 state.value = state.value.copy(loading = false)
                 error.value = "无法播放「${t.title}」：${e.message}"
@@ -260,7 +266,12 @@ object Engine {
         else if (audio.isPlaying) { state.value = s.copy(want = false); fadePause() }
         else { state.value = s.copy(want = true); fadePlay() }
     }
-    fun seek(ms: Long) { val t = ms.coerceAtLeast(0); if (!audio.idle) audio.seek(t); position.value = t }
+    fun seek(ms: Long) {
+        val t = ms.coerceAtLeast(0)
+        if (!opened) pendingStartMs = t
+        else if (!audio.idle) audio.seek(t)
+        position.value = t
+    }
 
     // ---------- 私人 FM ----------
     private var fmJob: Job? = null
@@ -383,5 +394,5 @@ object Engine {
 
     fun clearUpcoming() { dropNext(); val s = state.value; s.current?.let { state.value = s.copy(queue = listOf(it), index = 0) } }
 
-    fun savePosition() { val s = state.value; if (s.index >= 0) Store.saveQueue(s.queue, s.index, audio.position) }
+    fun savePosition() { val s = state.value; if (s.index >= 0) Store.saveQueue(s.queue, s.index, if (opened) audio.position else position.value) }
 }

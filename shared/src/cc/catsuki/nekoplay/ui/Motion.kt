@@ -76,7 +76,18 @@ object AnimStyle {
     val osu get() = style == 4
     val off get() = style == 3
     val custom get() = style == 5
-    val customEasing get() = CubicBezierEasing(x1.coerceIn(0f, 1f), y1.coerceIn(-0.45f, 1.45f), x2.coerceIn(0f, 1f), y2.coerceIn(-0.45f, 1.45f))
+    private var cachedKey = ""
+    private var cachedEasing: Easing = SmoothBezierEasing(0.16f, 1.00f, 0.30f, 1.00f)
+    val customEasing: Easing get() {
+        val a = x1.coerceIn(0f, 1f); val b = y1.coerceIn(-0.45f, 1.45f)
+        val c = x2.coerceIn(0f, 1f); val d = y2.coerceIn(-0.45f, 1.45f)
+        val key = "$a,$b,$c,$d"
+        if (key != cachedKey) {
+            cachedKey = key
+            cachedEasing = SmoothBezierEasing(a, b, c, d)
+        }
+        return cachedEasing
+    }
     val activeEasing: Easing get() = when (style) {
         2 -> LinearEasing
         4 -> OsuOut
@@ -108,10 +119,10 @@ object AnimStyle {
             .putInt("anim_ms_p", pageBaseMs).putInt("anim_ms_c", crossfadeBaseMs).apply()
     }
     fun set(v: Int) { style = v.coerceIn(0, labels.lastIndex); save() }
-    fun setCurve(a: Float, b: Float, c: Float, d: Float, switchCustom: Boolean = true) {
+    fun setCurve(a: Float, b: Float, c: Float, d: Float, switchCustom: Boolean = true, persist: Boolean = true) {
         x1 = a.coerceIn(0f, 1f); y1 = b.coerceIn(-0.45f, 1.45f); x2 = c.coerceIn(0f, 1f); y2 = d.coerceIn(-0.45f, 1.45f)
         if (switchCustom) style = 5
-        save()
+        if (persist) save()
     }
     fun reset() {
         style = 0; Anim.set(1)
@@ -154,9 +165,53 @@ object AnimStyle {
     val osuMs get() = ((pageBaseMs + 40) / Anim.f).toInt().coerceAtLeast(1)
 }
 
+/**
+ * 64 位双精度三次贝塞尔缓动（牛顿迭代 + 二分兜底，精度 1e-7）：
+ * 消除极端控制点（x 贴近 0/1 或 y 过冲）在末帧收敛跳变导致的顿挫卡顿。
+ */
+data class SmoothBezierEasing(val x1: Float, val y1: Float, val x2: Float, val y2: Float) : Easing {
+    private val ax = x1.toDouble().coerceIn(0.0, 1.0)
+    private val ay = y1.toDouble()
+    private val bx = x2.toDouble().coerceIn(0.0, 1.0)
+    private val by = y2.toDouble()
+    private val cx = 3.0 * ax
+    private val bxC = 3.0 * (bx - ax) - cx
+    private val axC = 1.0 - cx - bxC
+    private val cy = 3.0 * ay
+    private val byC = 3.0 * (by - ay) - cy
+    private val ayC = 1.0 - cy - byC
+
+    private fun sampleX(t: Double) = ((axC * t + bxC) * t + cx) * t
+    private fun sampleY(t: Double) = ((ayC * t + byC) * t + cy) * t
+    private fun sampleDerivX(t: Double) = (3.0 * axC * t + 2.0 * bxC) * t + cx
+
+    override fun transform(fraction: Float): Float {
+        if (fraction <= 0f) return 0f
+        if (fraction >= 1f) return 1f
+        val x = fraction.toDouble()
+        var t = x
+        for (i in 0 until 8) {
+            val err = sampleX(t) - x
+            if (kotlin.math.abs(err) < 1e-7) return sampleY(t).toFloat()
+            val d = sampleDerivX(t)
+            if (kotlin.math.abs(d) < 1e-7) break
+            t = (t - err / d).coerceIn(0.0, 1.0)
+        }
+        var lo = 0.0; var hi = 1.0
+        t = x
+        repeat(24) {
+            val cur = sampleX(t)
+            if (kotlin.math.abs(cur - x) < 1e-7) return sampleY(t).toFloat()
+            if (cur < x) lo = t else hi = t
+            t = 0.5 * (lo + hi)
+        }
+        return sampleY(t).toFloat()
+    }
+}
+
 /** osu! 招牌 OutExpo/OutQuint 缓出曲线：瞬间冲出、长尾丝滑刹停、零回弹 */
-val OsuOut = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
-val DecelOut = CubicBezierEasing(0f, 0f, 0.2f, 1f)
+val OsuOut = SmoothBezierEasing(0.16f, 1f, 0.3f, 1f)
+val DecelOut = SmoothBezierEasing(0f, 0f, 0.2f, 1f)
 
 /**
  * 统一动效令牌（所有 UI 组件统一消费此层，禁止散落硬编码 tween/spring 或曲线分支）：

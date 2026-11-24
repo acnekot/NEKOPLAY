@@ -153,5 +153,6 @@ jobs:
           tag_name: v${{ steps.ver.outputs.v }}
           target_commitish: ${{ github.sha }}
           name: NEKOPLAY v${{ steps.ver.outputs.v }}
+          prerelease: ${{ contains(steps.ver.outputs.v, '-') }}
           body_path: notes.md
           files: dist/*
