@@ -79,6 +79,7 @@ sealed interface Page {
     data class PluginLogin(val pid: String) : Page
     data object BtnLayout : Page
     data class LyricCard(val t: Track) : Page
+    data object CoverFlow : Page
 }
 
 /** 全局界面状态 */

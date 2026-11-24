@@ -67,6 +67,8 @@ import java.util.Calendar
                 Tag("LIBRARY"); Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
                     T("曲库", Fs.HERO, w = 800, lh = 1.3f, modifier = Modifier.weight(1f))
+                    LinkBtn("封面墙", 14) { nav.push(Page.CoverFlow) }
+                    Spacer(Modifier.width(6.dp))
                     if (prof != null && main != null) {
                         val signed by Store.signedToday.collectAsState()
                         if (!main.has("signin")) Unit

@@ -90,6 +90,7 @@ import kotlinx.coroutines.flow.map
             top is Page.Search -> 2
             top is Page.Fm -> 3
             top is Page.Playlists && top.kind == "top" -> 4
+            top is Page.CoverFlow -> 5
             else -> -1
         }
         val sliding = !AnimStyle.off
@@ -107,6 +108,7 @@ import kotlinx.coroutines.flow.map
                 SideItem(NIcons.search, "搜索", navIdx == 2, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Search) }
                 SideItem(NIcons.radio, "私人 FM", navIdx == 3, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Fm) }
                 SideItem(NIcons.chart, "发现 · 排行榜", navIdx == 4, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Playlists("top", "", "排行榜")) }
+                SideItem(NIcons.disc, "封面墙", navIdx == 5, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.CoverFlow) }
             }
         }
         Spacer(Modifier.height(14.dp))
