@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
@@ -126,7 +127,7 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
         backLoading = false
     }
 
-    val reflMask = remember { Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.30f), 0.22f to Color.Black.copy(alpha = 0.15f), 0.52f to Color.Black.copy(alpha = 0.04f), 0.82f to Color.Transparent, 1f to Color.Transparent) }
+    val reflMask = remember { Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.30f), 0.18f to Color.Black.copy(alpha = 0.14f), 0.42f to Color.Black.copy(alpha = 0.03f), 0.68f to Color.Transparent, 1f to Color.Transparent) }
 
     Column(Modifier.fillMaxSize()) {
         // 顶部筛选条（完全融入当前主题与毛玻璃背景）
@@ -299,9 +300,9 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                         }
                         .drawWithContent {
                             drawContent()
-                            drawRect(brush = reflMask, blendMode = BlendMode.DstIn)
+                            drawRect(brush = reflMask, topLeft = androidx.compose.ui.geometry.Offset(-4f, -4f), size = androidx.compose.ui.geometry.Size(size.width + 8f, size.height + 8f), blendMode = BlendMode.DstIn)
                         }) {
-                        Box(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).graphicsLayer { scaleY = -1f }) {
+                        Box(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).graphicsLayer { scaleY = -1f }.then(if (Plat.impl.liveBlur) Modifier.blur(1.5.dp) else Modifier)) {
                             Cover(item.cover, coverDp, item.title, border = false, decodeSize = 256.dp)
                             Box(Modifier.matchParentSize().graphicsLayer { val ad = abs(i - pos.value); val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat(); alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f) }.background(Color.Black))
                         }
