@@ -1,5 +1,9 @@
 package cc.catsuki.nekoplay
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -37,7 +41,6 @@ import kotlin.math.roundToInt
 import kotlin.math.sign
 
 private data class FlowItem(val key: String, val kind: String, val id: String, val title: String, val sub: String, val cover: String?, val presetTracks: List<Track>? = null)
-private fun smoothStep(x: Float): Float { val t = x.coerceIn(0f, 1f); return t * t * (3f - 2f * t) }
 
 /** 经典 iOS 6 Apple Music Cover Flow 3D 封面墙：纯黑镜面舞台 + 平行 70° 侧翼唱片架 + 精确底部镜面倒影 + 惯性甩动 + 点击中心 180° 翻转看曲目 */
 @Composable fun CoverFlowPage() {
@@ -74,32 +77,35 @@ private fun smoothStep(x: Float): Float { val t = x.coerceIn(0f, 1f); return t *
     }
 
     val pos = remember { Animatable(0f) }
+    var targetIdx by remember { mutableIntStateOf(0) }
     var snapJob by remember { mutableStateOf<Job?>(null) }
     var flippedKey by remember { mutableStateOf<String?>(null) }
     var stageW by remember { mutableFloatStateOf(0f) }
     var stageH by remember { mutableFloatStateOf(0f) }
     var pointerX by remember { mutableFloatStateOf(0f) } // -1..1 相对舞台中心
     var pointerY by remember { mutableFloatStateOf(0f) }
-    val tiltX by animateFloatAsState(if (AnimStyle.off) 0f else pointerX, spring(0.86f, Anim.stiff(Spring.StiffnessLow)), label = "cfTx")
-    val tiltY by animateFloatAsState(if (AnimStyle.off) 0f else pointerY, spring(0.86f, Anim.stiff(Spring.StiffnessLow)), label = "cfTy")
+    val tiltX by animateFloatAsState(if (AnimStyle.off) 0f else pointerX, spring(0.88f, Anim.stiff(Spring.StiffnessLow)), label = "cfTx")
+    val tiltY by animateFloatAsState(if (AnimStyle.off) 0f else pointerY, spring(0.88f, Anim.stiff(Spring.StiffnessLow)), label = "cfTy")
     val density = LocalDensity.current.density
 
     LaunchedEffect(items.size) {
-        if (items.isNotEmpty() && pos.value > items.lastIndex.toFloat()) pos.snapTo(items.lastIndex.toFloat())
+        if (items.isNotEmpty() && pos.value > items.lastIndex.toFloat()) { pos.snapTo(items.lastIndex.toFloat()); targetIdx = items.lastIndex }
         flippedKey = null
     }
 
-    fun snapTo(targetIdx: Int) {
+    fun snapTo(idx: Int, initialVel: Float = 0f) {
         if (items.isEmpty()) return
-        val clamped = targetIdx.coerceIn(0, items.lastIndex).toFloat()
-        if (flippedKey != null && items.getOrNull(clamped.roundToInt())?.key != flippedKey) flippedKey = null
+        val clamped = idx.coerceIn(0, items.lastIndex)
+        targetIdx = clamped
+        if (flippedKey != null && items.getOrNull(clamped)?.key != flippedKey) flippedKey = null
         snapJob?.cancel()
         snapJob = scope.launch {
-            pos.animateTo(clamped, if (AnimStyle.off) androidx.compose.animation.core.snap() else spring(dampingRatio = 0.84f, stiffness = Anim.stiff(Spring.StiffnessLow)))
+            if (AnimStyle.off) pos.snapTo(clamped.toFloat())
+            else pos.animateTo(clamped.toFloat(), spring(dampingRatio = 0.90f, stiffness = Anim.stiff(185f)), initialVelocity = initialVel)
         }
     }
 
-    val curIdx = if (items.isEmpty()) 0 else pos.value.roundToInt().coerceIn(0, items.lastIndex)
+    val curIdx by remember(items.size) { derivedStateOf { if (items.isEmpty()) 0 else pos.value.roundToInt().coerceIn(0, items.lastIndex) } }
     val curItem = items.getOrNull(curIdx)
 
     // 翻转背面时按需拉取当前专辑/歌单的曲目列表
@@ -158,8 +164,9 @@ private fun smoothStep(x: Float): Float { val t = x.coerceIn(0f, 1f); return t *
                     onDragEnd = {
                         val vx = vt.calculateVelocity().x
                         val stepPx = (stageW * 0.22f).coerceIn(100f * density, 240f * density)
-                        val flingCards = (-vx / (stepPx * 4.2f)).coerceIn(-5f, 5f)
-                        snapTo((pos.value + flingCards).roundToInt())
+                        val velCards = (-vx / stepPx).coerceIn(-12f, 12f)
+                        val flingCards = (velCards * 0.24f).coerceIn(-5f, 5f)
+                        snapTo((pos.value + flingCards).roundToInt(), initialVel = velCards * 0.65f)
                     },
                     onDragCancel = { snapTo(pos.value.roundToInt()) },
                 ) { change, dragAmount ->
@@ -172,67 +179,66 @@ private fun smoothStep(x: Float): Float { val t = x.coerceIn(0f, 1f); return t *
             }
             .pointerInput(items.size) {
                 awaitPointerEventScope {
+                    var wheelAcc = 0f
                     while (true) {
                         val ev = awaitPointerEvent()
                         when (ev.type) {
                             PointerEventType.Scroll -> {
                                 val d = ev.changes.fold(0f) { acc, ch -> acc + ch.scrollDelta.y + ch.scrollDelta.x }
-                                if (abs(d) > 0.05f) {
+                                if (abs(d) > 0.01f) {
                                     ev.changes.forEach { it.consume() }
-                                    snapTo(pos.value.roundToInt() + if (d > 0f) 1 else -1)
+                                    wheelAcc += d
+                                    val steps = wheelAcc.toInt()
+                                    if (steps != 0) {
+                                        wheelAcc -= steps
+                                        snapTo(targetIdx + steps.coerceIn(-2, 2))
+                                    } else if (abs(wheelAcc) >= 0.45f) {
+                                        val s = if (wheelAcc > 0f) 1 else -1
+                                        wheelAcc = 0f
+                                        snapTo(targetIdx + s)
+                                    }
                                 }
                             }
                             PointerEventType.Move, PointerEventType.Enter -> {
-                                val pt = ev.changes.firstOrNull()?.position
-                                if (pt != null && stageW > 1f && stageH > 1f) {
-                                    pointerX = ((pt.x / stageW) * 2f - 1f).coerceIn(-1f, 1f)
-                                    pointerY = ((pt.y / stageH) * 2f - 1f).coerceIn(-1f, 1f)
+                                ev.changes.firstOrNull()?.position?.let { pt ->
+                                    if (stageW > 1f && stageH > 1f) { pointerX = ((pt.x / stageW) * 2f - 1f).coerceIn(-1f, 1f); pointerY = ((pt.y / stageH) * 2f - 1f).coerceIn(-1f, 1f) }
                                 }
                             }
-                            PointerEventType.Exit -> {
-                                pointerX = 0f; pointerY = 0f
-                            }
+                            PointerEventType.Exit -> { pointerX = 0f; pointerY = 0f }
                         }
                     }
                 }
             }, contentAlignment = Alignment.Center) {
 
-            val coverDp: Dp = with(LocalDensity.current) {
-                (minOf(stageW * 0.44f, stageH * 0.56f).coerceIn(160f * density, 300f * density)).toDp()
-            }
+            val coverDp: Dp = with(LocalDensity.current) { (minOf(stageW * 0.44f, stageH * 0.56f).coerceIn(160f * density, 300f * density)).toDp() }
             val coverPx = with(LocalDensity.current) { coverDp.toPx() }
             // 经典 iOS 6 几何参数：中心封面无遮挡，两侧外缘靠前、内缘向内折向中心形成 V 型唱片架
             val centerGapPx = coverPx * 0.78f
             val stackStepPx = coverPx * 0.22f
             val reflH = coverDp * 0.36f
 
-            // 左右各渲染 6 张封面，居中卡最高 zIndex
+            // 左右各渲染 6 张封面，使用 key(item.key) 稳定节点身份并在 graphicsLayer 内读 pos.value，避免切卡闪烁与整树重组
             val minI = (curIdx - 6).coerceAtLeast(0)
             val maxI = (curIdx + 6).coerceAtMost(items.lastIndex)
             for (i in minI..maxI) {
                 val item = items[i]
-                val d = i - pos.value
-                val ad = abs(d)
-                val s = smoothStep(ad) // 0 = 正中，1 = 侧翼到位
-                val isCenter = i == curIdx && ad < 0.35f
+                key(item.key) {
+                val isCenter = i == curIdx
                 val isFlipped = isCenter && flippedKey == item.key
-                val flipDeg by animateFloatAsState(if (isFlipped) 180f else 0f, Motion.page(), label = "cfFlip_$i")
-
-                // 左侧封面 (d < 0) 外缘靠前内缘向后 (+64°)，右侧封面 (d > 0) 对称 (-64°)，经典 iOS 6 内折视角
-                val wingAngle = -64f * sign(d) * s
-                val tx = if (ad <= 1f) {
-                    sign(d) * centerGapPx * smoothStep(ad)
-                } else {
-                    sign(d) * (centerGapPx + (ad - 1f) * stackStepPx)
-                }
-                // 中心 1.00，侧翼统一 0.80 保持平行唱片脊线
-                val sc = 1f - 0.20f * s
-                val alphaVal = if (ad <= 3.5f) 1f else (1f - (ad - 3.5f) * 0.38f).coerceIn(0f, 1f)
-                val z = 100f - ad * 10f
+                val flipDeg by animateFloatAsState(if (isFlipped) 180f else 0f, Motion.page(), label = "cfFlip")
+                val z = 100f - abs(i - curIdx) * 10f
 
                 Column(
                     Modifier.zIndex(z)
                         .graphicsLayer {
+                            val d = i - pos.value
+                            val ad = abs(d)
+                            // C1 连续平滑曲线：消除 |d|=1 处速度突变造成的生硬顿挫
+                            val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat()
+                            val wingAngle = -64f * sign(d) * s
+                            val extraGap = (centerGapPx - stackStepPx) * kotlin.math.tanh((ad * 1.35f).toDouble()).toFloat()
+                            val tx = d * stackStepPx + sign(d) * extraGap
+                            val sc = 1f - 0.20f * s
                             val centerWeight = (1f - s).coerceIn(0f, 1f)
                             val rotYExtra = if (isFlipped) 0f else tiltX * (4.5f + 7.5f * centerWeight)
                             val rotXExtra = if (isFlipped) 0f else -tiltY * (3.2f + 5.8f * centerWeight)
@@ -242,9 +248,9 @@ private fun smoothStep(x: Float): Float { val t = x.coerceIn(0f, 1f); return t *
                             rotationY = (if (isCenter) wingAngle + flipDeg else wingAngle) + rotYExtra
                             rotationX = rotXExtra
                             cameraDistance = 12f * density
-                            alpha = alphaVal
+                            alpha = if (ad <= 3.6f) 1f else (1f - (ad - 3.6f) * 0.42f).coerceIn(0f, 1f)
                         }
-                        .pointerInput(item.key, isCenter, curIdx) {
+                        .pointerInput(item.key, isCenter) {
                             detectTapGestures {
                                 if (isCenter) flippedKey = if (flippedKey == item.key) null else item.key
                                 else snapTo(i)
@@ -268,10 +274,11 @@ private fun smoothStep(x: Float): Float { val t = x.coerceIn(0f, 1f); return t *
                                     ))
                                 })
                             }
-                            if (s > 0.02f) {
-                                val veil = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f)
-                                Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = veil)))
-                            }
+                            Box(Modifier.matchParentSize().graphicsLayer {
+                                val ad = abs(i - pos.value)
+                                val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat()
+                                alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f)
+                            }.background(Color.Black))
                         } else {
                             CoverBackTracklist(item, backTracks, backLoading, onClose = { flippedKey = null }, onOpenDetail = {
                                 when (item.kind) {
@@ -299,15 +306,22 @@ private fun smoothStep(x: Float): Float { val t = x.coerceIn(0f, 1f); return t *
                         }
                     }
                 }
+                }
             }
         }
 
-        // 底部专辑信息 + 操作 + 底部快滑条（使用主题色令牌）
+        // 底部专辑信息（柔和淡入淡出）+ 操作 + 底部快滑条
         if (curItem != null) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                T(curItem.title, 18, p.k, 800, lines = 1, align = TextAlign.Center)
-                Spacer(Modifier.height(2.dp))
-                T(curItem.sub, 12, p.s, 500, lines = 1, align = TextAlign.Center)
+                AnimatedContent(curItem, contentKey = { it.key }, transitionSpec = {
+                    fadeIn(Motion.quick()) togetherWith fadeOut(Motion.quick())
+                }, label = "cfMeta") { it ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        T(it.title, 18, p.k, 800, lines = 1, align = TextAlign.Center)
+                        Spacer(Modifier.height(2.dp))
+                        T(it.sub, 12, p.s, 500, lines = 1, align = TextAlign.Center)
+                    }
+                }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.press {
