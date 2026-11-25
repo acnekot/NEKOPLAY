@@ -230,10 +230,14 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                 raw.toDp()
             }
             val coverPx = with(LocalDensity.current) { coverDp.toPx() }
-            // 经典 iOS 6 几何参数：中心封面无遮挡，两侧外缘靠前、内缘向内折向中心形成 V 型唱片架
-            val centerGapPx = coverPx * 0.78f
-            val stackStepPx = coverPx * 0.22f
-            val reflH = coverDp * 0.36f
+            val spineDp = (coverDp * 0.11f).coerceIn(14.dp, 28.dp)
+            val rimDp = (coverDp * 0.018f).coerceIn(2.5.dp, 4.5.dp)
+            val caseW = spineDp + coverDp + rimDp
+            val caseH = coverDp + rimDp * 2
+            // 经典 iOS 6 几何参数：中心 CD 盒无遮挡，两侧外缘靠前、内缘向内折向中心形成 V 型唱片架
+            val centerGapPx = coverPx * 0.84f
+            val stackStepPx = coverPx * 0.23f
+            val reflH = caseH * 0.36f
 
             // 桌面左右各 5 张、移动端各 4 张，显著减少离屏合成与 GPU 填充率开销，稳定高帧率
             val wingSpan = if (Plat.isDesktop) 5 else 4
@@ -278,32 +282,34 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    // CD 透明亚克力塑料壳：透光侧脊厚度 + 左侧塑料铰链托盘条 + 斜向高光反光 + 晶体倒角棱边
-                    Box(Modifier.size(coverDp)) {
-                        // 透明塑料壳 3D 侧边厚度（透光亚克力边缘质感）
+                    // 外包式透明亚克力 CD 塑料壳：左侧托盘脊柱 + 四周透明边框完全包裹在 1:1 封面外部，绝不遮挡专辑画作
+                    Box(Modifier.size(caseW, caseH)) {
                         Box(Modifier.matchParentSize().graphicsLayer {
                             val d = i - pos.value; val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
                             translationX = if (isFlipped) 0f else (sign(d) * s * 6.5.dp.toPx() - tiltX.value * 4.dp.toPx())
                             translationY = if (isFlipped) 0f else (1.5.dp.toPx() - tiltY.value * 2.dp.toPx())
                             alpha = (1f - flipDeg / 90f).coerceIn(0f, 1f)
-                        }.background(Brush.verticalGradient(listOf(Color(0x66E4EEFA), Color(0x388292A8), Color(0x4D202632)))).border(1.dp, Color(0x66FFFFFF)))
-                        Box(Modifier.matchParentSize().border(1.2.dp, Color(if (isCenter) 0x7AFFFFFF else 0x44FFFFFF)).background(p.sheet)) {
+                        }.background(Brush.verticalGradient(listOf(Color(0x5CE4EEFA), Color(0x308292A8), Color(0x46202632)))).border(1.dp, Color(0x5CFFFFFF)))
+                        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color(0x32FFFFFF), Color(0x14B8C8DC), Color(0x28101620)))).border(1.2.dp, Color(if (isCenter) 0x88FFFFFF else 0x4EFFFFFF))) {
                         if (flipDeg <= 90f) {
-                            Cover(item.cover, coverDp, item.title, border = false, decodeSize = if (isCenter) 512.dp else 256.dp)
-                            // CD 塑料盒透明质感叠加层（单 Pass Canvas 零开销：左侧托盘脊条 + 上下卡扣 + 斜向塑料反光带 + 晶边高光）
+                            Box(Modifier.padding(start = spineDp, top = rimDp, end = rimDp, bottom = rimDp)) {
+                                Cover(item.cover, coverDp, item.title, border = false, decodeSize = if (isCenter) 512.dp else 256.dp)
+                            }
+                            // 外壳透明塑料细节（单 Pass Canvas）：左侧独立脊柱条 + 合页卡扣 + 外框折边与内缘定位扣 + 极淡表层斜向反光
                             Box(Modifier.matchParentSize().drawWithContent {
-                                val w = size.width; val h = size.height; val spW = w * 0.088f; val d = i - pos.value; val ad = abs(d)
-                                drawRect(Brush.horizontalGradient(listOf(Color(0x42FFFFFF), Color(0x18FFFFFF), Color(0x30000000), Color(0x48FFFFFF)), 0f, spW), size = Size(spW, h))
-                                drawRect(Color(0x55000000), Offset(spW, 0f), Size(1.5f, h)); drawRect(Color(0x4DFFFFFF), Offset(spW + 1.5f, 0f), Size(1.5f, h))
-                                for (r in 1..3) drawRect(Color(0x24FFFFFF), Offset(spW * r / 4f, 0f), Size(1f, h))
-                                listOf(0.14f, 0.86f).forEach { fy -> val hy = h * fy; drawRect(Color(0x50000000), Offset(2f, hy - 3f), Size(spW - 4f, 3f)); drawRect(Color(0x66FFFFFF), Offset(2f, hy), Size(spW - 4f, 2f)) }
+                                val w = size.width; val h = size.height; val spW = spineDp.toPx(); val rm = rimDp.toPx(); val d = i - pos.value; val ad = abs(d)
+                                drawRect(Brush.horizontalGradient(listOf(Color(0x3EFFFFFF), Color(0x16FFFFFF), Color(0x2C000000), Color(0x44FFFFFF)), 0f, spW), size = Size(spW, h))
+                                drawRect(Color(0x52000000), Offset(spW - 1.5f, 0f), Size(1.5f, h)); drawRect(Color(0x52FFFFFF), Offset(spW, 0f), Size(1.2f, h))
+                                for (r in 1..4) drawRect(Color(0x28FFFFFF), Offset(spW * r / 5f, rm), Size(1f, h - rm * 2f))
+                                listOf(0.14f, 0.86f).forEach { fy -> val hy = h * fy; drawRect(Color(0x54000000), Offset(2f, hy - 3f), Size(spW - 4.5f, 3f)); drawRect(Color(0x6EFFFFFF), Offset(2f, hy), Size(spW - 4.5f, 2f)) }
+                                listOf(0.28f, 0.72f).forEach { fx -> val tx = spW + (w - spW - rm) * fx; drawRect(Color(0x55FFFFFF), Offset(tx - 6f, 0f), Size(12f, rm)); drawRect(Color(0x44FFFFFF), Offset(tx - 6f, h - rm), Size(12f, rm)) }
                                 if (ad < 2.6f) {
                                     val cw = (1f - kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat()).coerceIn(0f, 1f)
                                     val sh = (-tiltX.value * 0.28f - d.coerceIn(-1f, 1f) * 0.16f) * w
-                                    drawRect(Brush.linearGradient(0f to Color.Transparent, 0.36f to Color.Transparent, 0.48f to Color.White.copy(alpha = 0.08f + 0.14f * cw), 0.54f to Color.White.copy(alpha = 0.04f + 0.06f * cw), 0.66f to Color.Transparent, 1f to Color.Transparent,
+                                    drawRect(Brush.linearGradient(0f to Color.Transparent, 0.40f to Color.Transparent, 0.50f to Color.White.copy(alpha = 0.04f + 0.08f * cw), 0.56f to Color.White.copy(alpha = 0.02f + 0.03f * cw), 0.65f to Color.Transparent, 1f to Color.Transparent,
                                         start = Offset(sh - w * 0.15f, -tiltY.value * h * 0.2f), end = Offset(sh + w * 1.05f, h * 0.85f - tiltY.value * h * 0.2f)))
                                 }
-                                drawRect(Color(0x55FFFFFF), size = Size(w, 2f)); drawRect(Color(0x44FFFFFF), Offset(w - 2f, 0f), Size(2f, h)); drawRect(Color(0x48000000), Offset(0f, h - 2.5f), Size(w, 2.5f))
+                                drawRect(Color(0x62FFFFFF), size = Size(w, 1.8f)); drawRect(Color(0x4CFFFFFF), Offset(w - 1.8f, 0f), Size(1.8f, h)); drawRect(Color(0x4C000000), Offset(0f, h - 2f), Size(w, 2f))
                             })
                             Box(Modifier.matchParentSize().graphicsLayer { val ad = abs(i - pos.value); val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat(); alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f) }.background(Color.Black))
                         } else CoverBackTracklist(item, backTracks, backLoading, onClose = { flippedKey = null }, onOpenDetail = {
@@ -311,18 +317,16 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                         })
                         }
                     }
-                    // 轻量高效底部镜面倒影：去掉逐卡实时高斯模糊（省下十余次 GPU Blur Pass），仅近处卡片合成倒影
-                    if (abs(i - curIdx) <= 3) Box(Modifier.size(coverDp, reflH).clipToBounds()
-                        .graphicsLayer {
-                            alpha = (1f - flipDeg / 90f).coerceIn(0f, 1f)
-                            compositingStrategy = CompositingStrategy.Offscreen
-                        }
+                    // 轻量高效底部镜面倒影：精确对齐外包 CD 盒尺寸与左脊柱
+                    if (abs(i - curIdx) <= 3) Box(Modifier.size(caseW, reflH).clipToBounds()
+                        .graphicsLayer { alpha = (1f - flipDeg / 90f).coerceIn(0f, 1f); compositingStrategy = CompositingStrategy.Offscreen }
                         .drawWithContent {
                             drawContent()
-                            drawRect(brush = reflMask, topLeft = androidx.compose.ui.geometry.Offset(-4f, -4f), size = androidx.compose.ui.geometry.Size(size.width + 8f, size.height + 8f), blendMode = BlendMode.DstIn)
+                            drawRect(brush = reflMask, topLeft = Offset(-4f, -4f), size = Size(size.width + 8f, size.height + 8f), blendMode = BlendMode.DstIn)
                         }) {
-                        Box(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).graphicsLayer { scaleY = -1f }) {
-                            Cover(item.cover, coverDp, item.title, border = false, decodeSize = 200.dp)
+                        Box(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).height(caseH).graphicsLayer { scaleY = -1f }.background(Color(0x1CFFFFFF)).border(1.dp, Color(0x38FFFFFF))) {
+                            Box(Modifier.width(spineDp).fillMaxHeight().background(Color(0x28FFFFFF)))
+                            Box(Modifier.padding(start = spineDp, top = rimDp, end = rimDp, bottom = rimDp)) { Cover(item.cover, coverDp, item.title, border = false, decodeSize = 200.dp) }
                             Box(Modifier.matchParentSize().graphicsLayer { val ad = abs(i - pos.value); val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat(); alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f) }.background(Color.Black))
                         }
                     } else Spacer(Modifier.height(reflH))
