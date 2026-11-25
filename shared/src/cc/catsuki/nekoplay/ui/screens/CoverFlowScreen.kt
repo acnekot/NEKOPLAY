@@ -7,6 +7,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -123,7 +124,7 @@ import kotlin.math.sign
     val curIdx by remember(items.size) { derivedStateOf { if (items.isEmpty()) 0 else pos.value.roundToInt().coerceIn(0, items.lastIndex) } }
     val curItem = items.getOrNull(curIdx)
     val isExpanded = expandedKey != null && curItem?.key == expandedKey
-    val expandProg by animateFloatAsState(if (isExpanded) 1f else 0f, Motion.page(), label = "cfExp")
+    val expandProg by animateFloatAsState(if (isExpanded) 1f else 0f, if (AnimStyle.off) snap() else spring(dampingRatio = 0.85f, stiffness = Anim.stiff(88f)), label = "cfExp")
 
     // 点开封面放大时按需拉取当前专辑/歌单的完整曲目列表
     var sideTracks by remember { mutableStateOf<List<Track>?>(null) }
@@ -260,49 +261,55 @@ import kotlin.math.sign
                             val wingAngle = -64f * sign(d) * s
                             val extraGap = (centerGapPx - stackStepPx) * kotlin.math.tanh((ad * 1.35f).toDouble()).toFloat()
                             val tx = d * stackStepPx + sign(d) * extraGap
-                            val ep = expandProg
-                            val sc = (1f - 0.20f * s) * (if (isCenter) 1f + (maxOpenScale - 1f) * ep else 1f)
+                            val ep = expandProg.coerceIn(0f, 1.05f)
+                            // 分段编排：先优雅 3D 旋身翻盖，再平滑舒展放大居中（旋转 → 放大）
+                            val zoomP = smoothStep(0.28f, 1.0f, ep)
+                            val shiftP = smoothStep(0.08f, 0.92f, ep)
+                            val swirl = kotlin.math.sin((ep.coerceIn(0f, 1f) * kotlin.math.PI)).toFloat()
+                            val sc = (1f - 0.20f * s) * (if (isCenter) 1f + (maxOpenScale - 1f) * zoomP else 1f)
                             val centerWeight = (1f - s).coerceIn(0f, 1f)
                             val tX = tiltX.value; val tY = tiltY.value
-                            val tiltDamp = 1f - 0.55f * ep
-                            // 翻开 CD 盒时：右托盘右移半个盒宽，左前盖沿左铰链向左侧翻开 180°，整体双页正好居中
-                            val expX = if (isCenter) caseWPx * 0.50f * sc * ep else sign(d) * ep * 64f * density
+                            val tiltDamp = 1f - 0.55f * ep.coerceAtMost(1f)
+                            val expX = if (isCenter) caseWPx * 0.50f * sc * shiftP else sign(d) * smoothStep(0f, 0.65f, ep) * 76f * density
+                            val liftY = if (isCenter) -14f * density * swirl else 0f
                             translationX = tx + expX + tX * (10f * density * (0.35f + 0.65f * centerWeight) * tiltDamp)
-                            translationY = coverPx * (if (ls) 0.08f else 0.14f) * (1f - (if (isCenter) ep else 0f)) + tY * (5f * density * centerWeight * tiltDamp)
+                            translationY = coverPx * (if (ls) 0.08f else 0.14f) * (1f - (if (isCenter) zoomP else 0f)) + liftY + tY * (5f * density * centerWeight * tiltDamp)
                             scaleX = sc; scaleY = sc
-                            rotationY = wingAngle + tX * (4.5f + 7.5f * centerWeight) * tiltDamp
-                            rotationX = -tY * (3.2f + 5.8f * centerWeight) * tiltDamp
+                            rotationY = wingAngle + (if (isCenter) 22f * swirl else 0f) + tX * (4.5f + 7.5f * centerWeight) * tiltDamp
+                            rotationX = (if (isCenter) 8f * swirl else 0f) - tY * (3.2f + 5.8f * centerWeight) * tiltDamp
+                            rotationZ = if (isCenter) -3.2f * swirl else 0f
                             transformOrigin = TransformOrigin(0.5f, 0.368f)
-                            cameraDistance = 14f * density
+                            cameraDistance = 18f * density
                             val baseAlpha = if (ad <= 3.2f) 1f else (1f - (ad - 3.2f) * 0.48f).coerceIn(0f, 1f)
-                            alpha = if (isCenter) baseAlpha else baseAlpha * (1f - ep * 1.45f).coerceIn(0f, 1f)
+                            alpha = if (isCenter) baseAlpha else baseAlpha * (1f - smoothStep(0f, 0.58f, ep))
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    // 实体 CD 塑料盒：右侧托盘（翻开后露出完整曲目与光盘底纹）+ 沿左铰链 180° 翻开的透明前盖
+                    // 实体 CD 塑料盒：右侧托盘（翻开后露出完整曲目与微转光盘底纹）+ 沿左铰链 180° 翻开的透明前盖
+                    val lidP = if (isCenter) smoothStep(0.02f, 0.72f, expandProg) else 0f
                     Box(Modifier.size(caseW, caseH)) {
                         Box(Modifier.matchParentSize().graphicsLayer {
                             val d = i - pos.value; val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
                             translationX = sign(d) * s * 6.5.dp.toPx() - tiltX.value * 4.dp.toPx()
                             translationY = 1.5.dp.toPx() - tiltY.value * 2.dp.toPx()
-                            alpha = if (isCenter) (1f - expandProg * 1.6f).coerceIn(0f, 1f) else 1f
+                            alpha = if (isCenter) (1f - smoothStep(0f, 0.55f, expandProg)) else 1f
                         }.background(Brush.verticalGradient(listOf(Color(0x5CE4EEFA), Color(0x308292A8), Color(0x46202632)))).border(1.dp, Color(0x5CFFFFFF)))
 
-                        // 右侧 CD 托盘层（随前盖沿左铰链翻开自然显露）
+                        // 右侧 CD 托盘层（随前盖沿左铰链翻开自然显露，炫彩光盘随开合微转）
                         if (isCenter && expandProg > 0.02f) {
-                            Box(Modifier.matchParentSize().graphicsLayer { alpha = (expandProg * 2.2f).coerceIn(0f, 1f) }) {
-                                CdTrayTracklist(item, sideTracks, sideLoading, compact = ls || stageW < 640f * density, onClose = { expandedKey = null }, onOpenDetail = {
+                            Box(Modifier.matchParentSize().graphicsLayer { alpha = smoothStep(0.10f, 0.58f, expandProg) }) {
+                                CdTrayTracklist(item, sideTracks, sideLoading, compact = ls || stageW < 640f * density, openProg = { expandProg }, onClose = { expandedKey = null }, onOpenDetail = {
                                     when (item.kind) { "album" -> nav.push(Page.Album(item.id, item.title, item.cover)); "pl" -> nav.push(Page.Detail("pl", item.id, item.title, item.cover)); "lpl" -> nav.push(Page.Detail("lpl", item.id, item.title)); else -> item.presetTracks?.let { Engine.playList(it, 0); nav.player = true } }
                                 })
                             }
                         }
 
-                        // 透明亚克力前盖：以左缘铰链为轴翻开 -180°（前半程为外包封面，过 90° 后切为左盖内侧歌词本）
+                        // 透明亚克力前盖：以左缘铰链为轴翻开 -180°（带旋转流光高光，前半程为外包封面，过 90° 后切为左盖内侧歌词本）
                         Box(Modifier.matchParentSize()
                             .graphicsLayer {
-                                rotationY = if (isCenter) -180f * expandProg else 0f
+                                rotationY = -180f * lidP
                                 transformOrigin = TransformOrigin(0f, 0.5f)
-                                cameraDistance = 16f * density
+                                cameraDistance = 18f * density
                             }
                             .pointerInput(item.key, isCenter) {
                                 detectTapGestures {
@@ -310,10 +317,11 @@ import kotlin.math.sign
                                     else if (expandedKey == null) snapTo(i)
                                 }
                             }) {
-                            if (!isCenter || expandProg < 0.5f) {
-                                CdCaseFrontLid(item, coverDp, spineDp, rimDp, isCenter, { i - pos.value }, { tiltX.value }, { tiltY.value })
+                            val sweep = { kotlin.math.sin((lidP * kotlin.math.PI)).toFloat() }
+                            if (!isCenter || lidP < 0.5f) {
+                                CdCaseFrontLid(item, coverDp, spineDp, rimDp, isCenter, { i - pos.value }, { tiltX.value }, { tiltY.value }, sweep)
                             } else {
-                                CdCaseInnerLid(item, coverDp, spineDp, rimDp, onClose = { expandedKey = null })
+                                CdCaseInnerLid(item, coverDp, spineDp, rimDp, sweep, onClose = { expandedKey = null })
                             }
                         }
                     }
@@ -374,4 +382,9 @@ import kotlin.math.sign
             }
         }
     }
+}
+
+private fun smoothStep(e0: Float, e1: Float, x: Float): Float {
+    val t = ((x - e0) / (e1 - e0)).coerceIn(0f, 1f)
+    return t * t * (3f - 2f * t)
 }
