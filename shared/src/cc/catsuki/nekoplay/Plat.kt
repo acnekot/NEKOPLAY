@@ -80,6 +80,8 @@ interface Audio {
     fun clearNext() {}
     /** 正在播放的真实音频参数（解码器读到的），拿不到时 null */
     fun info(): AudioInfo? = null
+    /** 实时变速与变调（长按快进/快退时 pitchLinked=true 模拟实体转速变调；恢复传 1f, false） */
+    fun setRate(speed: Float, pitchLinked: Boolean = false) {}
     fun applyFx(fx: Fx)
 }
 

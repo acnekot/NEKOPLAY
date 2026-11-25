@@ -422,6 +422,11 @@ class ExoAudio(private val c: Context) : Audio {
         return AudioInfo(codec, f.sampleRate.coerceAtLeast(0), bits, f.channelCount.coerceAtLeast(0), kbps)
     }
 
+    override fun setRate(speed: Float, pitchLinked: Boolean) {
+        val s = speed.coerceIn(0.25f, 6f)
+        main.post { player.playbackParameters = androidx.media3.common.PlaybackParameters(s, if (pitchLinked) s.coerceAtMost(3.2f) else 1f) }
+    }
+
     /**
      * 效果器：Android 9+ 用 DynamicsProcessing 做 10 段均衡（频段可以任意定）；更老的系统退回 Equalizer（按最接近的频段）。
      * 每个效果单独 try，设备不支持就跳过。

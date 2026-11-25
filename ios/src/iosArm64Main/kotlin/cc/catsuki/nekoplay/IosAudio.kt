@@ -180,6 +180,13 @@ class IosAudio(cacheRoot: File) : Audio {
         val codec = when (ext) { "flac" -> "flac"; "mp3" -> "mp3"; "m4a", "aac", "mp4" -> "aac"; else -> return null }
         return AudioInfo(codec, 0, 0, 0, 0)
     }
+    override fun setRate(speed: Float, pitchLinked: Boolean) {
+        val s = speed.coerceIn(0.25f, 4f)
+        NSOperationQueue.mainQueue.addOperationWithBlock {
+            cur?.audioTimePitchAlgorithm = if (pitchLinked) AVAudioTimePitchAlgorithmVarispeed else AVAudioTimePitchAlgorithmSpectral
+            if (player.rate > 0f) player.rate = s
+        }
+    }
     /** 均衡器等效果：iOS 版暂不支持 */
     override fun applyFx(fx: Fx) {}
 

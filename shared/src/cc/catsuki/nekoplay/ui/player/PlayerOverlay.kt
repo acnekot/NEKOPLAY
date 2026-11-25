@@ -62,9 +62,9 @@ import androidx.compose.runtime.withFrameMillis
             Cover(t.cover, 40.dp, t.title)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) { T(t.title, 15, w = 700, lh = 1.3f); T(t.artist, 12, p.s, lh = 1.3f) }
-            Box(Modifier.size(40.dp, 48.dp).press(haptic = true) { if (st.fm) { Engine.fmTrash(); nav.toast = "不再推荐这首" } else Engine.prev() }, contentAlignment = Alignment.Center) { NIcon(if (st.fm) NIcons.trash else NIcons.prev, 19.dp) }
+            Box(Modifier.size(40.dp, 48.dp).holdScrub(-1, enabled = !st.fm, haptic = true) { if (st.fm) { Engine.fmTrash(); nav.toast = "不再推荐这首" } else Engine.prev() }, contentAlignment = Alignment.Center) { NIcon(if (st.fm) NIcons.trash else NIcons.prev, 19.dp, if (ScrubController.dir < 0) p.p else p.k) }
             Box(Modifier.size(44.dp, 48.dp).press(haptic = true) { Engine.toggle() }, contentAlignment = Alignment.Center) { NIcon(if (st.playing) NIcons.pause else NIcons.play, 21.dp) }
-            Box(Modifier.size(40.dp, 48.dp).press(haptic = true) { Engine.next() }, contentAlignment = Alignment.Center) { NIcon(NIcons.next, 19.dp) }
+            Box(Modifier.size(40.dp, 48.dp).holdScrub(1, haptic = true) { Engine.next() }, contentAlignment = Alignment.Center) { NIcon(NIcons.next, 19.dp, if (ScrubController.dir > 0) p.p else p.k) }
         }
         var scrub by remember { mutableStateOf<Float?>(null) }
         Box(Modifier.offset(y = (-7).dp)) { ScrubBar(t.durationMs) { scrub = it } }
@@ -198,15 +198,22 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
         Spacer(Modifier.height(2.dp)); TimeRow(t.durationMs, scrub)
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (st.fm) SquareBtn(NIcons.trash) { Engine.fmTrash(); nav.toast = "不再推荐这首" } else SquareBtn(NIcons.prev) { Engine.prev() }
+            if (st.fm) SquareBtn(NIcons.trash) { Engine.fmTrash(); nav.toast = "不再推荐这首" } else SquareBtn(NIcons.prev, scrubDir = -1) { Engine.prev() }
             Spacer(Modifier.width(10.dp))
             Row(Modifier.weight(1f).fillMaxHeight().press(.98f, true) { Engine.toggle() }.background(c.p).padding(horizontal = 18.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                T(when { st.loading && st.want && !st.playing -> "加载中"; st.playing -> "暂停"; else -> "播放" }, 15, Color.White, 700, modifier = Modifier.weight(1f))
+                val lbl = when {
+                    ScrubController.dir > 0 -> "快进 >> %.1f×".format(ScrubController.rate)
+                    ScrubController.dir < 0 -> "快退 << %.1f×".format(ScrubController.rate)
+                    st.loading && st.want && !st.playing -> "加载中"
+                    st.playing -> "暂停"
+                    else -> "播放"
+                }
+                T(lbl, 15, Color.White, 700, modifier = Modifier.weight(1f))
                 if (st.loading && st.want && !st.playing) LoadingDots() else NIcon(if (st.playing) NIcons.pause else NIcons.play, 20.dp, Color.White)
             }
             Spacer(Modifier.width(10.dp))
-            SquareBtn(NIcons.next) { Engine.next() }
+            SquareBtn(NIcons.next, scrubDir = 1) { Engine.next() }
         }
         if (row != null) { Spacer(Modifier.height(10.dp)); Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically, content = row) }
     }

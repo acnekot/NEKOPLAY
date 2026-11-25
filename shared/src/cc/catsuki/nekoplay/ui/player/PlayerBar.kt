@@ -78,7 +78,7 @@ import kotlinx.coroutines.flow.map
                     NIcon(when (st.mode) { Mode.LOOP_ALL -> NIcons.modeSeq; Mode.LOOP_ONE -> NIcons.modeOne; Mode.SHUFFLE -> NIcons.modeShuffle }, 18.dp, p.s)
                 }
                 Spacer(Modifier.width(14.dp))
-                Box(Modifier.size(36.dp).press { if (st.fm) Engine.fmTrash() else Engine.prev() }, contentAlignment = Alignment.Center) { NIcon(if (st.fm) NIcons.trash else NIcons.prev, 18.dp) }
+                Box(Modifier.size(36.dp).holdScrub(-1, enabled = !st.fm && t != null) { if (st.fm) Engine.fmTrash() else Engine.prev() }, contentAlignment = Alignment.Center) { NIcon(if (st.fm) NIcons.trash else NIcons.prev, 18.dp, if (ScrubController.dir < 0) p.p else p.k) }
                 Spacer(Modifier.width(14.dp))
                 Box(Modifier.size(40.dp).press(.94f) { Engine.toggle() }.background(p.p), contentAlignment = Alignment.Center) {
                     AnimatedContent(st.playing, transitionSpec = {
@@ -89,7 +89,8 @@ import kotlinx.coroutines.flow.map
                     }
                 }
                 Spacer(Modifier.width(14.dp))
-                Box(Modifier.size(36.dp).press { Engine.next() }, contentAlignment = Alignment.Center) { NIcon(NIcons.next, 18.dp) }
+                Box(Modifier.size(36.dp).holdScrub(1, enabled = t != null) { Engine.next() }, contentAlignment = Alignment.Center) { NIcon(NIcons.next, 18.dp, if (ScrubController.dir > 0) p.p else p.k) }
+                if (ScrubController.dir != 0) T((if (ScrubController.dir > 0) " >> " else " << ") + "%.1f×".format(ScrubController.rate), 11, p.p, 700, mono = true)
                 Spacer(Modifier.width(14.dp))
                 Box(Modifier.size(36.dp).press { if (t != null) trackActions(nav, t) }, contentAlignment = Alignment.Center) { NIcon(NIcons.more, 18.dp, p.s) }
             }

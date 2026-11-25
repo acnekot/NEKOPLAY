@@ -155,8 +155,8 @@ private fun vector(spec: String): ImageVector = iconCache.getOrPut(spec) {
         Tag(text); Box(Modifier.weight(1f).padding(start = 10.dp, end = lineEnd).height(1.dp).background(if (Look.flat) Color.Transparent else c.l3)); trailing?.invoke()
     }
 
-@Composable fun SquareBtn(icon: String, size: Dp = 44.dp, iconSize: Dp = 18.dp, filled: Boolean = false, onClick: () -> Unit) =
-    Box(Modifier.press(.96f, true, onClick = onClick).size(size).background(if (filled) c.p else Color.Transparent).then(if (filled) Modifier else Modifier.nbf(1.dp, c.k)),
+@Composable fun SquareBtn(icon: String, size: Dp = 44.dp, iconSize: Dp = 18.dp, filled: Boolean = false, scrubDir: Int = 0, onClick: () -> Unit) =
+    Box((if (scrubDir != 0) Modifier.holdScrub(scrubDir, haptic = true, onClick = onClick) else Modifier.press(.96f, true, onClick = onClick)).size(size).background(if (filled) c.p else Color.Transparent).then(if (filled) Modifier else Modifier.nbf(1.dp, c.k)),
         contentAlignment = Alignment.Center) { NIcon(icon, iconSize, if (filled) Color.White else c.k) }
 
 @Composable fun PrimaryBar(label: String, icon: String, modifier: Modifier = Modifier, onClick: () -> Unit) {

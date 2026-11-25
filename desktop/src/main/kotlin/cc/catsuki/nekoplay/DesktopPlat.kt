@@ -411,6 +411,13 @@ private class MpvAudio : Audio {
     override var volume: Float = 1f
         set(v) { field = v; h?.let { lib!!.mpv_set_property_string(it, "volume", (v * 100).toInt().toString()) } }
 
+    /** 实时变速变调：pitchLinked=true 时关闭音高补偿，声音随转速自然升调，还原实体 CD/磁带快进听感 */
+    override fun setRate(speed: Float, pitchLinked: Boolean) {
+        val hh = h ?: return
+        lib!!.mpv_set_property_string(hh, "audio-pitch-correction", if (pitchLinked) "no" else "yes")
+        lib.mpv_set_property_string(hh, "speed", "%.3f".format(java.util.Locale.US, speed.coerceIn(0.25f, 6f)))
+    }
+
     /** 效果器：拼成 ffmpeg 滤镜链交给 mpv（10 个 equalizer + bass + extrastereo + volume） */
     override fun applyFx(fx: Fx) {
         val hh = h ?: return
