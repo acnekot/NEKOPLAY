@@ -19,7 +19,7 @@ private val CAP_NAMES = linkedMapOf(
     "search" to "搜索", "stream" to "播放", "lyric" to "歌词", "playlist" to "歌单", "album" to "专辑", "artist" to "歌手",
     "toplists" to "排行榜", "myPlaylists" to "我的歌单", "like" to "收藏", "loginQr" to "扫码登录", "loginWeb" to "网页登录",
     "daily" to "每日推荐", "fm" to "私人 FM", "comments" to "评论", "recMvs" to "MV", "hotRadios" to "电台", "cloud" to "云盘",
-    "manifest" to "功能声明", "onTrackChange" to "切歌监听", "onPlayState" to "播控监听", "transformLyric" to "歌词处理", "action" to "快捷动作",
+    "manifest" to "功能声明", "config" to "热更新配置", "render" to "独立页面", "onTrackChange" to "切歌监听", "onPlayState" to "播控监听", "transformLyric" to "歌词处理", "action" to "快捷动作",
 )
 
 /** 设置 → 插件：分为「音源插件」与「功能插件」两类管理 */
@@ -84,7 +84,7 @@ private val CAP_NAMES = linkedMapOf(
                         val sub = listOfNotNull(s.meta["author"]?.let { "作者 $it" }, s.meta["desc"]).joinToString(" · ")
                         if (sub.isNotEmpty()) T(sub, 12, p.s, lines = 2, lh = 1.4f)
                     }
-                    NSwitch(on) { v -> Plugins.set(s.id, v); PluginStore.refresh() }
+                    NSwitch(on) { v -> Plugins.set(s.id, v) }
                 }
                 Spacer(Modifier.height(6.dp))
                 val caps = CAP_NAMES.filterKeys { s.has(it) }.values
@@ -100,14 +100,16 @@ private val CAP_NAMES = linkedMapOf(
                         else LinkBtn("退出 ${acc[s.id]}", 13) { confirmLogout(nav, s.name) { scope.launch { runCatching { s.call("logout") }; PluginStore.refresh() } } }
                         Spacer(Modifier.width(14.dp))
                     }
+                    if (on && s.has("render")) { LinkBtn("打开页面", 13) { nav.push(Page.PluginPage(s.id)) }; Spacer(Modifier.width(14.dp)) }
                     if (on && s.isFeature && s.has("action")) {
                         LinkBtn("执行", 13) { scope.launch { runCatching { Plugins.runFeatureAction(s.id, Engine.state.value.current) }.onSuccess { r ->
-                            if (r?.open == "coverflow") nav.push(Page.CoverFlow)
+                            val op = r?.open
+                            if (op == "coverflow") nav.push(Page.CoverFlow) else if (op?.startsWith("plugin:") == true) nav.push(Page.PluginPage(op.removePrefix("plugin:")))
                             r?.message?.let { nav.toast = it }
                         }.onFailure { nav.toast = "执行失败：${it.message}" } } }
                         Spacer(Modifier.width(14.dp))
                     }
-                    LinkBtn("重新加载", 13) { scope.launch { s.close().join(); if (s.start()) nav.toast = "已重新加载" else nav.toast = "加载失败：${s.error}" } }
+                    LinkBtn("重新加载", 13) { scope.launch { s.close().join(); if (s.start()) { Plugins.bump(); PluginStore.refresh().join(); Store.refreshAll(); nav.toast = "已重新加载" } else nav.toast = "加载失败：${s.error}" } }
                     Spacer(Modifier.width(14.dp))
                     LinkBtn("删除", 13, p.bad) {
                         nav.sheet = SheetSpec("删除插件「${s.name}」？", "删除后它提供的搜索、歌单等功能都会消失；以后可以重新导入", listOf(SheetItem("删除", danger = true) { Plugins.delete(s.id); nav.toast = "已删除" }))

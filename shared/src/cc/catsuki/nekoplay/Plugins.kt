@@ -1,6 +1,7 @@
 package cc.catsuki.nekoplay
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
@@ -21,16 +22,19 @@ object Plugins {
     private val prefs by lazy { Plat.prefs("plugins") }
     val list = kotlinx.coroutines.flow.MutableStateFlow<List<JsSource>>(emptyList())
     var off by mutableStateOf(setOf<String>())
+    /** 响应式变更版本号：导入/开关/重载/删除/启动完成均递增，确保所有读取 Plugins.main() / enabledSources 的页面立刻重组 */
+    var rev by mutableIntStateOf(0); private set
+    fun bump() { rev++ }
 
     private var idleJob: kotlinx.coroutines.Job? = null
     @Volatile private var loaded = false
     fun load() = synchronized(this) {
         off = prefs.getStringSet("off", null) ?: emptySet()
         list.value = (dir.listFiles() ?: emptyArray()).filter { it.extension == "js" }.sortedBy { it.name }.map { JsSource(it) }
-        loaded = true
+        loaded = true; bump()
         // 按需启动：已有 caps 缓存的插件不立即创建 QuickJS；首次安装的插件后台跑一次拿 caps；5 分钟未用自动释放
         val needWarm = enabled.filter { it.caps.isEmpty() }
-        if (needWarm.isNotEmpty()) kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { needWarm.forEach { it.start() } }
+        if (needWarm.isNotEmpty()) kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { needWarm.forEach { it.start() }; bump() }
         if (idleJob == null) idleJob = kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
             while (true) {
                 kotlinx.coroutines.delay(60_000L)
@@ -40,19 +44,38 @@ object Plugins {
         }
     }
     private fun ensureLoaded() { if (!loaded) load() }
-    fun on(id: String): Boolean { ensureLoaded(); return id !in off && list.value.any { it.id == id } }
-    fun get(id: String): JsSource? { ensureLoaded(); return list.value.firstOrNull { it.id == id } }
-    val enabled get(): List<JsSource> { ensureLoaded(); return list.value.filter { it.id !in off } }
+    fun on(id: String): Boolean { ensureLoaded(); rev; return id !in off && list.value.any { it.id == id } }
+    fun get(id: String): JsSource? { ensureLoaded(); rev; return list.value.firstOrNull { it.id == id } }
+    val enabled get(): List<JsSource> { ensureLoaded(); rev; return list.value.filter { it.id !in off } }
     /** 音源插件（全部 / 已启用） */
-    val sources get(): List<JsSource> { ensureLoaded(); return list.value.filter { it.isSource } }
-    val enabledSources get(): List<JsSource> { ensureLoaded(); return enabled.filter { it.isSource } }
-    /** 功能插件（全部 / 已启用） */
-    val features get(): List<JsSource> { ensureLoaded(); return list.value.filter { it.isFeature } }
-    val enabledFeatures get(): List<JsSource> { ensureLoaded(); return enabled.filter { it.isFeature } }
+    val sources get(): List<JsSource> { ensureLoaded(); rev; return list.value.filter { it.isSource } }
+    val enabledSources get(): List<JsSource> { ensureLoaded(); rev; return enabled.filter { it.isSource } }
+    /** 功能插件与页面插件（全部 / 已启用） */
+    val features get(): List<JsSource> { ensureLoaded(); rev; return list.value.filter { it.isFeature } }
+    val enabledFeatures get(): List<JsSource> { ensureLoaded(); rev; return enabled.filter { it.isFeature } }
+    val enabledPages get(): List<JsSource> { ensureLoaded(); rev; return enabled.filter { it.isPage } }
     /** 是否启用了某个功能插件槽位（如 "coverflow"） */
     fun hasFeature(slot: String): Boolean {
         val key = slot.lowercase()
         return enabledFeatures.any { it.featureSlot == key || it.id.equals(key, ignoreCase = true) }
+    }
+    /** 读取指定功能槽位/插件的热更新配置（JS 导出 config()），实现不发版本体即可热调参数与行为 */
+    suspend fun featureConfig(slotOrId: String): JSONObject? {
+        val key = slotOrId.lowercase()
+        val s = enabledFeatures.firstOrNull { it.featureSlot == key || it.id.equals(key, ignoreCase = true) } ?: return null
+        if (!s.start() || !s.has("config")) return null
+        return runCatching { s.call("config") as? JSONObject }.getOrNull()
+    }
+    /** 声明式页面插件渲染与交互派发（Plugin API v2） */
+    suspend fun renderPage(id: String, ctx: JSONObject): JSONObject? {
+        val s = get(id)?.takeIf { on(it.id) && it.isFeature } ?: return null
+        if (!s.start() || !s.has("render")) return null
+        return runCatching { s.call("render", ctx) as? JSONObject }.getOrNull()
+    }
+    suspend fun dispatchPageAction(id: String, action: String, payload: JSONObject? = null): JSONObject? {
+        val s = get(id)?.takeIf { on(it.id) && it.isFeature } ?: return null
+        if (!s.start() || !s.has("onAction")) return null
+        return runCatching { s.call("onAction", action, payload ?: JSONObject()) as? JSONObject }.getOrNull()
     }
 
     /** 向所有启用的功能插件派发轻量生命周期事件（如 onTrackChange / onPlayState） */
@@ -96,26 +119,46 @@ object Plugins {
             else -> ActionResult("已执行「${s.name}」")
         }
     }
-    fun set(id: String, v: Boolean) { off = if (v) off - id else off + id; prefs.edit().putStringSet("off", off).apply(); if (!v) get(id)?.close()
-        kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { if (v) get(id)?.start(); PluginStore.refresh().join(); Store.refreshAll() } }
+    fun set(id: String, v: Boolean) {
+        off = if (v) off - id else off + id
+        prefs.edit().putStringSet("off", off).apply()
+        bump()
+        kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
+            if (v) get(id)?.start() else get(id)?.close()?.join()
+            bump()
+            PluginStore.refresh().join()
+            Store.refreshAll()
+            bump()
+        }
+    }
 
-    /** 导入脚本：检查开头的 @id，同 id 覆盖旧版本；返回导入的插件 */
+    /** 导入脚本：检查开头的 @id 与 @minHost，同 id 覆盖旧版本；导入后自动刷新账号与曲库 */
     suspend fun import(text: String): JsSource = withContext(Dispatchers.IO) {
         val id = Regex("""^\s*//\s*@id\s+([A-Za-z0-9_\-]+)\s*$""", RegexOption.MULTILINE).find(text.take(4000))?.groupValues?.get(1)
             ?: throw NcmError("不是 NEKOPLAY 插件：脚本开头要有「// @id 名字」")
-        get(id)?.close()
+        get(id)?.close()?.join()
         val f = File(dir, "$id.js"); f.writeText(text)
         val s = JsSource(f)
+        if (!s.hostCompatible) { f.delete(); throw NcmError("插件需要 NEKOPLAY v${s.minHost} 或更高版本（当前 v$APP_VERSION）") }
         if (!s.start()) { f.delete(); throw NcmError("脚本运行出错：${s.error}") }
         list.value = list.value.filter { it.id != id } + s
         off = off - id; prefs.edit().putStringSet("off", off).apply()
+        bump()
+        if (s.isSource) kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { PluginStore.refresh().join(); Store.refreshAll(); bump() }
         s
     }
     suspend fun importUrl(url: String): JsSource {
         val text = withContext(Dispatchers.IO) { Ncm.http.newCall(Request.Builder().url(url.trim()).build()).execute().use { r -> if (!r.isSuccessful) throw NcmError("下载失败：HTTP ${r.code}"); r.body?.string() ?: "" } }
         return import(text)
     }
-    fun delete(id: String) { get(id)?.close(); File(dir, "$id.js").delete(); list.value = list.value.filter { it.id != id } }
+    fun delete(id: String) {
+        get(id)?.close()
+        File(dir, "$id.js").delete()
+        list.value = list.value.filter { it.id != id }
+        off = off - id; prefs.edit().putStringSet("off", off).apply()
+        bump()
+        kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { PluginStore.refresh().join(); Store.refreshAll(); bump() }
+    }
 
     // ---------- 本体调用插件 ----------
     /** 老数据里的前缀：网易云的 id 不带前缀，QQ 音乐 "qq:"，酷狗 "kg:" */

@@ -123,8 +123,9 @@ import kotlin.math.sign
 
     val curIdx by remember(items.size) { derivedStateOf { if (items.isEmpty()) 0 else pos.value.roundToInt().coerceIn(0, items.lastIndex) } }
     val curItem = items.getOrNull(curIdx)
-    // 交互逻辑分流：桌面宽屏与手机横屏支持 3D 翻开 CD 盒展开曲目；手机竖屏点击中心封面直接进专辑/歌单详情页
-    val canExpand = Screen.wide || ls
+    val cfg by produceState(CoverFlowCfg(), Plugins.rev) { value = CoverFlowCfg.from(Plugins.featureConfig("coverflow")) }
+    // 交互逻辑分流：桌面宽屏与手机横屏支持 3D 翻开 CD 盒展开曲目；手机竖屏默认直进专辑/歌单详情页（可由插件 config() 热更新）
+    val canExpand = Screen.wide || ls || cfg.portraitExpand
     LaunchedEffect(canExpand) { if (!canExpand) expandedKey = null }
     val isExpanded = canExpand && expandedKey != null && curItem?.key == expandedKey
     val expandProg by animateFloatAsState(if (isExpanded) 1f else 0f, if (AnimStyle.off) snap() else spring(dampingRatio = 0.85f, stiffness = Anim.stiff(88f)), label = "cfExp")
@@ -157,7 +158,7 @@ import kotlin.math.sign
         sideLoading = false
     }
 
-    val reflMask = remember { Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.30f), 0.18f to Color.Black.copy(alpha = 0.14f), 0.42f to Color.Black.copy(alpha = 0.03f), 0.68f to Color.Transparent, 1f to Color.Transparent) }
+    val reflMask = remember(cfg.reflectionAlpha) { val a = cfg.reflectionAlpha; Brush.verticalGradient(0f to Color.Black.copy(alpha = a), 0.18f to Color.Black.copy(alpha = a * 0.46f), 0.42f to Color.Black.copy(alpha = a * 0.10f), 0.68f to Color.Transparent, 1f to Color.Transparent) }
 
     Column(Modifier.fillMaxSize().then(if (ls) Modifier.statusBarsPadding().navigationBarsPadding() else Modifier)) {
         // 顶部筛选条（手机横屏时自带返回键并极致压缩高度，把全部视野留给 3D 封面）
@@ -171,7 +172,7 @@ import kotlin.math.sign
                 }
             }
             Spacer(Modifier.weight(1f))
-            if (Screen.wide) Box(Modifier.padding(end = 10.dp).press { nav.hideSidebar = !nav.hideSidebar }
+            if (Screen.wide && cfg.desktopSidebarToggle) Box(Modifier.padding(end = 10.dp).press { nav.hideSidebar = !nav.hideSidebar }
                 .background(if (nav.hideSidebar) p.p else p.k.copy(alpha = 0.08f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
                 T(if (nav.hideSidebar) "展开侧栏" else "收起侧栏", 11, if (nav.hideSidebar) Color.White else p.k, 700)
             }
@@ -247,13 +248,13 @@ import kotlin.math.sign
                 raw.toDp()
             }
             val coverPx = with(LocalDensity.current) { coverDp.toPx() }
-            val spineDp = (coverDp * 0.11f).coerceIn(14.dp, 28.dp)
+            val spineDp = (coverDp * cfg.spineRatio).coerceIn(12.dp, 32.dp)
             val rimDp = (coverDp * 0.018f).coerceIn(2.5.dp, 4.5.dp)
             val caseW = spineDp + coverDp + rimDp
             val caseH = coverDp + rimDp * 2
             val caseWPx = with(LocalDensity.current) { caseW.toPx() }
             val caseHPx = with(LocalDensity.current) { caseH.toPx() }
-            val maxOpenScale = if (caseWPx > 1f && caseHPx > 1f) minOf(stageW * 0.95f / (caseWPx * 2f), stageH * 0.95f / caseHPx).coerceIn(0.80f, 1.65f) else 1.40f
+            val maxOpenScale = if (caseWPx > 1f && caseHPx > 1f) minOf(stageW * 0.95f / (caseWPx * 2f), stageH * 0.95f / caseHPx).coerceIn(0.80f, cfg.maxOpenScale) else 1.40f
             // 经典 iOS 6 几何参数：中心 CD 盒无遮挡，两侧外缘靠前、内缘向内折向中心形成 V 型唱片架
             val centerGapPx = coverPx * 0.84f
             val stackStepPx = coverPx * 0.23f
@@ -275,7 +276,7 @@ import kotlin.math.sign
                             val d = i - pos.value
                             val ad = abs(d)
                             val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat()
-                            val wingAngle = -64f * sign(d) * s
+                            val wingAngle = -cfg.wingAngle * sign(d) * s
                             val extraGap = (centerGapPx - stackStepPx) * kotlin.math.tanh((ad * 1.35f).toDouble()).toFloat()
                             val tx = d * stackStepPx + sign(d) * extraGap
                             val ep = expandProg.coerceIn(0f, 1.05f)
@@ -293,7 +294,7 @@ import kotlin.math.sign
                             val baseY = coverPx * (if (ls) 0.08f else 0.14f)
                             translationY = (if (isCenter) baseY + (caseHPx * 0.18f - baseY) * zoomP else baseY) + liftY + tY * (5f * density * centerWeight * tiltDamp)
                             scaleX = sc; scaleY = sc
-                            rotationY = wingAngle + (if (isCenter) 22f * swirl else 0f) + tX * (4.5f + 7.5f * centerWeight) * tiltDamp
+                            rotationY = wingAngle + (if (isCenter) cfg.spinDeg * swirl else 0f) + tX * (4.5f + 7.5f * centerWeight) * tiltDamp
                             rotationX = (if (isCenter) 8f * swirl else 0f) - tY * (3.2f + 5.8f * centerWeight) * tiltDamp
                             rotationZ = if (isCenter) -3.2f * swirl else 0f
                             transformOrigin = TransformOrigin(0.5f, 0.368f)
@@ -305,7 +306,7 @@ import kotlin.math.sign
                 ) {
                     // 实体 CD 塑料盒：外侧无缝挤出透明亚克力侧边厚度 + 右侧托盘 + 沿左铰链 180° 翻开的透明前盖
                     val lidP = if (isCenter) smoothStep(0.02f, 0.72f, expandProg) else 0f
-                    Box(Modifier.size(caseW, caseH).cdThicknessEdge({ i - pos.value }, { tiltX.value }, { tiltY.value }) { if (isCenter) (1f - smoothStep(0f, 0.45f, expandProg)) else 1f }) {
+                    Box(Modifier.size(caseW, caseH).cdThicknessEdge({ i - pos.value }, { tiltX.value }, { tiltY.value }, cfg.thicknessDp) { if (isCenter) (1f - smoothStep(0f, 0.45f, expandProg)) else 1f }) {
 
                         // 右侧 CD 托盘层（随前盖沿左铰链翻开自然显露，炫彩光盘随开合微转）
                         if (isCenter && expandProg > 0.02f) {

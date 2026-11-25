@@ -34,30 +34,41 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  * 本体不带任何在线音源；音源是用户导入的 .js 脚本，在内置的 QuickJS 里运行。
  * 脚本和本体之间只传 JSON 字符串，接口说明见 docs/source-api.md。
  */
-/** 插件大类：音源插件（提供曲库/搜索/播放/歌词）与功能插件（监听播放事件、处理歌词、提供扩展动作） */
+/** 插件大类：音源插件（曲库/搜索/播放/歌词）、功能插件（槽位扩展/钩子/歌词管道）、页面插件（声明式可热更新原生页面） */
 enum class PluginKind(val id: String, val label: String) {
     SOURCE("source", "音源插件"),
     FEATURE("feature", "功能插件"),
+    PAGE("page", "页面插件"),
 }
 
 class JsSource(val file: File) {
-    /** 脚本开头注释里的信息：// @id qq  // @name xx  // @type source|feature  // @version 1.0.0  // @author xx  // @desc xx */
+    /** 脚本开头注释里的信息：// @id xx  // @name xx  // @type source|feature|page  // @version 1.0.0  // @minHost 0.6.8  // @permissions ... */
     val meta: Map<String, String> = Regex("""^\s*//\s*@(\w+)\s+(.+)$""", RegexOption.MULTILINE).findAll(file.readText().take(4000))
         .associate { it.groupValues[1] to it.groupValues[2].trim() }
     val id: String get() = meta["id"] ?: file.nameWithoutExtension
     val name: String get() = meta["name"] ?: id
     val version: String get() = meta["version"] ?: "0"
+    val apiVersion: Int get() = meta["api"]?.toIntOrNull() ?: 1
+    val minHost: String get() = meta["minHost"].orEmpty()
+    val permissions: Set<String> get() = meta["permissions"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
+    val hostCompatible: Boolean get() = minHost.isEmpty() || !PluginSubs.newer(minHost, APP_VERSION)
     /** 功能插件绑定的扩展槽位标识（头注释 // @feature coverflow 等） */
     val featureSlot: String get() = meta["feature"]?.lowercase()?.trim().orEmpty()
-    /** 插件类型：默认 source；支持 // @type feature 显式声明，未写时若声明了 @feature 或仅实现功能钩子也自动识别为功能插件 */
+    /** 插件类型：默认 source；支持 // @type feature|page 显式声明，未写时自动按槽位与导出能力识别 */
     val kind: PluginKind get() = when (meta["type"]?.lowercase()) {
-        "feature", "ext", "extension", "tool" -> PluginKind.FEATURE
+        "page", "ui", "view" -> PluginKind.PAGE
+        "feature", "ext", "extension", "tool", "hook" -> PluginKind.FEATURE
         "source", "music", "audio" -> PluginKind.SOURCE
-        else -> if (featureSlot.isNotEmpty() || (caps.isNotEmpty() && "stream" !in caps && "search" !in caps &&
-            listOf("manifest", "onTrackChange", "onPlayState", "transformLyric", "action").any { it in caps })) PluginKind.FEATURE else PluginKind.SOURCE
+        else -> when {
+            "render" in caps && "stream" !in caps -> PluginKind.PAGE
+            featureSlot.isNotEmpty() || (caps.isNotEmpty() && "stream" !in caps && "search" !in caps &&
+                listOf("manifest", "config", "onTrackChange", "onPlayState", "transformLyric", "action").any { it in caps }) -> PluginKind.FEATURE
+            else -> PluginKind.SOURCE
+        }
     }
     val isSource: Boolean get() = kind == PluginKind.SOURCE
-    val isFeature: Boolean get() = kind == PluginKind.FEATURE
+    val isPage: Boolean get() = kind == PluginKind.PAGE
+    val isFeature: Boolean get() = kind == PluginKind.FEATURE || kind == PluginKind.PAGE
     /** 能搜的类型（头注释「// @search track,album,…」），没写就当单曲 / 专辑 / 歌单 */
     val searchTypes: Set<String> get() = meta["search"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet() ?: setOf("track", "album", "playlist")
 
@@ -76,11 +87,12 @@ class JsSource(val file: File) {
         try {
             val q = QuickJs.create(Dispatchers.Default)
             installHost(q)
-            q.evaluate<Any?>(PRELUDE, filename = "prelude.js")
+            q.evaluate<Any?>(prelude(), filename = "prelude.js")
             q.evaluate<Any?>(file.readText(), filename = file.name)
             val c = JSONArray(q.evaluate<String>("__caps()")).let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
             caps = c; Plat.prefs("plugins").edit().putStringSet(capsKey, c).apply()
             js = q; error = null
+            Plugins.bump()
             true
         } catch (e: Throwable) {
             error = e.message ?: e.toString(); Debug.log("js:$id", 0, 0, "start", error ?: ""); false
@@ -218,8 +230,8 @@ class JsSource(val file: File) {
         private val noRedirect: OkHttpClient by lazy { Ncm.http.newBuilder().followRedirects(false).followSslRedirects(false).build() }
         private fun q(s: String) = JSONObject.quote(s)
 
-        /** 脚本运行前先注入的工具：nk.http / nk.md5 / nk.aes / nk.store / nk.log，以及注册音源用的 nk.register */
-        val PRELUDE = """
+        /** 脚本运行前先注入的工具：nk.http / nk.md5 / nk.aes / nk.store / nk.log / nk.host，以及注册入口 */
+        fun prelude() = """
             const __p = {}; let __seq = 0;
             const __http = (req) => new Promise((res, rej) => { const id = ++__seq; __p[id] = { res, rej }; __host.httpStart(id, req); });
             globalThis.__resolve = (id) => { const p = __p[id]; delete __p[id]; const r = JSON.parse(__host.take(id) || '[false,"无结果"]'); if (p) r[0] ? p.res(r[1]) : p.rej(new Error(r[1])); };
@@ -237,6 +249,8 @@ class JsSource(val file: File) {
               log: (...a) => __host.log(a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ')),
               register: (s) => { globalThis.source = s; },
               registerFeature: (s) => { globalThis.source = s; },
+              registerPage: (s) => { globalThis.source = s; },
+              host: { version: '${APP_VERSION}', platform: '${Plat.impl.name}' },
             };
             globalThis.console = { log: nk.log, warn: nk.log, error: nk.log };
             globalThis.__caps = () => JSON.stringify(Object.keys(globalThis.source || {}).filter(k => typeof globalThis.source[k] === 'function'));

@@ -24,13 +24,33 @@ import kotlin.math.abs
 
 internal data class FlowItem(val key: String, val kind: String, val id: String, val title: String, val sub: String, val cover: String?, val presetTracks: List<Track>? = null)
 
+/** Cover Flow 热更新配置：直接从 coverflow.js 的 config() 读取，更新插件即可实时调整外观、3D 角度与交互策略 */
+internal data class CoverFlowCfg(
+    val wingAngle: Float = 64f, val maxOpenScale: Float = 1.65f, val spinDeg: Float = 22f,
+    val spineRatio: Float = 0.11f, val thicknessDp: Float = 6.5f, val reflectionAlpha: Float = 0.30f,
+    val portraitExpand: Boolean = false, val desktopSidebarToggle: Boolean = true,
+) {
+    companion object {
+        fun from(o: org.json.JSONObject?) = if (o == null) CoverFlowCfg() else CoverFlowCfg(
+            o.optDouble("wingAngle", 64.0).toFloat().coerceIn(25f, 80f),
+            o.optDouble("maxOpenScale", 1.65).toFloat().coerceIn(1.0f, 2.0f),
+            o.optDouble("spinDeg", 22.0).toFloat().coerceIn(0f, 45f),
+            o.optDouble("spineRatio", 0.11).toFloat().coerceIn(0.06f, 0.18f),
+            o.optDouble("thicknessDp", 6.5).toFloat().coerceIn(0f, 14f),
+            o.optDouble("reflectionAlpha", 0.30).toFloat().coerceIn(0f, 0.55f),
+            o.optBoolean("portraitExpand", false),
+            o.optBoolean("desktopSidebarToggle", true),
+        )
+    }
+}
+
 internal fun smoothStep(e0: Float, e1: Float, x: Float): Float { val t = ((x - e0) / (e1 - e0)).coerceIn(0f, 1f); return t * t * (3f - 2f * t) }
 
 /** 仅在外框边缘无缝挤出透明亚克力 3D 侧边厚度（绝不垫在透明外壳后面造成错位重影） */
-internal fun Modifier.cdThicknessEdge(dist: () -> Float, tiltX: () -> Float, tiltY: () -> Float, vis: () -> Float) = drawBehind {
-    val v = vis(); if (v <= 0.01f) return@drawBehind
+internal fun Modifier.cdThicknessEdge(dist: () -> Float, tiltX: () -> Float, tiltY: () -> Float, depthDp: Float = 6.5f, vis: () -> Float) = drawBehind {
+    val v = vis(); if (v <= 0.01f || depthDp <= 0.1f) return@drawBehind
     val d = dist(); val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
-    val ex = kotlin.math.sign(d) * s * 6.5.dp.toPx() - tiltX() * 3.dp.toPx()
+    val ex = kotlin.math.sign(d) * s * depthDp.dp.toPx() - tiltX() * 3.dp.toPx()
     val ey = -tiltY() * 2.5.dp.toPx()
     val side = Brush.verticalGradient(listOf(Color(0x6CE4EEFA).copy(alpha = 0.44f * v), Color(0x528292A8).copy(alpha = 0.34f * v), Color(0x5C202632).copy(alpha = 0.40f * v)))
     val rim = Color.White.copy(alpha = 0.46f * v); val shd = Color.Black.copy(alpha = 0.36f * v)
