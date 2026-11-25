@@ -126,9 +126,7 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
         backLoading = false
     }
 
-    val reflMask = remember {
-        Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.34f), 0.48f to Color.Black.copy(alpha = 0.08f), 1f to Color.Transparent)
-    }
+    val reflMask = remember { Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.30f), 0.22f to Color.Black.copy(alpha = 0.15f), 0.52f to Color.Black.copy(alpha = 0.04f), 0.82f to Color.Transparent, 1f to Color.Transparent) }
 
     Column(Modifier.fillMaxSize()) {
         // 顶部筛选条（完全融入当前主题与毛玻璃背景）
@@ -247,6 +245,7 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                             scaleX = sc; scaleY = sc
                             rotationY = (if (isCenter) wingAngle + flipDeg else wingAngle) + rotYExtra
                             rotationX = rotXExtra
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.368f)
                             cameraDistance = 12f * density
                             alpha = if (ad <= 3.6f) 1f else (1f - (ad - 3.6f) * 0.42f).coerceIn(0f, 1f)
                         }
@@ -292,8 +291,7 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                             })
                         }
                     }
-                    Spacer(Modifier.height(1.dp))
-                    // 精确 iOS 6 底部镜面倒影：外层未翻转容器做顶部→底部渐隐，内层原位 scaleY = -1f 精准镜像封面底边
+                    // 精确底部镜面倒影：0dp 紧贴封面底边、同步侧翼暗角、二次曲线提前渐隐彻底消除底边硬裁切线
                     Box(Modifier.size(coverDp, reflH).clipToBounds()
                         .graphicsLayer {
                             alpha = (1f - flipDeg / 90f).coerceIn(0f, 1f)
@@ -305,6 +303,7 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                         }) {
                         Box(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).graphicsLayer { scaleY = -1f }) {
                             Cover(item.cover, coverDp, item.title, border = false, decodeSize = 256.dp)
+                            Box(Modifier.matchParentSize().graphicsLayer { val ad = abs(i - pos.value); val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat(); alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f) }.background(Color.Black))
                         }
                     }
                 }
