@@ -258,29 +258,27 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    // 封面主体（翻转超过 90° 时切为背面曲目清单）
-                    Box(Modifier.size(coverDp).border(1.dp, p.k.copy(alpha = if (isCenter) 0.22f else 0.10f)).background(p.sheet)) {
+                    // 封面主体 + 实体唱片盒 3D 厚度侧脊与底边接触阴影（翻转超过 90° 时切为背面曲目清单）
+                    Box(Modifier.size(coverDp)) {
+                        // 实体厚度侧脊背板：随 3D 偏转角与鼠标倾斜动态露出物理侧边与高光棱线
+                        Box(Modifier.matchParentSize().graphicsLayer {
+                            val d = i - pos.value; val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
+                            translationX = if (isFlipped) 0f else (sign(d) * s * 6.dp.toPx() - tiltX * 3.5.dp.toPx())
+                            translationY = if (isFlipped) 0f else (1.5.dp.toPx() - tiltY * 2.dp.toPx())
+                            alpha = (1f - flipDeg / 90f).coerceIn(0f, 1f)
+                        }.background(Brush.verticalGradient(listOf(Color(0xFF3A414E), Color(0xFF1A1E26), Color(0xFF0E1016)))).border(1.dp, Color(0x38FFFFFF)))
+                        Box(Modifier.matchParentSize().border(1.dp, p.k.copy(alpha = if (isCenter) 0.28f else 0.14f)).background(p.sheet)) {
                         if (flipDeg <= 90f) {
                             Cover(item.cover, coverDp, item.title, border = false, decodeSize = 512.dp)
-                            // 始终保持的连续镜面光照：随封面角度与鼠标位置平滑流动，切换封面时不闪烁、不突兀开关
                             Box(Modifier.matchParentSize().drawWithContent {
-                                val d = i - pos.value
-                                val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
-                                val centerWeight = (1f - s).coerceIn(0f, 1f)
+                                val d = i - pos.value; val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
                                 val gx = size.width * (0.38f - tiltX * 0.34f - d.coerceIn(-1f, 1f) * 0.18f)
                                 val gy = size.height * (0.26f - tiltY * 0.32f)
-                                val sheenAlpha = 0.07f + 0.13f * centerWeight
-                                drawRect(Brush.radialGradient(
-                                    listOf(Color.White.copy(alpha = sheenAlpha), Color.Transparent),
-                                    center = androidx.compose.ui.geometry.Offset(gx, gy),
-                                    radius = size.width * 0.92f,
-                                ))
+                                drawRect(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.07f + 0.13f * (1f - s).coerceIn(0f, 1f)), Color.Transparent), center = androidx.compose.ui.geometry.Offset(gx, gy), radius = size.width * 0.92f))
+                                drawRect(Color.White.copy(alpha = 0.22f), size = androidx.compose.ui.geometry.Size(size.width, 1.5f))
+                                drawRect(Color.Black.copy(alpha = 0.38f), topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - 2f), size = androidx.compose.ui.geometry.Size(size.width, 2f))
                             })
-                            Box(Modifier.matchParentSize().graphicsLayer {
-                                val ad = abs(i - pos.value)
-                                val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat()
-                                alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f)
-                            }.background(Color.Black))
+                            Box(Modifier.matchParentSize().graphicsLayer { val ad = abs(i - pos.value); val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat(); alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f) }.background(Color.Black))
                         } else {
                             CoverBackTracklist(item, backTracks, backLoading, onClose = { flippedKey = null }, onOpenDetail = {
                                 when (item.kind) {
@@ -290,6 +288,7 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                                     else -> item.presetTracks?.let { Engine.playList(it, 0); nav.player = true }
                                 }
                             })
+                        }
                         }
                     }
                     // 精确底部镜面倒影：0dp 紧贴封面底边、同步侧翼暗角、二次曲线提前渐隐彻底消除底边硬裁切线
