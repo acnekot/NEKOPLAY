@@ -57,7 +57,44 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
         }
     }
 
-    init { exoAudio = ExoAudio(ctx); LyricNotify.start(ctx, exoAudio); WidgetSync.start(ctx) }
+    init { exoAudio = ExoAudio(ctx); LyricNotify.start(ctx, exoAudio); WidgetSync.start(ctx); attachTiltSensor(ctx) }
+
+    /** 移动端按需陀螺仪 / 重力倾斜传感（仅封面墙打开时监听，自动以初始握持角度为零点平滑偏移） */
+    private fun attachTiltSensor(context: Context) {
+        val sm = context.getSystemService(Context.SENSOR_SERVICE) as? android.hardware.SensorManager ?: return
+        val sensor = sm.getDefaultSensor(android.hardware.Sensor.TYPE_GRAVITY)
+            ?: sm.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER) ?: return
+        var baseX = Float.NaN; var baseY = Float.NaN
+        var smoothX = 0f; var smoothY = 0f
+        val listener = object : android.hardware.SensorEventListener {
+            override fun onSensorChanged(e: android.hardware.SensorEvent) {
+                val gx = e.values[0]; val gy = e.values[1]
+                // 横屏时传感器坐标轴旋转 90°：手机左右倾斜对应 gy，前后俯仰对应 gx
+                val rawX = if (Screen.landscape) gy else -gx
+                val rawY = if (Screen.landscape) gx else gy
+                if (baseX.isNaN()) { baseX = rawX; baseY = rawY }
+                // 缓慢漂移基准角，改变握持姿势后几秒自动回中
+                baseX += (rawX - baseX) * 0.012f
+                baseY += (rawY - baseY) * 0.012f
+                val tx = ((rawX - baseX) / 3.2f).coerceIn(-1f, 1f)
+                val ty = ((rawY - baseY) / 3.2f).coerceIn(-1f, 1f)
+                smoothX += (tx - smoothX) * 0.18f
+                smoothY += (ty - smoothY) * 0.18f
+                TiltBus.x.value = smoothX
+                TiltBus.y.value = smoothY
+            }
+            override fun onAccuracyChanged(s: android.hardware.Sensor?, accuracy: Int) {}
+        }
+        TiltBus.onObserve = { active ->
+            if (active) {
+                baseX = Float.NaN; baseY = Float.NaN; smoothX = 0f; smoothY = 0f
+                runCatching { sm.registerListener(listener, sensor, android.hardware.SensorManager.SENSOR_DELAY_GAME) }
+            } else {
+                runCatching { sm.unregisterListener(listener) }
+                TiltBus.x.value = 0f; TiltBus.y.value = 0f
+            }
+        }
+    }
 
     override val name = "android"
     override val filesDir: File = ctx.filesDir

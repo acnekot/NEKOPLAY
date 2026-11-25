@@ -94,7 +94,7 @@ import kotlinx.coroutines.launch
             AnimatedContent(pg, Modifier.weight(1f), transitionSpec = { fadeIn(Motion.standard()) togetherWith fadeOut(Motion.quick()) }, label = "sub") { page ->
                 PageContent(page)
             }
-            if (Engine.state.collectAsState().value.current != null) MiniBar()
+            if (Engine.state.collectAsState().value.current != null && !(Screen.landscape && pg == Page.CoverFlow)) MiniBar()
             Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime.union(WindowInsets.navigationBars)))
         }
         Box(Modifier.fillMaxHeight().width(22.dp).pointerInput(Unit) {
@@ -117,7 +117,7 @@ import kotlinx.coroutines.launch
     val nav = LocalNav.current
     val p = c
     Column(Modifier.fillMaxSize()) {
-        if (page !is Page.Search) Row(Modifier.fillMaxWidth().height(48.dp).drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx())) }
+        if (page !is Page.Search && !(Screen.landscape && page == Page.CoverFlow)) Row(Modifier.fillMaxWidth().height(48.dp).drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx())) }
             .press { nav.back() }.padding(start = 6.dp, end = 18.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { NIcon(NIcons.back, 20.dp) }

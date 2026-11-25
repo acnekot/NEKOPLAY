@@ -66,3 +66,10 @@ object PlayerBus {
     val openSeq = kotlinx.coroutines.flow.MutableStateFlow(0)
     fun open() { openSeq.value += 1 }
 }
+
+/** 移动端陀螺仪 / 重力倾斜总线（仅在封面墙开启时按需订阅传感器，零常驻耗电） */
+object TiltBus {
+    val x = kotlinx.coroutines.flow.MutableStateFlow(0f)
+    val y = kotlinx.coroutines.flow.MutableStateFlow(0f)
+    var onObserve: ((Boolean) -> Unit)? = null
+}

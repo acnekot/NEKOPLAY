@@ -83,10 +83,16 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
     var flippedKey by remember { mutableStateOf<String?>(null) }
     var stageW by remember { mutableFloatStateOf(0f) }
     var stageH by remember { mutableFloatStateOf(0f) }
-    var pointerX by remember { mutableFloatStateOf(0f) } // -1..1 相对舞台中心
+    var pointerX by remember { mutableFloatStateOf(0f) } // -1..1 相对舞台中心（桌面鼠标）
     var pointerY by remember { mutableFloatStateOf(0f) }
-    val tiltX by animateFloatAsState(if (AnimStyle.off) 0f else pointerX, spring(0.88f, Anim.stiff(Spring.StiffnessLow)), label = "cfTx")
-    val tiltY by animateFloatAsState(if (AnimStyle.off) 0f else pointerY, spring(0.88f, Anim.stiff(Spring.StiffnessLow)), label = "cfTy")
+    val gyroX by TiltBus.x.collectAsState()
+    val gyroY by TiltBus.y.collectAsState()
+    DisposableEffect(Unit) { TiltBus.onObserve?.invoke(true); onDispose { TiltBus.onObserve?.invoke(false) } }
+    val rawTiltX = if (Plat.isDesktop) pointerX else gyroX
+    val rawTiltY = if (Plat.isDesktop) pointerY else gyroY
+    val tiltX by animateFloatAsState(if (AnimStyle.off) 0f else rawTiltX, spring(0.88f, Anim.stiff(Spring.StiffnessLow)), label = "cfTx")
+    val tiltY by animateFloatAsState(if (AnimStyle.off) 0f else rawTiltY, spring(0.88f, Anim.stiff(Spring.StiffnessLow)), label = "cfTy")
+    val ls = Screen.landscape
     val density = LocalDensity.current.density
 
     LaunchedEffect(items.size) {
@@ -129,21 +135,19 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
 
     val reflMask = remember { Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.30f), 0.18f to Color.Black.copy(alpha = 0.14f), 0.42f to Color.Black.copy(alpha = 0.03f), 0.68f to Color.Transparent, 1f to Color.Transparent) }
 
-    Column(Modifier.fillMaxSize()) {
-        // 顶部筛选条（完全融入当前主题与毛玻璃背景）
-        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.fillMaxSize().then(if (ls) Modifier.statusBarsPadding().navigationBarsPadding() else Modifier)) {
+        // 顶部筛选条（手机横屏时自带返回键并极致压缩高度，把全部视野留给 3D 封面）
+        Row(Modifier.fillMaxWidth().padding(horizontal = if (ls) 12.dp else 18.dp, vertical = if (ls) 4.dp else 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (ls) { Box(Modifier.size(32.dp).press { nav.back() }, contentAlignment = Alignment.Center) { NIcon(NIcons.back, 18.dp) }; Spacer(Modifier.width(6.dp)) }
             listOf("全部", "专辑", "歌单", "最近").forEachIndexed { idx, label ->
                 val on = filter == idx
-                Box(Modifier.padding(end = 8.dp).press { filter = idx; flippedKey = null; scope.launch { pos.snapTo(0f) } }
-                    .background(if (on) p.p else p.k.copy(alpha = 0.08f))
-                    .padding(horizontal = 12.dp, vertical = 5.dp)) {
-                    T(label, 12, if (on) Color.White else p.k, 700)
+                Box(Modifier.padding(end = 6.dp).press { filter = idx; flippedKey = null; scope.launch { pos.snapTo(0f) } }
+                    .background(if (on) p.p else p.k.copy(alpha = 0.08f)).padding(horizontal = if (ls) 10.dp else 12.dp, vertical = if (ls) 3.dp else 5.dp)) {
+                    T(label, if (ls) 11 else 12, if (on) Color.White else p.k, 700)
                 }
             }
             Spacer(Modifier.weight(1f))
-            if (items.isNotEmpty()) {
-                T("${curIdx + 1} / ${items.size}", 12, p.s, 600, mono = true)
-            }
+            if (items.isNotEmpty()) T("${curIdx + 1} / ${items.size}", 11, p.s, 600, mono = true)
         }
 
         if (items.isEmpty()) {
@@ -209,7 +213,11 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                 }
             }, contentAlignment = Alignment.Center) {
 
-            val coverDp: Dp = with(LocalDensity.current) { (minOf(stageW * 0.44f, stageH * 0.56f).coerceIn(160f * density, 300f * density)).toDp() }
+            val coverDp: Dp = with(LocalDensity.current) {
+                val raw = if (ls) minOf(stageW * 0.30f, stageH * 0.64f).coerceIn(108f * density, 220f * density)
+                else minOf(stageW * 0.44f, stageH * 0.56f).coerceIn(160f * density, 300f * density)
+                raw.toDp()
+            }
             val coverPx = with(LocalDensity.current) { coverDp.toPx() }
             // 经典 iOS 6 几何参数：中心封面无遮挡，两侧外缘靠前、内缘向内折向中心形成 V 型唱片架
             val centerGapPx = coverPx * 0.78f
@@ -311,61 +319,38 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
             }
         }
 
-        // 底部专辑信息（柔和淡入淡出）+ 操作 + 底部快滑条
+        // 底部专辑信息（手机横屏单行紧凑排布，不挡封面）+ 操作 + 底部快滑条
         if (curItem != null) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                AnimatedContent(curItem, contentKey = { it.key }, transitionSpec = {
-                    fadeIn(Motion.quick()) togetherWith fadeOut(Motion.quick())
-                }, label = "cfMeta") { it ->
+            fun playCurrent() {
+                if (curItem.presetTracks != null && curItem.presetTracks.isNotEmpty()) { Engine.playList(curItem.presetTracks, 0); nav.player = true }
+                else scope.launch {
+                    val ts = runCatching { when (curItem.kind) { "album" -> Ncm.album(curItem.id).second; "pl" -> Ncm.playlistTracks(curItem.id); else -> emptyList() } }.getOrDefault(emptyList())
+                    if (ts.isNotEmpty()) { Engine.playList(ts, 0); nav.player = true } else nav.toast = "暂无可播曲目"
+                }
+            }
+            if (ls) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { T(curItem.title, 14, p.k, 800, lines = 1); T(curItem.sub, 11, p.s, lines = 1) }
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.press { playCurrent() }.background(p.p).padding(horizontal = 12.dp, vertical = 5.dp)) { T("播放", 11, Color.White, 700) }
+                Spacer(Modifier.width(6.dp))
+                Box(Modifier.press { flippedKey = if (flippedKey == curItem.key) null else curItem.key }.nbf(1.dp, p.k).padding(horizontal = 10.dp, vertical = 5.dp)) { T(if (flippedKey == curItem.key) "封面" else "曲目", 11, p.k, 600) }
+            } else Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                AnimatedContent(curItem, contentKey = { it.key }, transitionSpec = { fadeIn(Motion.quick()) togetherWith fadeOut(Motion.quick()) }, label = "cfMeta") { it ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        T(it.title, 18, p.k, 800, lines = 1, align = TextAlign.Center)
-                        Spacer(Modifier.height(2.dp))
-                        T(it.sub, 12, p.s, 500, lines = 1, align = TextAlign.Center)
+                        T(it.title, 18, p.k, 800, lines = 1, align = TextAlign.Center); Spacer(Modifier.height(2.dp)); T(it.sub, 12, p.s, 500, lines = 1, align = TextAlign.Center)
                     }
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.press {
-                        if (curItem.presetTracks != null && curItem.presetTracks.isNotEmpty()) {
-                            Engine.playList(curItem.presetTracks, 0); nav.player = true
-                        } else {
-                            scope.launch {
-                                val ts = runCatching {
-                                    when (curItem.kind) {
-                                        "album" -> Ncm.album(curItem.id).second
-                                        "pl" -> Ncm.playlistTracks(curItem.id)
-                                        else -> emptyList()
-                                    }
-                                }.getOrDefault(emptyList())
-                                if (ts.isNotEmpty()) { Engine.playList(ts, 0); nav.player = true } else nav.toast = "暂无可播曲目"
-                            }
-                        }
-                    }.background(p.p).padding(horizontal = 16.dp, vertical = 7.dp)) {
-                        T("立即播放", 12, Color.White, 700)
-                    }
-                    Box(Modifier.press { flippedKey = if (flippedKey == curItem.key) null else curItem.key }
-                        .nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 7.dp)) {
-                        T(if (flippedKey == curItem.key) "翻回封面" else "翻转曲目", 12, p.k, 600)
-                    }
-                    if (curItem.kind != "tracks") {
-                        Box(Modifier.press {
-                            when (curItem.kind) {
-                                "album" -> nav.push(Page.Album(curItem.id, curItem.title, curItem.cover))
-                                "pl" -> nav.push(Page.Detail("pl", curItem.id, curItem.title, curItem.cover))
-                                "lpl" -> nav.push(Page.Detail("lpl", curItem.id, curItem.title))
-                            }
-                        }.nbf(1.dp, p.l2).padding(horizontal = 14.dp, vertical = 7.dp)) {
-                            T("进入详情", 12, p.k, 600)
-                        }
-                    }
+                    Box(Modifier.press { playCurrent() }.background(p.p).padding(horizontal = 16.dp, vertical = 7.dp)) { T("立即播放", 12, Color.White, 700) }
+                    Box(Modifier.press { flippedKey = if (flippedKey == curItem.key) null else curItem.key }.nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 7.dp)) { T(if (flippedKey == curItem.key) "翻回封面" else "翻转曲目", 12, p.k, 600) }
+                    if (curItem.kind != "tracks") Box(Modifier.press {
+                        when (curItem.kind) { "album" -> nav.push(Page.Album(curItem.id, curItem.title, curItem.cover)); "pl" -> nav.push(Page.Detail("pl", curItem.id, curItem.title, curItem.cover)); "lpl" -> nav.push(Page.Detail("lpl", curItem.id, curItem.title)) }
+                    }.nbf(1.dp, p.l2).padding(horizontal = 14.dp, vertical = 7.dp)) { T("进入详情", 12, p.k, 600) }
                 }
                 if (items.size > 1) {
                     Spacer(Modifier.height(10.dp))
-                    NSlider(pos.value.coerceIn(0f, items.lastIndex.toFloat()), 0f..items.lastIndex.toFloat(),
-                        onDone = { snapTo(pos.value.roundToInt()) }) { v ->
-                        snapJob?.cancel(); flippedKey = null
-                        scope.launch { pos.snapTo(v) }
-                    }
+                    NSlider(pos.value.coerceIn(0f, items.lastIndex.toFloat()), 0f..items.lastIndex.toFloat(), onDone = { snapTo(pos.value.roundToInt()) }) { v -> snapJob?.cancel(); flippedKey = null; scope.launch { pos.snapTo(v) } }
                 }
             }
         }

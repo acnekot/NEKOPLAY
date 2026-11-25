@@ -183,7 +183,8 @@ object Boot {
                 fadeIn(Motion.standard()) togetherWith fadeOut(Motion.quick())
             }, label = "layoutMode") { isWide ->
             if (isWide) WideLayout() else Column(Modifier.fillMaxSize()) {
-                if (chrome == null) androidx.compose.animation.AnimatedVisibility(!(Screen.short && nav.player),
+                val hideTop = (Screen.short && nav.player) || (Screen.landscape && nav.stack.lastOrNull() == Page.CoverFlow)
+                if (chrome == null) androidx.compose.animation.AnimatedVisibility(!hideTop,
                     enter = androidx.compose.animation.expandVertically(Motion.hero()),
                     exit = androidx.compose.animation.shrinkVertically(Motion.hero())) { TopBar() }
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
