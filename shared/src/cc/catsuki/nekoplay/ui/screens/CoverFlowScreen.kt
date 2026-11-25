@@ -36,20 +36,8 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sign
 
-private data class FlowItem(
-    val key: String,
-    val kind: String, // "album" | "pl" | "lpl" | "tracks"
-    val id: String,
-    val title: String,
-    val sub: String,
-    val cover: String?,
-    val presetTracks: List<Track>? = null,
-)
-
-private fun smoothStep(x: Float): Float {
-    val t = x.coerceIn(0f, 1f)
-    return t * t * (3f - 2f * t)
-}
+private data class FlowItem(val key: String, val kind: String, val id: String, val title: String, val sub: String, val cover: String?, val presetTracks: List<Track>? = null)
+private fun smoothStep(x: Float): Float { val t = x.coerceIn(0f, 1f); return t * t * (3f - 2f * t) }
 
 /** 经典 iOS 6 Apple Music Cover Flow 3D 封面墙：纯黑镜面舞台 + 平行 70° 侧翼唱片架 + 精确底部镜面倒影 + 惯性甩动 + 点击中心 180° 翻转看曲目 */
 @Composable fun CoverFlowPage() {
@@ -81,12 +69,7 @@ private fun smoothStep(x: Float): Float {
         } + lls.map { l ->
             FlowItem("lpl:${l.id}", "lpl", l.id, l.name, "本地歌单 · ${two(l.tracks.size)} 首", l.tracks.firstOrNull { it.cover != null }?.cover, l.tracks)
         }
-        val raw = when (filter) {
-            1 -> albumItems + recentAlbums
-            2 -> plItems
-            3 -> recentAlbums
-            else -> albumItems + plItems + recentAlbums
-        }
+        val raw = when (filter) { 1 -> albumItems + recentAlbums; 2 -> plItems; 3 -> recentAlbums; else -> albumItems + plItems + recentAlbums }
         raw.distinctBy { it.key }
     }
 
@@ -95,6 +78,10 @@ private fun smoothStep(x: Float): Float {
     var flippedKey by remember { mutableStateOf<String?>(null) }
     var stageW by remember { mutableFloatStateOf(0f) }
     var stageH by remember { mutableFloatStateOf(0f) }
+    var pointerX by remember { mutableFloatStateOf(0f) } // -1..1 相对舞台中心
+    var pointerY by remember { mutableFloatStateOf(0f) }
+    val tiltX by animateFloatAsState(if (AnimStyle.off) 0f else pointerX, spring(0.86f, Anim.stiff(Spring.StiffnessLow)), label = "cfTx")
+    val tiltY by animateFloatAsState(if (AnimStyle.off) 0f else pointerY, spring(0.86f, Anim.stiff(Spring.StiffnessLow)), label = "cfTy")
     val density = LocalDensity.current.density
 
     LaunchedEffect(items.size) {
@@ -187,11 +174,23 @@ private fun smoothStep(x: Float): Float {
                 awaitPointerEventScope {
                     while (true) {
                         val ev = awaitPointerEvent()
-                        if (ev.type == PointerEventType.Scroll) {
-                            val d = ev.changes.fold(0f) { acc, ch -> acc + ch.scrollDelta.y + ch.scrollDelta.x }
-                            if (abs(d) > 0.05f) {
-                                ev.changes.forEach { it.consume() }
-                                snapTo(pos.value.roundToInt() + if (d > 0f) 1 else -1)
+                        when (ev.type) {
+                            PointerEventType.Scroll -> {
+                                val d = ev.changes.fold(0f) { acc, ch -> acc + ch.scrollDelta.y + ch.scrollDelta.x }
+                                if (abs(d) > 0.05f) {
+                                    ev.changes.forEach { it.consume() }
+                                    snapTo(pos.value.roundToInt() + if (d > 0f) 1 else -1)
+                                }
+                            }
+                            PointerEventType.Move, PointerEventType.Enter -> {
+                                val pt = ev.changes.firstOrNull()?.position
+                                if (pt != null && stageW > 1f && stageH > 1f) {
+                                    pointerX = ((pt.x / stageW) * 2f - 1f).coerceIn(-1f, 1f)
+                                    pointerY = ((pt.y / stageH) * 2f - 1f).coerceIn(-1f, 1f)
+                                }
+                            }
+                            PointerEventType.Exit -> {
+                                pointerX = 0f; pointerY = 0f
                             }
                         }
                     }
@@ -234,10 +233,14 @@ private fun smoothStep(x: Float): Float {
                 Column(
                     Modifier.zIndex(z)
                         .graphicsLayer {
-                            translationX = tx
-                            translationY = coverPx * 0.14f
+                            val centerWeight = (1f - s).coerceIn(0f, 1f)
+                            val rotYExtra = if (isFlipped) 0f else tiltX * (4.5f + 7.5f * centerWeight)
+                            val rotXExtra = if (isFlipped) 0f else -tiltY * (3.2f + 5.8f * centerWeight)
+                            translationX = tx + tiltX * (10f * density * (0.35f + 0.65f * centerWeight))
+                            translationY = coverPx * 0.14f + tiltY * (5f * density * centerWeight)
                             scaleX = sc; scaleY = sc
-                            rotationY = if (isCenter) wingAngle + flipDeg else wingAngle
+                            rotationY = (if (isCenter) wingAngle + flipDeg else wingAngle) + rotYExtra
+                            rotationX = rotXExtra
                             cameraDistance = 12f * density
                             alpha = alphaVal
                         }
@@ -253,6 +256,18 @@ private fun smoothStep(x: Float): Float {
                     Box(Modifier.size(coverDp).border(1.dp, p.k.copy(alpha = if (isCenter) 0.22f else 0.10f)).background(p.sheet)) {
                         if (flipDeg <= 90f) {
                             Cover(item.cover, coverDp, item.title, border = false, decodeSize = 512.dp)
+                            if (isCenter && (abs(tiltX) > 0.02f || abs(tiltY) > 0.02f)) {
+                                // 跟随鼠标移动的柔和镜面高光，增强 3D 立体转动质感
+                                Box(Modifier.matchParentSize().drawWithContent {
+                                    val gx = size.width * (0.5f - tiltX * 0.35f)
+                                    val gy = size.height * (0.5f - tiltY * 0.35f)
+                                    drawRect(Brush.radialGradient(
+                                        listOf(Color.White.copy(alpha = 0.16f), Color.Transparent),
+                                        center = androidx.compose.ui.geometry.Offset(gx, gy),
+                                        radius = size.width * 0.85f,
+                                    ))
+                                })
+                            }
                             if (s > 0.02f) {
                                 val veil = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f)
                                 Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = veil)))
@@ -342,26 +357,14 @@ private fun smoothStep(x: Float): Float {
     }
 }
 
-@Composable private fun CoverBackTracklist(
-    item: FlowItem,
-    tracks: List<Track>?,
-    loading: Boolean,
-    onClose: () -> Unit,
-    onOpenDetail: () -> Unit,
-) {
+@Composable private fun CoverBackTracklist(item: FlowItem, tracks: List<Track>?, loading: Boolean, onClose: () -> Unit, onOpenDetail: () -> Unit) {
     val p = c
     Column(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }.background(p.sheet.copy(alpha = 0.96f)).padding(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                T(item.title, 13, p.k, 800, lines = 1)
-                T(item.sub, 10, p.s, lines = 1)
-            }
-            Box(Modifier.press(onClick = onClose).nbf(1.dp, p.l2).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                T("返回", 10, p.k, 700)
-            }
+            Column(Modifier.weight(1f)) { T(item.title, 13, p.k, 800, lines = 1); T(item.sub, 10, p.s, lines = 1) }
+            Box(Modifier.press(onClick = onClose).nbf(1.dp, p.l2).padding(horizontal = 8.dp, vertical = 4.dp)) { T("返回", 10, p.k, 700) }
         }
-        Spacer(Modifier.height(8.dp))
-        Box(Modifier.fillMaxWidth().height(1.dp).background(p.l1))
+        Spacer(Modifier.height(8.dp)); Box(Modifier.fillMaxWidth().height(1.dp).background(p.l1))
         when {
             loading -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { T("LOADING…", 11, p.s, mono = true) }
             tracks.isNullOrEmpty() -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
