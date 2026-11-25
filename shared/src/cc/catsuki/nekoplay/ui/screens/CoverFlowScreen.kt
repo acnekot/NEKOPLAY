@@ -246,14 +246,15 @@ private object CoverFlowStyle { var tape by mutableStateOf(false) }
             val coverPx = with(LocalDensity.current) { coverDp.toPx() }
             val spineDp = (coverDp * 0.11f).coerceIn(14.dp, 28.dp)
             val rimDp = (coverDp * 0.018f).coerceIn(2.5.dp, 4.5.dp)
-            val caseW = if (tape) coverDp * 1.44f else spineDp + coverDp + rimDp
-            val caseH = if (tape) coverDp * 0.92f else coverDp + rimDp * 2
+            val tapeArtDp = coverDp * 0.84f
+            val caseW = if (tape) spineDp + tapeArtDp + rimDp else spineDp + coverDp + rimDp
+            val caseH = if (tape) tapeArtDp * 1.34f + rimDp * 2 else coverDp + rimDp * 2
             val caseWPx = with(LocalDensity.current) { caseW.toPx() }
             val caseHPx = with(LocalDensity.current) { caseH.toPx() }
             val maxOpenScale = if (caseWPx > 1f && caseHPx > 1f) minOf(stageW * 0.95f / (caseWPx * 2f), stageH * 0.95f / caseHPx).coerceIn(0.80f, 1.65f) else 1.40f
             // 经典 iOS 6 几何参数：中心外壳无遮挡，两侧外缘靠前、内缘向内折向中心形成 V 型唱片/磁带架
-            val centerGapPx = if (tape) caseWPx * 0.72f else coverPx * 0.84f
-            val stackStepPx = if (tape) caseWPx * 0.22f else coverPx * 0.23f
+            val centerGapPx = if (tape) caseWPx * 0.86f else coverPx * 0.84f
+            val stackStepPx = if (tape) caseWPx * 0.24f else coverPx * 0.23f
             val reflH = caseH * 0.36f
 
             // 桌面左右各 5 张、移动端各 4 张，显著减少离屏合成与 GPU 填充率开销，稳定高帧率
@@ -330,15 +331,15 @@ private object CoverFlowStyle { var tape by mutableStateOf(false) }
                             }) {
                             val sweep = { kotlin.math.sin((lidP * kotlin.math.PI)).toFloat() }
                             if (!isCenter || lidP < 0.5f) {
-                                if (tape) CassetteFrontLid(item, caseH, isCenter, { i - pos.value }, { tiltX.value }, { tiltY.value }, sweep)
+                                if (tape) CassetteFrontLid(item, tapeArtDp, spineDp, rimDp, isCenter, { i - pos.value }, { tiltX.value }, { tiltY.value }, sweep)
                                 else CdCaseFrontLid(item, coverDp, spineDp, rimDp, isCenter, { i - pos.value }, { tiltX.value }, { tiltY.value }, sweep)
                             } else {
-                                if (tape) CassetteInnerLid(item, caseH, sweep, { expandProg }, onClose = { expandedKey = null })
+                                if (tape) CassetteInnerLid(item, tapeArtDp, spineDp, rimDp, sweep, onClose = { expandedKey = null })
                                 else CdCaseInnerLid(item, coverDp, spineDp, rimDp, sweep, onClose = { expandedKey = null })
                             }
                         }
                     }
-                    // 轻量高效底部镜面倒影：自动匹配 CD 盒与复古磁带的外框比例（翻开时平滑淡出）
+                    // 轻量高效底部镜面倒影：自动匹配 CD 盒与竖版磁带盒的外框比例（翻开时平滑淡出）
                     if (abs(i - curIdx) <= 3) Box(Modifier.size(caseW, reflH).clipToBounds()
                         .graphicsLayer { alpha = if (isCenter) (1f - expandProg * 1.6f).coerceIn(0f, 1f) else 1f; compositingStrategy = CompositingStrategy.Offscreen }
                         .drawWithContent {
@@ -346,13 +347,9 @@ private object CoverFlowStyle { var tape by mutableStateOf(false) }
                             drawRect(brush = reflMask, topLeft = Offset(-4f, -4f), size = Size(size.width + 8f, size.height + 8f), blendMode = BlendMode.DstIn)
                         }) {
                         Box(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).height(caseH).graphicsLayer { scaleY = -1f }.background(Color(0x1CFFFFFF)).border(1.dp, Color(0x38FFFFFF))) {
-                            if (tape) {
-                                val tRim = (caseH * 0.065f).coerceIn(8.dp, 14.dp); val tArt = (caseH - tRim * 2.5f).coerceAtLeast(64.dp)
-                                Box(Modifier.align(Alignment.TopStart).padding(start = tRim, top = tRim)) { Cover(item.cover, tArt, item.title, border = false, decodeSize = 200.dp) }
-                            } else {
-                                Box(Modifier.width(spineDp).fillMaxHeight().background(Color(0x28FFFFFF)))
-                                Box(Modifier.padding(start = spineDp, top = rimDp, end = rimDp, bottom = rimDp)) { Cover(item.cover, coverDp, item.title, border = false, decodeSize = 200.dp) }
-                            }
+                            Box(Modifier.width(spineDp).fillMaxHeight().background(Color(0x28FFFFFF)))
+                            if (tape) Box(Modifier.fillMaxSize().padding(start = spineDp, top = rimDp, end = rimDp, bottom = rimDp).background(p.sheet.copy(alpha = 0.85f))) { Cover(item.cover, tapeArtDp, item.title, border = false, decodeSize = 200.dp) }
+                            else Box(Modifier.padding(start = spineDp, top = rimDp, end = rimDp, bottom = rimDp)) { Cover(item.cover, coverDp, item.title, border = false, decodeSize = 200.dp) }
                             Box(Modifier.matchParentSize().graphicsLayer { val ad = abs(i - pos.value); val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat(); alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f) }.background(Color.Black))
                         }
                     } else Spacer(Modifier.height(reflH))
