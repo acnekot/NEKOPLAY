@@ -24,6 +24,38 @@ import kotlin.math.abs
 
 internal data class FlowItem(val key: String, val kind: String, val id: String, val title: String, val sub: String, val cover: String?, val presetTracks: List<Track>? = null)
 
+internal fun smoothStep(e0: Float, e1: Float, x: Float): Float { val t = ((x - e0) / (e1 - e0)).coerceIn(0f, 1f); return t * t * (3f - 2f * t) }
+
+/** 仅在外框边缘无缝挤出透明亚克力 3D 侧边厚度（绝不垫在透明外壳后面造成错位重影） */
+internal fun Modifier.cdThicknessEdge(dist: () -> Float, tiltX: () -> Float, tiltY: () -> Float, vis: () -> Float) = drawBehind {
+    val v = vis(); if (v <= 0.01f) return@drawBehind
+    val d = dist(); val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
+    val ex = kotlin.math.sign(d) * s * 6.5.dp.toPx() - tiltX() * 3.dp.toPx()
+    val ey = -tiltY() * 2.5.dp.toPx()
+    val side = Brush.verticalGradient(listOf(Color(0x6CE4EEFA).copy(alpha = 0.44f * v), Color(0x528292A8).copy(alpha = 0.34f * v), Color(0x5C202632).copy(alpha = 0.40f * v)))
+    val rim = Color.White.copy(alpha = 0.46f * v); val shd = Color.Black.copy(alpha = 0.36f * v)
+    if (ex > 0.5f) {
+        drawRect(side, Offset(size.width, 0f), Size(ex, size.height))
+        drawRect(rim, Offset(size.width + ex - 1f, 0f), Size(1f, size.height))
+        drawRect(rim, Offset(size.width, 0f), Size(ex, 1f))
+        drawRect(shd, Offset(size.width, size.height - 1.2f), Size(ex, 1.2f))
+    } else if (ex < -0.5f) {
+        val w = -ex
+        drawRect(side, Offset(-w, 0f), Size(w, size.height))
+        drawRect(rim, Offset(-w, 0f), Size(1f, size.height))
+        drawRect(rim, Offset(-w, 0f), Size(w, 1f))
+        drawRect(shd, Offset(-w, size.height - 1.2f), Size(w, 1.2f))
+    }
+    if (ey > 0.5f) {
+        drawRect(Color(0x448292A8).copy(alpha = 0.28f * v), Offset(0f, size.height), Size(size.width, ey))
+        drawRect(shd, Offset(0f, size.height + ey - 1f), Size(size.width, 1f))
+    } else if (ey < -0.5f) {
+        val h = -ey
+        drawRect(Color(0x58E4EEFA).copy(alpha = 0.36f * v), Offset(0f, -h), Size(size.width, h))
+        drawRect(rim, Offset(0f, -h), Size(size.width, 1f))
+    }
+}
+
 /** 外包式透明亚克力 CD 塑料壳前盖：左侧独立防滑脊柱条 + 四周透明边框完全包裹 1:1 封面，绝不遮挡画作 */
 @Composable internal fun CdCaseFrontLid(
     item: FlowItem, coverDp: Dp, spineDp: Dp, rimDp: Dp, isCenter: Boolean,

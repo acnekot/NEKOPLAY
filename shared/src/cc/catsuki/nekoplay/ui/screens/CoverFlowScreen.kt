@@ -290,15 +290,9 @@ import kotlin.math.sign
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    // 实体 CD 塑料盒：右侧托盘（翻开后露出完整曲目与微转光盘底纹）+ 沿左铰链 180° 翻开的透明前盖
+                    // 实体 CD 塑料盒：外侧无缝挤出透明亚克力侧边厚度 + 右侧托盘 + 沿左铰链 180° 翻开的透明前盖
                     val lidP = if (isCenter) smoothStep(0.02f, 0.72f, expandProg) else 0f
-                    Box(Modifier.size(caseW, caseH)) {
-                        Box(Modifier.matchParentSize().graphicsLayer {
-                            val d = i - pos.value; val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
-                            translationX = sign(d) * s * 6.5.dp.toPx() - tiltX.value * 4.dp.toPx()
-                            translationY = 1.5.dp.toPx() - tiltY.value * 2.dp.toPx()
-                            alpha = if (isCenter) (1f - smoothStep(0f, 0.55f, expandProg)) else 1f
-                        }.background(Brush.verticalGradient(listOf(Color(0x5CE4EEFA), Color(0x308292A8), Color(0x46202632)))).border(1.dp, Color(0x5CFFFFFF)))
+                    Box(Modifier.size(caseW, caseH).cdThicknessEdge({ i - pos.value }, { tiltX.value }, { tiltY.value }) { if (isCenter) (1f - smoothStep(0f, 0.45f, expandProg)) else 1f }) {
 
                         // 右侧 CD 托盘层（随前盖沿左铰链翻开自然显露，炫彩光盘随开合微转）
                         if (isCenter && expandProg > 0.02f) {
@@ -360,15 +354,18 @@ import kotlin.math.sign
                     if (ts.isNotEmpty()) { Engine.playList(ts, 0); nav.player = true } else nav.toast = "暂无可播曲目"
                 }
             }
-            if (ls) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) { T(curItem.title, 14, p.k, 800, lines = 1); T(curItem.sub, 11, p.s, lines = 1) }
-                Spacer(Modifier.width(8.dp))
-                Box(Modifier.press { playCurrent() }.background(p.p).padding(horizontal = 12.dp, vertical = 5.dp)) { T("播放", 11, Color.White, 700) }
-                Spacer(Modifier.width(6.dp))
-                Box(Modifier.press { expandedKey = if (expandedKey == curItem.key) null else curItem.key }.nbf(1.dp, p.k).padding(horizontal = 10.dp, vertical = 5.dp)) { T(if (isExpanded) "合上" else "翻开", 11, p.k, 600) }
+            if (ls) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                Column(Modifier.align(Alignment.Center).padding(horizontal = 112.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    T(curItem.title, 14, p.k, 800, lines = 1, align = TextAlign.Center)
+                    T(curItem.sub, 11, p.s, lines = 1, align = TextAlign.Center)
+                }
+                Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.press { playCurrent() }.background(p.p).padding(horizontal = 12.dp, vertical = 5.dp)) { T("播放", 11, Color.White, 700) }
+                    Box(Modifier.press { expandedKey = if (expandedKey == curItem.key) null else curItem.key }.nbf(1.dp, p.k).padding(horizontal = 10.dp, vertical = 5.dp)) { T(if (isExpanded) "合上" else "翻开", 11, p.k, 600) }
+                }
             } else Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 AnimatedContent(curItem, contentKey = { it.key }, transitionSpec = { fadeIn(Motion.quick()) togetherWith fadeOut(Motion.quick()) }, label = "cfMeta") { it ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         T(it.title, 18, p.k, 800, lines = 1, align = TextAlign.Center); Spacer(Modifier.height(2.dp)); T(it.sub, 12, p.s, 500, lines = 1, align = TextAlign.Center)
                     }
                 }
@@ -387,9 +384,4 @@ import kotlin.math.sign
             }
         }
     }
-}
-
-private fun smoothStep(e0: Float, e1: Float, x: Float): Float {
-    val t = ((x - e0) / (e1 - e0)).coerceIn(0f, 1f)
-    return t * t * (3f - 2f * t)
 }
