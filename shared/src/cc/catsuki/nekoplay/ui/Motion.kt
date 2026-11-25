@@ -1,5 +1,6 @@
 package cc.catsuki.nekoplay
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
@@ -7,12 +8,19 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 import kotlin.math.PI
 import kotlin.math.pow
@@ -58,6 +66,8 @@ data class MotionPluginProfile(
     val hoverTint: Boolean? = null,
     val pressScale: Float? = null,
     val pageScale: Boolean? = null,
+    val listStaggerMs: Int? = null,
+    val listSlideDp: Float? = null,
 ) {
     val displayName: String get() = if (presetLabel.isNotBlank()) "$pluginName · $presetLabel" else pluginName
 }
@@ -68,6 +78,8 @@ object MotionEffects {
     var userHoverTint by mutableStateOf(true)
     var userPressScale by mutableFloatStateOf(0.985f)
     var userPageScale by mutableStateOf(true)
+    var userListStaggerMs by mutableIntStateOf(24)
+    var userListSlideDp by mutableFloatStateOf(36f)
 
     var hoverShiftDp: Float
         get() = AnimStyle.pluginProfile?.hoverShiftDp ?: userHoverShiftDp
@@ -81,6 +93,12 @@ object MotionEffects {
     var pageScale: Boolean
         get() = AnimStyle.pluginProfile?.pageScale ?: userPageScale
         set(v) { userPageScale = v }
+    var listStaggerMs: Int
+        get() = AnimStyle.pluginProfile?.listStaggerMs ?: userListStaggerMs
+        set(v) { userListStaggerMs = v.coerceIn(0, 80) }
+    var listSlideDp: Float
+        get() = AnimStyle.pluginProfile?.listSlideDp ?: userListSlideDp
+        set(v) { userListSlideDp = v.coerceIn(0f, 80f) }
 
     private val k get() = Plat.prefs("ui")
     fun load() {
@@ -88,12 +106,15 @@ object MotionEffects {
         userHoverTint = k.getBoolean("me_hoverTint", true)
         userPressScale = k.getFloat("me_pressScale", 0.985f).coerceIn(0.92f, 1.0f)
         userPageScale = k.getBoolean("me_pageScale", true)
+        userListStaggerMs = k.getInt("me_listStagger", 24).coerceIn(0, 80)
+        userListSlideDp = k.getFloat("me_listSlide", 36f).coerceIn(0f, 80f)
     }
     fun save() {
         k.edit().putFloat("me_hoverShift", userHoverShiftDp).putBoolean("me_hoverTint", userHoverTint)
-            .putFloat("me_pressScale", userPressScale).putBoolean("me_pageScale", userPageScale).apply()
+            .putFloat("me_pressScale", userPressScale).putBoolean("me_pageScale", userPageScale)
+            .putInt("me_listStagger", userListStaggerMs).putFloat("me_listSlide", userListSlideDp).apply()
     }
-    fun reset() { userHoverShiftDp = 5f; userHoverTint = true; userPressScale = 0.985f; userPageScale = true; save() }
+    fun reset() { userHoverShiftDp = 5f; userHoverTint = true; userPressScale = 0.985f; userPageScale = true; userListStaggerMs = 24; userListSlideDp = 36f; save() }
 }
 
 /** 内置动效形式（纯基础原语）：0 弹簧 / 1 缓动 / 2 线性 / 3 关闭 / 4 自定义曲线；特色动效（如 osu!lazer）已独立为 @type motion 插件 */
@@ -171,6 +192,8 @@ object AnimStyle {
             hoverTint = fx?.takeIf { it.has("hoverTint") }?.optBoolean("hoverTint"),
             pressScale = fx?.takeIf { it.has("pressScale") }?.optDouble("pressScale", 0.985)?.toFloat()?.coerceIn(0.92f, 1.0f),
             pageScale = fx?.takeIf { it.has("pageScale") }?.optBoolean("pageScale"),
+            listStaggerMs = fx?.takeIf { it.has("listStaggerMs") }?.optInt("listStaggerMs", 24)?.coerceIn(0, 80),
+            listSlideDp = fx?.takeIf { it.has("listSlideDp") }?.optDouble("listSlideDp", 36.0)?.toFloat()?.coerceIn(0f, 80f),
         )
     }
 
@@ -350,3 +373,22 @@ object Motion {
 
 val sp: FiniteAnimationSpec<IntOffset> get() = Motion.hero()
 val spF: FiniteAnimationSpec<Float> get() = Motion.hero()
+
+/** osu! 风格列表逐项瀑布错峰入场协调器（同一波次 140ms 内连续挂载的列表项按序错峰，超过 16 项封顶不拖慢长列表滚动） */
+object ListStagger {
+    private var waveMs = 0L; private var slot = 0
+    fun nextDelayMs(): Long {
+        val step = MotionEffects.listStaggerMs; if (step <= 0 || AnimStyle.off) return 0L
+        val now = System.currentTimeMillis(); if (now - waveMs > 140L) { waveMs = now; slot = 0 }
+        val idx = slot++; return if (idx < 16) (idx * step / Anim.f).toLong() else 0L
+    }
+}
+
+/** 歌单 / 曲目逐项右滑留尾错峰入场（纯 GPU graphicsLayer，0 重组） */
+fun Modifier.cascadeEnter(): Modifier = composed {
+    val slideDp = MotionEffects.listSlideDp; val stagger = MotionEffects.listStaggerMs
+    if (AnimStyle.off || (stagger <= 0 && slideDp < 1f)) return@composed this
+    val prog = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { val d = ListStagger.nextDelayMs(); if (d > 0L) delay(d); prog.animateTo(1f, Motion.page()) }
+    this.graphicsLayer { val p = prog.value; alpha = p.coerceIn(0f, 1f); translationX = (1f - p) * slideDp.dp.toPx() }
+}

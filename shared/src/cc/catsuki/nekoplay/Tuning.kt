@@ -141,6 +141,14 @@ private val CURVE_PRESETS = listOf(
                 ParamSlider("按压缩放幅度（1.00 = 关闭）", MotionEffects.pressScale, 0.92f..1.00f, "%.3f".format(MotionEffects.pressScale), onDone = { MotionEffects.save() }) {
                     MotionEffects.pressScale = (it * 200f).roundToInt() / 200f
                 }
+                Spacer(Modifier.height(10.dp))
+                ParamSlider("歌单 / 曲目逐项入场间隔", MotionEffects.listStaggerMs.toFloat(), 0f..60f, if (MotionEffects.listStaggerMs == 0) "关" else "${MotionEffects.listStaggerMs} ms", onDone = { MotionEffects.save() }) {
+                    MotionEffects.listStaggerMs = (it / 2f).roundToInt() * 2
+                }
+                Spacer(Modifier.height(10.dp))
+                ParamSlider("歌单 / 曲目入场滑入距离", MotionEffects.listSlideDp, 0f..72f, if (MotionEffects.listSlideDp < 1f) "关" else "${MotionEffects.listSlideDp.toInt()} dp", onDone = { MotionEffects.save() }) {
+                    MotionEffects.listSlideDp = (it / 2f).roundToInt() * 2f
+                }
                 Spacer(Modifier.height(8.dp))
                 SwitchRow("悬停底色高亮", "鼠标滑过侧边栏导航或歌单项时显示柔和底色", MotionEffects.hoverTint) { MotionEffects.hoverTint = it; MotionEffects.save() }
                 SwitchRow("播放页 / 切页微缩放", "展开或收起播放页时叠加 0.96 → 1.00 的空间缩放过渡", MotionEffects.pageScale) { MotionEffects.pageScale = it; MotionEffects.save() }

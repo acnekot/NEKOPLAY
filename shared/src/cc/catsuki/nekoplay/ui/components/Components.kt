@@ -228,7 +228,8 @@ val LocalCompactAction = compositionLocalOf { false }
     val hovered by hSrc.collectIsHoveredAsState()
     val curAnim = animateFloatAsState(if (current) 1f else 0f, Motion.standard(), label = "trc")
     val hovAnim = animateFloatAsState(if (hovered && !current && MotionEffects.hoverTint) 1f else 0f, Motion.quick(), label = "trh")
-    Row(Modifier.fillMaxWidth().height(64.dp).hoverable(hSrc).press(onLong = onLong, onClick = onClick).drawBehind {
+    val hovShift = if (MotionEffects.hoverShiftDp > 0.1f && !AnimStyle.off) animateFloatAsState(if (hovered) MotionEffects.hoverShiftDp * 0.55f else 0f, Motion.standard(), label = "trs") else null
+    Row(Modifier.fillMaxWidth().height(64.dp).cascadeEnter().then(if (hovShift != null) Modifier.graphicsLayer { translationX = hovShift.value.dp.toPx() } else Modifier).hoverable(hSrc).press(onLong = onLong, onClick = onClick).drawBehind {
         val ext = 10.dp.toPx()
         val ca = curAnim.value
         val ha = hovAnim.value
