@@ -190,6 +190,8 @@ object Screen {
     var short by mutableStateOf(false)
     /** 窄屏（宽度 < 360dp，比如 iPhone SE 一代）：按钮文字缩小、少留边 */
     var narrow by mutableStateOf(false)
+    /** 手机横屏（非桌面端且宽大于高、高度 < 560dp）：用于横屏自动触发 3D 封面墙 */
+    var landscape by mutableStateOf(false)
 }
 
 /** 操作按钮行：手机占满一行；宽屏靠右，播放全部和随机播放一样大（和列表右侧的时长对齐） */

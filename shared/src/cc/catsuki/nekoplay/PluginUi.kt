@@ -19,7 +19,7 @@ private val CAP_NAMES = linkedMapOf(
     "search" to "搜索", "stream" to "播放", "lyric" to "歌词", "playlist" to "歌单", "album" to "专辑", "artist" to "歌手",
     "toplists" to "排行榜", "myPlaylists" to "我的歌单", "like" to "收藏", "loginQr" to "扫码登录", "loginWeb" to "网页登录",
     "daily" to "每日推荐", "fm" to "私人 FM", "comments" to "评论", "recMvs" to "MV", "hotRadios" to "电台", "cloud" to "云盘",
-    "onTrackChange" to "切歌监听", "onPlayState" to "播控监听", "transformLyric" to "歌词处理", "action" to "快捷动作",
+    "manifest" to "功能声明", "onTrackChange" to "切歌监听", "onPlayState" to "播控监听", "transformLyric" to "歌词处理", "action" to "快捷动作",
 )
 
 /** 设置 → 插件：分为「音源插件」与「功能插件」两类管理 */
@@ -101,7 +101,10 @@ private val CAP_NAMES = linkedMapOf(
                         Spacer(Modifier.width(14.dp))
                     }
                     if (on && s.isFeature && s.has("action")) {
-                        LinkBtn("执行", 13) { scope.launch { nav.toast = runCatching { Plugins.runFeatureAction(s.id, Engine.state.value.current) ?: "已执行" }.getOrElse { "执行失败：${it.message}" } } }
+                        LinkBtn("执行", 13) { scope.launch { runCatching { Plugins.runFeatureAction(s.id, Engine.state.value.current) }.onSuccess { r ->
+                            if (r?.open == "coverflow") nav.push(Page.CoverFlow)
+                            r?.message?.let { nav.toast = it }
+                        }.onFailure { nav.toast = "执行失败：${it.message}" } } }
                         Spacer(Modifier.width(14.dp))
                     }
                     LinkBtn("重新加载", 13) { scope.launch { s.close().join(); if (s.start()) nav.toast = "已重新加载" else nav.toast = "加载失败：${s.error}" } }

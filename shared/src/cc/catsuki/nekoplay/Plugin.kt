@@ -47,12 +47,14 @@ class JsSource(val file: File) {
     val id: String get() = meta["id"] ?: file.nameWithoutExtension
     val name: String get() = meta["name"] ?: id
     val version: String get() = meta["version"] ?: "0"
-    /** 插件类型：默认 source；支持 // @type feature 显式声明，未写时若仅实现了功能钩子也自动识别为功能插件 */
+    /** 功能插件绑定的扩展槽位标识（头注释 // @feature coverflow 等） */
+    val featureSlot: String get() = meta["feature"]?.lowercase()?.trim().orEmpty()
+    /** 插件类型：默认 source；支持 // @type feature 显式声明，未写时若声明了 @feature 或仅实现功能钩子也自动识别为功能插件 */
     val kind: PluginKind get() = when (meta["type"]?.lowercase()) {
         "feature", "ext", "extension", "tool" -> PluginKind.FEATURE
         "source", "music", "audio" -> PluginKind.SOURCE
-        else -> if (caps.isNotEmpty() && "stream" !in caps && "search" !in caps &&
-            listOf("onTrackChange", "onPlayState", "transformLyric", "action").any { it in caps }) PluginKind.FEATURE else PluginKind.SOURCE
+        else -> if (featureSlot.isNotEmpty() || (caps.isNotEmpty() && "stream" !in caps && "search" !in caps &&
+            listOf("manifest", "onTrackChange", "onPlayState", "transformLyric", "action").any { it in caps })) PluginKind.FEATURE else PluginKind.SOURCE
     }
     val isSource: Boolean get() = kind == PluginKind.SOURCE
     val isFeature: Boolean get() = kind == PluginKind.FEATURE
@@ -234,6 +236,7 @@ class JsSource(val file: File) {
               store: { get: (k) => { const v = __host.get(String(k)); return v == null ? null : JSON.parse(v); }, set: (k, v) => __host.set(String(k), v === undefined || v === null ? null : JSON.stringify(v)) },
               log: (...a) => __host.log(a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ')),
               register: (s) => { globalThis.source = s; },
+              registerFeature: (s) => { globalThis.source = s; },
             };
             globalThis.console = { log: nk.log, warn: nk.log, error: nk.log };
             globalThis.__caps = () => JSON.stringify(Object.keys(globalThis.source || {}).filter(k => typeof globalThis.source[k] === 'function'));

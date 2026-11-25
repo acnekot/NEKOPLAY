@@ -84,13 +84,15 @@ import kotlinx.coroutines.flow.map
         if (!Plat.isDesktop) Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             T("NEKOPLAY", Fs.HEAD, w = 900, ls = .02f, modifier = Modifier.press { nav.player = false; nav.stack.clear(); nav.tab = 0 })
         } else Spacer(Modifier.height(10.dp))
+        val allPlugs by Plugins.list.collectAsState()
+        val cfOn = remember(allPlugs, Plugins.off) { Plugins.hasFeature("coverflow") }
         val navIdx = when {
             nav.stack.isEmpty() && nav.tab == 0 -> 0
             nav.stack.isEmpty() && nav.tab == 1 -> 1
             top is Page.Search -> 2
             top is Page.Fm -> 3
             top is Page.Playlists && top.kind == "top" -> 4
-            top is Page.CoverFlow -> 5
+            cfOn && top is Page.CoverFlow -> 5
             else -> -1
         }
         val sliding = !AnimStyle.off
@@ -108,7 +110,7 @@ import kotlinx.coroutines.flow.map
                 SideItem(NIcons.search, "搜索", navIdx == 2, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Search) }
                 SideItem(NIcons.radio, "私人 FM", navIdx == 3, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Fm) }
                 SideItem(NIcons.chart, "发现 · 排行榜", navIdx == 4, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Playlists("top", "", "排行榜")) }
-                SideItem(NIcons.disc, "封面墙", navIdx == 5, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.CoverFlow) }
+                if (cfOn) SideItem(NIcons.disc, "封面墙", navIdx == 5, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.CoverFlow) }
             }
         }
         Spacer(Modifier.height(14.dp))

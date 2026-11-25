@@ -22,7 +22,11 @@ class PluginScriptsTest {
             try {
                 assertEquals(f.nameWithoutExtension, s.id, "${f.name} 的 @id 要和文件名一致")
                 assertTrue(s.name.isNotBlank() && Regex("""^\d+\.\d+\.\d+$""").matches(s.version), "${f.name} 要有 @name 和 x.y.z 的 @version")
-                assertTrue(s.has("search") && s.has("stream"), "${f.name} 至少要能搜索和播放：${s.caps}")
+                if (s.isFeature) {
+                    assertTrue(s.caps.isNotEmpty(), "${f.name} 功能插件至少要通过 nk.registerFeature 导出一个能力：${s.caps}")
+                } else {
+                    assertTrue(s.has("search") && s.has("stream"), "${f.name} 音源插件至少要能搜索和播放：${s.caps}")
+                }
             } finally { Plugins.delete(s.id) }
         }
     }

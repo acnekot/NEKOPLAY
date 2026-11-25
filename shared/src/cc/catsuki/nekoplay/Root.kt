@@ -142,6 +142,18 @@ object Boot {
     val err by Engine.error.collectAsState()
     val openPlayer by PlayerBus.openSeq.collectAsState()
     LaunchedEffect(openPlayer) { if (openPlayer > 0 && Engine.state.value.current != null) nav.player = true }
+    // 手机横屏且已启用 3D 封面墙功能插件时自动进入封面墙；转回竖屏自动退出
+    val allPlugs by Plugins.list.collectAsState()
+    val cfEnabled = remember(allPlugs, Plugins.off) { Plugins.hasFeature("coverflow") }
+    var autoCf by remember { mutableStateOf(false) }
+    LaunchedEffect(Screen.landscape, cfEnabled) {
+        if (Screen.landscape && cfEnabled) {
+            if (nav.stack.lastOrNull() != Page.CoverFlow) { nav.player = false; nav.push(Page.CoverFlow); autoCf = true }
+        } else if (!Screen.landscape && autoCf) {
+            if (nav.stack.lastOrNull() == Page.CoverFlow) nav.stack.removeAt(nav.stack.lastIndex)
+            autoCf = false
+        }
+    }
     LaunchedEffect(err) { if (err != null) { nav.toast = err; Engine.error.value = null } }
     LaunchedEffect(nav.toast) { if (nav.toast != null) { delay(2200); nav.toast = null } }
     Plat.impl.BackHandler(Updater.dialog != null || nav.input != null || nav.sheet != null || nav.comments != null || nav.menu || nav.queue || nav.player || nav.stack.isNotEmpty() || nav.tab == 1) {
@@ -156,10 +168,11 @@ object Boot {
         Box(Modifier.fillMaxSize().backdrop().onSizeChanged { sz ->
             val wDp = sz.width / dens.density
             val hDp = sz.height / dens.density
-            val w = wDp >= 900f; val sh = hDp < 720f; val nr = wDp < 360f
+            val w = wDp >= 900f; val sh = hDp < 720f; val nr = wDp < 360f; val ls = !Plat.isDesktop && wDp > hDp && hDp < 560f
             if (Screen.wide != w) Screen.wide = w
             if (Screen.short != sh) Screen.short = sh
             if (Screen.narrow != nr) Screen.narrow = nr
+            if (Screen.landscape != ls) Screen.landscape = ls
         }) {
             val wide = Screen.wide
             BgLayer()

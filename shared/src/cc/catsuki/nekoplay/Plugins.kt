@@ -49,6 +49,11 @@ object Plugins {
     /** 功能插件（全部 / 已启用） */
     val features get(): List<JsSource> { ensureLoaded(); return list.value.filter { it.isFeature } }
     val enabledFeatures get(): List<JsSource> { ensureLoaded(); return enabled.filter { it.isFeature } }
+    /** 是否启用了某个功能插件槽位（如 "coverflow"） */
+    fun hasFeature(slot: String): Boolean {
+        val key = slot.lowercase()
+        return enabledFeatures.any { it.featureSlot == key || it.id.equals(key, ignoreCase = true) }
+    }
 
     /** 向所有启用的功能插件派发轻量生命周期事件（如 onTrackChange / onPlayState） */
     fun emitEvent(fn: String, payload: JSONObject) {
@@ -78,15 +83,17 @@ object Plugins {
         }
         return cur
     }
+    /** 功能插件执行结果：可返回提示文案，或请求宿主打开指定功能页面（如 open = "coverflow"） */
+    data class ActionResult(val message: String? = null, val open: String? = null)
     /** 手动触发功能插件的 action(track) 动作 */
-    suspend fun runFeatureAction(id: String, track: Track?): String? {
+    suspend fun runFeatureAction(id: String, track: Track?): ActionResult? {
         val s = get(id)?.takeIf { on(it.id) && it.isFeature } ?: return null
         if (!s.start() || !s.has("action")) return null
         val tObj = track?.let { JSONObject().put("id", it.id).put("title", it.title).put("artist", it.artist).put("album", it.album) }
         return when (val r = s.call("action", tObj)) {
-            is JSONObject -> r.optString("message").ifEmpty { r.toString() }
-            is String -> r
-            else -> "已执行「${s.name}」"
+            is JSONObject -> ActionResult(r.optString("message").takeIf { it.isNotEmpty() }, r.optString("open").takeIf { it.isNotEmpty() })
+            is String -> ActionResult(r.takeIf { it.isNotEmpty() })
+            else -> ActionResult("已执行「${s.name}」")
         }
     }
     fun set(id: String, v: Boolean) { off = if (v) off - id else off + id; prefs.edit().putStringSet("off", off).apply(); if (!v) get(id)?.close()
