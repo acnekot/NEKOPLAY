@@ -424,7 +424,7 @@ class ExoAudio(private val c: Context) : Audio {
 
     override fun setRate(speed: Float, pitchLinked: Boolean) {
         val s = speed.coerceIn(0.25f, 6f)
-        main.post { player.playbackParameters = androidx.media3.common.PlaybackParameters(s, if (pitchLinked) s.coerceAtMost(3.2f) else 1f) }
+        android.os.Handler(android.os.Looper.getMainLooper()).post { exo.playbackParameters = androidx.media3.common.PlaybackParameters(s, if (pitchLinked) s.coerceAtMost(3.2f) else 1f) }
     }
 
     /**
