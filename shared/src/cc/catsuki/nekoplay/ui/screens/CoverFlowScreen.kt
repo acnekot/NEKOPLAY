@@ -42,9 +42,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sign
 
-private object CoverFlowStyle { var tape by mutableStateOf(false) }
-
-/** 经典 iOS 6 Apple Music Cover Flow 3D 封面墙：支持透明 CD 塑料壳 / 复古透明磁带双形态切换 + 镜面倒影 + 3D 旋身翻开看完整曲目 */
+/** 经典 iOS 6 Apple Music Cover Flow 3D 封面墙：外包式透明 CD 塑料壳 + 镜面倒影 + 惯性甩动 + 点击铰链翻开 CD 盒看完整曲目 */
 @Composable fun CoverFlowPage() {
     val nav = LocalNav.current
     val p = c
@@ -159,18 +157,7 @@ private object CoverFlowStyle { var tape by mutableStateOf(false) }
                     T(label, if (ls) 11 else 12, if (on) Color.White else p.k, 700)
                 }
             }
-            val tape = CoverFlowStyle.tape
             Spacer(Modifier.weight(1f))
-            // 外壳形态切换：透明 CD 塑料壳 / 复古透明磁带
-            Row(Modifier.padding(end = 10.dp).background(p.k.copy(alpha = 0.08f)).padding(2.dp)) {
-                listOf(false to "CD", true to "磁带").forEach { (isTape, lbl) ->
-                    val on = tape == isTape
-                    Box(Modifier.press { if (CoverFlowStyle.tape != isTape) { CoverFlowStyle.tape = isTape; expandedKey = null } }
-                        .background(if (on) p.p else Color.Transparent).padding(horizontal = if (ls) 8.dp else 10.dp, vertical = if (ls) 2.dp else 3.dp)) {
-                        T(lbl, if (ls) 10 else 11, if (on) Color.White else p.k, 700)
-                    }
-                }
-            }
             if (items.isNotEmpty()) T("${curIdx + 1} / ${items.size}", 11, p.s, 600, mono = true)
         }
 
@@ -242,19 +229,17 @@ private object CoverFlowStyle { var tape by mutableStateOf(false) }
                 else minOf(stageW * 0.44f, stageH * 0.56f).coerceIn(160f * density, 300f * density)
                 raw.toDp()
             }
-            val tape = CoverFlowStyle.tape
             val coverPx = with(LocalDensity.current) { coverDp.toPx() }
             val spineDp = (coverDp * 0.11f).coerceIn(14.dp, 28.dp)
             val rimDp = (coverDp * 0.018f).coerceIn(2.5.dp, 4.5.dp)
-            val tapeArtDp = coverDp * 0.84f
-            val caseW = if (tape) spineDp + tapeArtDp + rimDp else spineDp + coverDp + rimDp
-            val caseH = if (tape) tapeArtDp * 1.34f + rimDp * 2 else coverDp + rimDp * 2
+            val caseW = spineDp + coverDp + rimDp
+            val caseH = coverDp + rimDp * 2
             val caseWPx = with(LocalDensity.current) { caseW.toPx() }
             val caseHPx = with(LocalDensity.current) { caseH.toPx() }
             val maxOpenScale = if (caseWPx > 1f && caseHPx > 1f) minOf(stageW * 0.95f / (caseWPx * 2f), stageH * 0.95f / caseHPx).coerceIn(0.80f, 1.65f) else 1.40f
-            // 经典 iOS 6 几何参数：中心外壳无遮挡，两侧外缘靠前、内缘向内折向中心形成 V 型唱片/磁带架
-            val centerGapPx = if (tape) caseWPx * 0.86f else coverPx * 0.84f
-            val stackStepPx = if (tape) caseWPx * 0.24f else coverPx * 0.23f
+            // 经典 iOS 6 几何参数：中心 CD 盒无遮挡，两侧外缘靠前、内缘向内折向中心形成 V 型唱片架
+            val centerGapPx = coverPx * 0.84f
+            val stackStepPx = coverPx * 0.23f
             val reflH = caseH * 0.36f
 
             // 桌面左右各 5 张、移动端各 4 张，显著减少离屏合成与 GPU 填充率开销，稳定高帧率
@@ -311,18 +296,22 @@ private object CoverFlowStyle { var tape by mutableStateOf(false) }
                             alpha = if (isCenter) (1f - smoothStep(0f, 0.55f, expandProg)) else 1f
                         }.background(Brush.verticalGradient(listOf(Color(0x5CE4EEFA), Color(0x308292A8), Color(0x46202632)))).border(1.dp, Color(0x5CFFFFFF)))
 
-                        // 右侧托盘层（CD 炫彩光盘托盘 / 磁带 J-Card 双轴曲目卡）
+                        // 右侧 CD 托盘层（随前盖沿左铰链翻开自然显露，炫彩光盘随开合微转）
                         if (isCenter && expandProg > 0.02f) {
-                            val openDetail: () -> Unit = { when (item.kind) { "album" -> nav.push(Page.Album(item.id, item.title, item.cover)); "pl" -> nav.push(Page.Detail("pl", item.id, item.title, item.cover)); "lpl" -> nav.push(Page.Detail("lpl", item.id, item.title)); else -> item.presetTracks?.let { Engine.playList(it, 0); nav.player = true } } }
                             Box(Modifier.matchParentSize().graphicsLayer { alpha = smoothStep(0.10f, 0.58f, expandProg) }) {
-                                if (tape) CassetteTrayTracklist(item, sideTracks, sideLoading, ls || stageW < 640f * density, { expandProg }, { expandedKey = null }, openDetail)
-                                else CdTrayTracklist(item, sideTracks, sideLoading, ls || stageW < 640f * density, { expandProg }, { expandedKey = null }, openDetail)
+                                CdTrayTracklist(item, sideTracks, sideLoading, compact = ls || stageW < 640f * density, openProg = { expandProg }, onClose = { expandedKey = null }, onOpenDetail = {
+                                    when (item.kind) { "album" -> nav.push(Page.Album(item.id, item.title, item.cover)); "pl" -> nav.push(Page.Detail("pl", item.id, item.title, item.cover)); "lpl" -> nav.push(Page.Detail("lpl", item.id, item.title)); else -> item.presetTracks?.let { Engine.playList(it, 0); nav.player = true } }
+                                })
                             }
                         }
 
-                        // 透明亚克力前盖：以左缘铰链为轴翻开 -180°（支持 CD 塑料壳 / 复古透明磁带双形态）
+                        // 透明亚克力前盖：以左缘铰链为轴翻开 -180°（带旋转流光高光，前半程为外包封面，过 90° 后切为左盖内侧歌词本）
                         Box(Modifier.matchParentSize()
-                            .graphicsLayer { rotationY = -180f * lidP; transformOrigin = TransformOrigin(0f, 0.5f); cameraDistance = 18f * density }
+                            .graphicsLayer {
+                                rotationY = -180f * lidP
+                                transformOrigin = TransformOrigin(0f, 0.5f)
+                                cameraDistance = 18f * density
+                            }
                             .pointerInput(item.key, isCenter) {
                                 detectTapGestures {
                                     if (isCenter) expandedKey = if (expandedKey == item.key) null else item.key
@@ -331,25 +320,25 @@ private object CoverFlowStyle { var tape by mutableStateOf(false) }
                             }) {
                             val sweep = { kotlin.math.sin((lidP * kotlin.math.PI)).toFloat() }
                             if (!isCenter || lidP < 0.5f) {
-                                if (tape) CassetteFrontLid(item, tapeArtDp, spineDp, rimDp, isCenter, { i - pos.value }, { tiltX.value }, { tiltY.value }, sweep)
-                                else CdCaseFrontLid(item, coverDp, spineDp, rimDp, isCenter, { i - pos.value }, { tiltX.value }, { tiltY.value }, sweep)
+                                CdCaseFrontLid(item, coverDp, spineDp, rimDp, isCenter, { i - pos.value }, { tiltX.value }, { tiltY.value }, sweep)
                             } else {
-                                if (tape) CassetteInnerLid(item, tapeArtDp, spineDp, rimDp, sweep, onClose = { expandedKey = null })
-                                else CdCaseInnerLid(item, coverDp, spineDp, rimDp, sweep, onClose = { expandedKey = null })
+                                CdCaseInnerLid(item, coverDp, spineDp, rimDp, sweep, onClose = { expandedKey = null })
                             }
                         }
                     }
-                    // 轻量高效底部镜面倒影：自动匹配 CD 盒与竖版磁带盒的外框比例（翻开时平滑淡出）
+                    // 轻量高效底部镜面倒影：精确对齐外包 CD 盒尺寸与左脊柱（翻开 CD 盒时平滑淡出）
                     if (abs(i - curIdx) <= 3) Box(Modifier.size(caseW, reflH).clipToBounds()
-                        .graphicsLayer { alpha = if (isCenter) (1f - expandProg * 1.6f).coerceIn(0f, 1f) else 1f; compositingStrategy = CompositingStrategy.Offscreen }
+                        .graphicsLayer {
+                            alpha = if (isCenter) (1f - expandProg * 1.6f).coerceIn(0f, 1f) else 1f
+                            compositingStrategy = CompositingStrategy.Offscreen
+                        }
                         .drawWithContent {
                             drawContent()
                             drawRect(brush = reflMask, topLeft = Offset(-4f, -4f), size = Size(size.width + 8f, size.height + 8f), blendMode = BlendMode.DstIn)
                         }) {
                         Box(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).height(caseH).graphicsLayer { scaleY = -1f }.background(Color(0x1CFFFFFF)).border(1.dp, Color(0x38FFFFFF))) {
                             Box(Modifier.width(spineDp).fillMaxHeight().background(Color(0x28FFFFFF)))
-                            if (tape) Box(Modifier.fillMaxSize().padding(start = spineDp, top = rimDp, end = rimDp, bottom = rimDp).background(p.sheet.copy(alpha = 0.85f))) { Cover(item.cover, tapeArtDp, item.title, border = false, decodeSize = 200.dp) }
-                            else Box(Modifier.padding(start = spineDp, top = rimDp, end = rimDp, bottom = rimDp)) { Cover(item.cover, coverDp, item.title, border = false, decodeSize = 200.dp) }
+                            Box(Modifier.padding(start = spineDp, top = rimDp, end = rimDp, bottom = rimDp)) { Cover(item.cover, coverDp, item.title, border = false, decodeSize = 200.dp) }
                             Box(Modifier.matchParentSize().graphicsLayer { val ad = abs(i - pos.value); val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat(); alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f) }.background(Color.Black))
                         }
                     } else Spacer(Modifier.height(reflH))
@@ -382,7 +371,7 @@ private object CoverFlowStyle { var tape by mutableStateOf(false) }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.press { playCurrent() }.background(p.p).padding(horizontal = 16.dp, vertical = 7.dp)) { T("立即播放", 12, Color.White, 700) }
-                    Box(Modifier.press { expandedKey = if (expandedKey == curItem.key) null else curItem.key }.nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 7.dp)) { T(if (isExpanded) (if (CoverFlowStyle.tape) "合上磁带盒" else "合上 CD 盒") else (if (CoverFlowStyle.tape) "翻开磁带盒" else "翻开 CD 盒"), 12, p.k, 600) }
+                    Box(Modifier.press { expandedKey = if (expandedKey == curItem.key) null else curItem.key }.nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 7.dp)) { T(if (isExpanded) "合上 CD 盒" else "翻开 CD 盒", 12, p.k, 600) }
                     if (curItem.kind != "tracks") Box(Modifier.press {
                         when (curItem.kind) { "album" -> nav.push(Page.Album(curItem.id, curItem.title, curItem.cover)); "pl" -> nav.push(Page.Detail("pl", curItem.id, curItem.title, curItem.cover)); "lpl" -> nav.push(Page.Detail("lpl", curItem.id, curItem.title)) }
                     }.nbf(1.dp, p.l2).padding(horizontal = 14.dp, vertical = 7.dp)) { T("进入详情", 12, p.k, 600) }
@@ -394,4 +383,9 @@ private object CoverFlowStyle { var tape by mutableStateOf(false) }
             }
         }
     }
+}
+
+private fun smoothStep(e0: Float, e1: Float, x: Float): Float {
+    val t = ((x - e0) / (e1 - e0)).coerceIn(0f, 1f)
+    return t * t * (3f - 2f * t)
 }
