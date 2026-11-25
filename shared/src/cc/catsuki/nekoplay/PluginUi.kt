@@ -19,7 +19,7 @@ private val CAP_NAMES = linkedMapOf(
     "search" to "搜索", "stream" to "播放", "lyric" to "歌词", "playlist" to "歌单", "album" to "专辑", "artist" to "歌手",
     "toplists" to "排行榜", "myPlaylists" to "我的歌单", "like" to "收藏", "loginQr" to "扫码登录", "loginWeb" to "网页登录",
     "daily" to "每日推荐", "fm" to "私人 FM", "comments" to "评论", "recMvs" to "MV", "hotRadios" to "电台", "cloud" to "云盘",
-    "manifest" to "功能声明", "config" to "热更新配置", "render" to "独立页面", "onTrackChange" to "切歌监听", "onPlayState" to "播控监听", "transformLyric" to "歌词处理", "action" to "快捷动作",
+    "manifest" to "功能声明", "profile" to "动效引擎", "config" to "热更新配置", "render" to "独立页面", "onTrackChange" to "切歌监听", "onPlayState" to "播控监听", "transformLyric" to "歌词处理", "action" to "快捷动作",
 )
 
 /** 设置 → 插件：分为「音源插件」与「功能插件」两类管理 */
@@ -75,8 +75,9 @@ private val CAP_NAMES = linkedMapOf(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val badge = when (s.kind) { PluginKind.MOTION -> "动效"; PluginKind.PAGE -> "页面"; PluginKind.FEATURE -> "功能"; PluginKind.SOURCE -> "音源" }
                             Box(Modifier.background(if (s.isFeature) p.k else p.p).padding(horizontal = 5.dp, vertical = 1.dp)) {
-                                T(if (s.isFeature) "功能" else "音源", 9, if (s.isFeature) p.tagFg else androidx.compose.ui.graphics.Color.White, 800)
+                                T(badge, 9, if (s.isFeature) p.tagFg else androidx.compose.ui.graphics.Color.White, 800)
                             }
                             Spacer(Modifier.width(7.dp)); T(s.name, 16, if (on) p.k else p.s, 800)
                             Spacer(Modifier.width(8.dp)); T("v" + s.version, 11, p.s, mono = true)

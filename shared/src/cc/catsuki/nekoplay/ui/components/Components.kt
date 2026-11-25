@@ -80,7 +80,7 @@ import kotlinx.coroutines.launch
     val a = animateFloatAsState(if (down) .72f else 1f, if (AnimStyle.off) androidx.compose.animation.core.snap() else tween(if (down) 45 else Motion.standardMs, easing = AnimStyle.activeEasing), label = "a")
     val effScale = if (scale != 1f) scale else MotionEffects.pressScale
     val sc = if (effScale < 0.999f && !AnimStyle.off) animateFloatAsState(if (down) effScale else 1f,
-        if (AnimStyle.style != 0) tween(if (down) 45 else Motion.standardMs, easing = AnimStyle.activeEasing)
+        if (AnimStyle.pluginProfile != null || AnimStyle.style != 0) tween(if (down) 45 else Motion.standardMs, easing = AnimStyle.activeEasing)
         else spring(AnimStyle.springDamping, Anim.stiff(if (down) Spring.StiffnessHigh else AnimStyle.springStiffness)), label = "s") else null
     val h = LocalHapticFeedback.current
     return this.graphicsLayer { alpha = a.value; if (sc != null) { scaleX = sc.value; scaleY = sc.value } }.combinedClickable(src, null,

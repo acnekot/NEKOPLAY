@@ -127,7 +127,7 @@ import java.util.Calendar
                 }
             }
         }
-        item { NavRow("动效", "动画形式和速度", "${AnimStyle.labels[AnimStyle.style]} · ${Anim.labels[Anim.level]}") { nav.push(Page.Tuning) } }
+        item { NavRow("动效", "动画形式、曲线与动效插件", "${AnimStyle.activeLabel} · ${Anim.labels[Anim.level]}") { nav.push(Page.Tuning) } }
        }
        "layout" -> {
         item { NavRow("首页布局", "调整首页模块的顺序，或关掉不需要的", "${HomeLayout.visible.size}/${HomeLayout.ALL.size}") { nav.push(Page.HomeLayout) } }

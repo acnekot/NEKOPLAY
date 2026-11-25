@@ -25,7 +25,7 @@ import kotlin.math.roundToInt
 
 private data class CurvePreset(val name: String, val x1: Float, val y1: Float, val x2: Float, val y2: Float)
 private val CURVE_PRESETS = listOf(
-    CurvePreset("osu! 丝滑", 0.16f, 1.00f, 0.30f, 1.00f),
+    CurvePreset("长留尾缓出", 0.08f, 1.00f, 0.18f, 1.00f),
     CurvePreset("Apple 柔和", 0.25f, 0.10f, 0.25f, 1.00f),
     CurvePreset("Q 弹过冲", 0.34f, 1.42f, 0.64f, 1.00f),
     CurvePreset("Hydrogen", 0.40f, 0.00f, 0.12f, 1.00f),
@@ -55,7 +55,33 @@ private val CURVE_PRESETS = listOf(
         item { Column { Tag("MOTION"); Spacer(Modifier.height(4.dp)); T("动效与曲线", Fs.HERO, w = 800, lh = 1.3f); Spacer(Modifier.height(12.dp)); Rule() } }
 
         item {
-            SetLine("动效形式", "弹簧带物理回弹，缓动先快后慢，osu! 极速起手丝滑无回弹，自定义曲线可直接在下方可视化拖拽控制点") {
+            val mp = AnimStyle.pluginProfile
+            if (mp != null) {
+                Column(Modifier.fillMaxWidth().padding(top = 14.dp).background(p.p.copy(alpha = 0.10f)).nbf(1.dp, p.p.copy(alpha = 0.45f)).padding(14.dp)) {
+                    T("MOTION PLUGIN ACTIVE · 外置动效插件已接管", 10, p.p, 800, mono = true)
+                    Spacer(Modifier.height(4.dp))
+                    T(mp.displayName, 16, p.k, 800)
+                    T("当前所有页面切换、弹窗与微交互均由该动效插件实时驱动（仍受下方全局速度倍率控制）", 12, p.s, lines = 2)
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (Plugins.get(mp.pluginId)?.has("render") == true) Box(Modifier.press { nav.push(Page.PluginPage(mp.pluginId)) }.background(p.p).padding(horizontal = 12.dp, vertical = 6.dp)) { T("调整插件预设", 11, Color.White, 700) }
+                        Box(Modifier.press { Plugins.set(mp.pluginId, false); playPreview() }.nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 6.dp)) { T("停用并切回内置", 11, p.k, 600) }
+                        Box(Modifier.press { playPreview() }.nbf(1.dp, p.l2).padding(horizontal = 12.dp, vertical = 6.dp)) { T("试播留尾", 11, p.k, 600) }
+                    }
+                }
+            } else {
+                Row(Modifier.fillMaxWidth().padding(top = 12.dp).press { nav.push(Page.PluginMgr) }.background(p.sheet).nbf(1.dp, p.l2).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        T("需要 osu!lazer 等特色动效？", 13, p.k, 700)
+                        T("特色动效已按 Plugin API v2 拆分为独立动效插件，可在插件中心一键订阅安装与热更新", 11, p.s, lines = 2)
+                    }
+                    T("前往插件 →", 11, p.p, 700)
+                }
+            }
+        }
+
+        item {
+            SetLine("内置动效形式", "弹簧带物理回弹，缓动先快后慢，自定义曲线可直接在下方可视化拖拽控制点（启用动效插件时由插件优先接管）") {
                 ChipRow(AnimStyle.labels, AnimStyle.style) { AnimStyle.set(it); playPreview() }
             }
         }

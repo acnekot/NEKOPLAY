@@ -1,6 +1,5 @@
 package cc.catsuki.nekoplay
 
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
@@ -15,6 +14,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.IntOffset
 import org.json.JSONObject
+import kotlin.math.PI
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /** 全局动效速率档位：0 慢 / 1 标准 / 2 快 / 3 很快 */
 object Anim {
@@ -27,42 +30,83 @@ object Anim {
     fun set(v: Int) { level = v.coerceIn(0, labels.lastIndex); Plat.prefs("ui").edit().putInt("anim", level).apply() }
 }
 
-/**
- * 空间微交互令牌（与曲线/时间引擎 AnimStyle 完全解耦）：
- * 无论使用弹簧、缓动、osu! 还是自定义贝塞尔曲线，以下空间反馈均可独立开关与调参。
- */
+/** 单个动效通道（支持解析数学缓动、贝塞尔或弹簧物理），由内置模式或 @type motion 插件提供 */
+data class MotionChannel(
+    val easing: Easing,
+    val baseMs: Int,
+    val isSpring: Boolean = false,
+    val damping: Float = 0.85f,
+    val stiffness: Float = 400f,
+) {
+    fun scaledMs(): Int = (baseMs / Anim.f).toInt().coerceAtLeast(1)
+    fun <T> spec(): FiniteAnimationSpec<T> =
+        if (isSpring) spring(dampingRatio = damping, stiffness = Anim.stiff(stiffness))
+        else tween(scaledMs(), easing = easing)
+}
+
+/** 由外部 @type motion 插件（如 osu_motion.js）下发的完整规范化动效配置包 */
+data class MotionPluginProfile(
+    val pluginId: String,
+    val pluginName: String,
+    val presetLabel: String,
+    val quick: MotionChannel,
+    val standard: MotionChannel,
+    val page: MotionChannel,
+    val crossfade: MotionChannel,
+    val hero: MotionChannel,
+    val hoverShiftDp: Float? = null,
+    val hoverTint: Boolean? = null,
+    val pressScale: Float? = null,
+    val pageScale: Boolean? = null,
+) {
+    val displayName: String get() = if (presetLabel.isNotBlank()) "$pluginName · $presetLabel" else pluginName
+}
+
+/** 空间微交互令牌（与曲线/时间引擎完全解耦；启用动效插件时自动读取插件建议值，关闭插件立刻还原用户原值） */
 object MotionEffects {
-    /** 鼠标悬停侧边栏 / 列表项时的横向微位移（dp，0 = 关闭） */
-    var hoverShiftDp by mutableFloatStateOf(5f)
-    /** 鼠标悬停时的轻底色高亮 */
-    var hoverTint by mutableStateOf(true)
-    /** 按下控件时的默认缩放比例（1.00 = 关闭按压缩放） */
-    var pressScale by mutableFloatStateOf(0.985f)
-    /** 播放页 / 面板 / 页面切换时是否叠加空间缩放与视差 */
-    var pageScale by mutableStateOf(true)
+    var userHoverShiftDp by mutableFloatStateOf(5f)
+    var userHoverTint by mutableStateOf(true)
+    var userPressScale by mutableFloatStateOf(0.985f)
+    var userPageScale by mutableStateOf(true)
+
+    var hoverShiftDp: Float
+        get() = AnimStyle.pluginProfile?.hoverShiftDp ?: userHoverShiftDp
+        set(v) { userHoverShiftDp = v.coerceIn(0f, 12f) }
+    var hoverTint: Boolean
+        get() = AnimStyle.pluginProfile?.hoverTint ?: userHoverTint
+        set(v) { userHoverTint = v }
+    var pressScale: Float
+        get() = AnimStyle.pluginProfile?.pressScale ?: userPressScale
+        set(v) { userPressScale = v.coerceIn(0.92f, 1.0f) }
+    var pageScale: Boolean
+        get() = AnimStyle.pluginProfile?.pageScale ?: userPageScale
+        set(v) { userPageScale = v }
 
     private val k get() = Plat.prefs("ui")
     fun load() {
-        hoverShiftDp = k.getFloat("me_hoverShift", 5f).coerceIn(0f, 12f)
-        hoverTint = k.getBoolean("me_hoverTint", true)
-        pressScale = k.getFloat("me_pressScale", 0.985f).coerceIn(0.92f, 1.0f)
-        pageScale = k.getBoolean("me_pageScale", true)
+        userHoverShiftDp = k.getFloat("me_hoverShift", 5f).coerceIn(0f, 12f)
+        userHoverTint = k.getBoolean("me_hoverTint", true)
+        userPressScale = k.getFloat("me_pressScale", 0.985f).coerceIn(0.92f, 1.0f)
+        userPageScale = k.getBoolean("me_pageScale", true)
     }
     fun save() {
-        k.edit().putFloat("me_hoverShift", hoverShiftDp).putBoolean("me_hoverTint", hoverTint)
-            .putFloat("me_pressScale", pressScale).putBoolean("me_pageScale", pageScale).apply()
+        k.edit().putFloat("me_hoverShift", userHoverShiftDp).putBoolean("me_hoverTint", userHoverTint)
+            .putFloat("me_pressScale", userPressScale).putBoolean("me_pageScale", userPageScale).apply()
     }
-    fun reset() { hoverShiftDp = 5f; hoverTint = true; pressScale = 0.985f; pageScale = true; save() }
+    fun reset() { userHoverShiftDp = 5f; userHoverTint = true; userPressScale = 0.985f; userPageScale = true; save() }
 }
 
-/** 动效形式（纯时间与缓动曲线层）：0 弹簧 / 1 缓动 / 2 线性 / 3 关闭 / 4 osu! / 5 自定义曲线 */
+/** 内置动效形式（纯基础原语）：0 弹簧 / 1 缓动 / 2 线性 / 3 关闭 / 4 自定义曲线；特色动效（如 osu!lazer）已独立为 @type motion 插件 */
 object AnimStyle {
-    val labels = listOf("弹簧", "缓动", "线性", "关闭", "osu!", "自定义曲线")
+    val labels = listOf("弹簧", "缓动", "线性", "关闭", "自定义曲线")
     var style by mutableIntStateOf(0)
+    /** 当前生效的外部 @type motion 插件配置（非空且未处于「关闭」模式时接管全局 Motion） */
+    var pluginProfile by mutableStateOf<MotionPluginProfile?>(null); private set
+
     // 自定义贝塞尔曲线控制点（支持 y 轴 -0.45..1.45 过冲）
-    var x1 by mutableFloatStateOf(0.16f)
+    var x1 by mutableFloatStateOf(0.22f)
     var y1 by mutableFloatStateOf(1.00f)
-    var x2 by mutableFloatStateOf(0.30f)
+    var x2 by mutableFloatStateOf(0.36f)
     var y2 by mutableFloatStateOf(1.00f)
     // 自定义弹簧物理参数
     var springDamping by mutableFloatStateOf(0.85f)
@@ -73,35 +117,76 @@ object AnimStyle {
     var pageBaseMs by mutableIntStateOf(320)
     var crossfadeBaseMs by mutableIntStateOf(400)
 
-    val osu get() = style == 4
     val off get() = style == 3
-    val custom get() = style == 5
+    val custom get() = style == 4
+    val activeLabel: String get() = if (off) labels[3] else pluginProfile?.displayName ?: labels[style]
+
     private var cachedKey = ""
-    private var cachedEasing: Easing = SmoothBezierEasing(0.16f, 1.00f, 0.30f, 1.00f)
+    private var cachedEasing: Easing = SmoothBezierEasing(0.22f, 1.00f, 0.36f, 1.00f)
     val customEasing: Easing get() {
         val a = x1.coerceIn(0f, 1f); val b = y1.coerceIn(-0.45f, 1.45f)
         val c = x2.coerceIn(0f, 1f); val d = y2.coerceIn(-0.45f, 1.45f)
         val key = "$a,$b,$c,$d"
-        if (key != cachedKey) {
-            cachedKey = key
-            cachedEasing = SmoothBezierEasing(a, b, c, d)
-        }
+        if (key != cachedKey) { cachedKey = key; cachedEasing = SmoothBezierEasing(a, b, c, d) }
         return cachedEasing
     }
-    val activeEasing: Easing get() = when (style) {
+    val activeEasing: Easing get() = pluginProfile?.standard?.easing ?: when (style) {
         2 -> LinearEasing
-        4 -> OsuOut
-        5 -> customEasing
+        4 -> customEasing
         else -> FastOutSlowInEasing
+    }
+
+    /** 接收 @type motion 插件的 profile() JSON 并解析为原生 120fps 动效通道 */
+    fun applyPlugin(pair: Pair<JsSource, JSONObject>?) {
+        if (pair == null) { pluginProfile = null; return }
+        val (src, o) = pair
+        val fx = o.optJSONObject("effects")
+        fun ch(key: String, defEase: Easing, defMs: Int): MotionChannel {
+            val c = o.optJSONObject(key) ?: return MotionChannel(defEase, defMs)
+            val ms = c.optInt("ms", defMs).coerceIn(40, 1200)
+            val easeName = c.optString("easing", "").lowercase()
+            if (easeName == "spring") {
+                return MotionChannel(FastOutSlowInEasing, ms, isSpring = true,
+                    damping = c.optDouble("damping", 0.82).toFloat().coerceIn(0.3f, 1f),
+                    stiffness = c.optDouble("stiffness", 420.0).toFloat().coerceIn(80f, 1400f))
+            }
+            val easing = if (easeName == "bezier" || c.has("x1")) {
+                SmoothBezierEasing(
+                    c.optDouble("x1", 0.16).toFloat(), c.optDouble("y1", 1.0).toFloat(),
+                    c.optDouble("x2", 0.30).toFloat(), c.optDouble("y2", 1.0).toFloat(),
+                )
+            } else MotionEasings.byName(easeName, defEase)
+            return MotionChannel(easing, ms)
+        }
+        pluginProfile = MotionPluginProfile(
+            pluginId = src.id,
+            pluginName = o.optString("name").ifBlank { src.name },
+            presetLabel = o.optString("presetLabel"),
+            quick = ch("quick", MotionEasings.OutExpo, 140),
+            standard = ch("standard", MotionEasings.OutQuint, 300),
+            page = ch("page", MotionEasings.OutQuint, 420),
+            crossfade = ch("crossfade", MotionEasings.OutQuint, 460),
+            hero = ch("hero", MotionEasings.OutElasticQuarter, 440),
+            hoverShiftDp = fx?.takeIf { it.has("hoverShiftDp") }?.optDouble("hoverShiftDp", 5.0)?.toFloat()?.coerceIn(0f, 12f),
+            hoverTint = fx?.takeIf { it.has("hoverTint") }?.optBoolean("hoverTint"),
+            pressScale = fx?.takeIf { it.has("pressScale") }?.optDouble("pressScale", 0.985)?.toFloat()?.coerceIn(0.92f, 1.0f),
+            pageScale = fx?.takeIf { it.has("pageScale") }?.optBoolean("pageScale"),
+        )
     }
 
     private val k get() = Plat.prefs("ui")
     fun load() {
         Anim.load()
-        style = k.getInt("animStyle", 0).coerceIn(0, labels.lastIndex)
-        x1 = k.getFloat("anim_x1", 0.16f).coerceIn(0f, 1f)
+        val raw = k.getInt("animStyle", 0)
+        // 平滑迁移旧版索引（原 4=内置osu! 已拆为插件，原 5=自定义曲线 顺移为 4）
+        style = when {
+            raw == 5 -> 4
+            raw == 4 && !k.getBoolean("anim_v2_migrated", false) -> { k.edit().putBoolean("anim_v2_migrated", true).putInt("animStyle", 0).apply(); 0 }
+            else -> raw.coerceIn(0, labels.lastIndex)
+        }
+        x1 = k.getFloat("anim_x1", 0.22f).coerceIn(0f, 1f)
         y1 = k.getFloat("anim_y1", 1.00f).coerceIn(-0.45f, 1.45f)
-        x2 = k.getFloat("anim_x2", 0.30f).coerceIn(0f, 1f)
+        x2 = k.getFloat("anim_x2", 0.36f).coerceIn(0f, 1f)
         y2 = k.getFloat("anim_y2", 1.00f).coerceIn(-0.45f, 1.45f)
         springDamping = k.getFloat("anim_sd", 0.85f).coerceIn(0.35f, 1f)
         springStiffness = k.getFloat("anim_ss", 400f).coerceIn(100f, 1200f)
@@ -112,7 +197,7 @@ object AnimStyle {
         MotionEffects.load()
     }
     fun save() {
-        k.edit().putInt("animStyle", style)
+        k.edit().putBoolean("anim_v2_migrated", true).putInt("animStyle", style)
             .putFloat("anim_x1", x1).putFloat("anim_y1", y1).putFloat("anim_x2", x2).putFloat("anim_y2", y2)
             .putFloat("anim_sd", springDamping).putFloat("anim_ss", springStiffness)
             .putInt("anim_ms_q", quickBaseMs).putInt("anim_ms_s", standardBaseMs)
@@ -121,25 +206,24 @@ object AnimStyle {
     fun set(v: Int) { style = v.coerceIn(0, labels.lastIndex); save() }
     fun setCurve(a: Float, b: Float, c: Float, d: Float, switchCustom: Boolean = true, persist: Boolean = true) {
         x1 = a.coerceIn(0f, 1f); y1 = b.coerceIn(-0.45f, 1.45f); x2 = c.coerceIn(0f, 1f); y2 = d.coerceIn(-0.45f, 1.45f)
-        if (switchCustom) style = 5
+        if (switchCustom) style = 4
         if (persist) save()
     }
     fun reset() {
         style = 0; Anim.set(1)
-        x1 = 0.16f; y1 = 1f; x2 = 0.30f; y2 = 1f
+        x1 = 0.22f; y1 = 1f; x2 = 0.36f; y2 = 1f
         springDamping = 0.85f; springStiffness = 400f
         quickBaseMs = 120; standardBaseMs = 240; pageBaseMs = 320; crossfadeBaseMs = 400
-        save()
-        MotionEffects.reset()
+        save(); MotionEffects.reset()
     }
     fun exportJson(): String = JSONObject()
-        .put("format", "nekoplay-motion-v1")
+        .put("format", "nekoplay-motion-v2")
         .put("style", style).put("speedLevel", Anim.level)
         .put("x1", x1.toDouble()).put("y1", y1.toDouble()).put("x2", x2.toDouble()).put("y2", y2.toDouble())
         .put("springDamping", springDamping.toDouble()).put("springStiffness", springStiffness.toDouble())
         .put("quickMs", quickBaseMs).put("standardMs", standardBaseMs).put("pageMs", pageBaseMs).put("crossfadeMs", crossfadeBaseMs)
-        .put("hoverShiftDp", MotionEffects.hoverShiftDp.toDouble()).put("hoverTint", MotionEffects.hoverTint)
-        .put("pressScale", MotionEffects.pressScale.toDouble()).put("pageScale", MotionEffects.pageScale)
+        .put("hoverShiftDp", MotionEffects.userHoverShiftDp.toDouble()).put("hoverTint", MotionEffects.userHoverTint)
+        .put("pressScale", MotionEffects.userPressScale.toDouble()).put("pageScale", MotionEffects.userPageScale)
         .toString(2)
     fun importJson(raw: String) {
         val o = JSONObject(raw.trim())
@@ -155,89 +239,113 @@ object AnimStyle {
         if (o.has("standardMs")) standardBaseMs = o.optInt("standardMs", standardBaseMs).coerceIn(80, 600)
         if (o.has("pageMs")) pageBaseMs = o.optInt("pageMs", pageBaseMs).coerceIn(100, 800)
         if (o.has("crossfadeMs")) crossfadeBaseMs = o.optInt("crossfadeMs", crossfadeBaseMs).coerceIn(100, 1000)
-        if (o.has("hoverShiftDp")) MotionEffects.hoverShiftDp = o.optDouble("hoverShiftDp", MotionEffects.hoverShiftDp.toDouble()).toFloat().coerceIn(0f, 12f)
-        if (o.has("hoverTint")) MotionEffects.hoverTint = o.optBoolean("hoverTint", MotionEffects.hoverTint)
-        if (o.has("pressScale")) MotionEffects.pressScale = o.optDouble("pressScale", MotionEffects.pressScale.toDouble()).toFloat().coerceIn(0.92f, 1.0f)
-        if (o.has("pageScale")) MotionEffects.pageScale = o.optBoolean("pageScale", MotionEffects.pageScale)
+        if (o.has("hoverShiftDp")) MotionEffects.hoverShiftDp = o.optDouble("hoverShiftDp", MotionEffects.userHoverShiftDp.toDouble()).toFloat()
+        if (o.has("hoverTint")) MotionEffects.hoverTint = o.optBoolean("hoverTint", MotionEffects.userHoverTint)
+        if (o.has("pressScale")) MotionEffects.pressScale = o.optDouble("pressScale", MotionEffects.userPressScale.toDouble()).toFloat()
+        if (o.has("pageScale")) MotionEffects.pageScale = o.optBoolean("pageScale", MotionEffects.userPageScale)
         save(); MotionEffects.save()
     }
     val ms get() = (pageBaseMs / Anim.f).toInt().coerceAtLeast(1)
-    val osuMs get() = ((pageBaseMs + 40) / Anim.f).toInt().coerceAtLeast(1)
 }
 
-/**
- * 64 位双精度三次贝塞尔缓动（牛顿迭代 + 二分兜底，精度 1e-7）：
- * 消除极端控制点（x 贴近 0/1 或 y 过冲）在末帧收敛跳变导致的顿挫卡顿。
- */
-data class SmoothBezierEasing(val x1: Float, val y1: Float, val x2: Float, val y2: Float) : Easing {
-    private val ax = x1.toDouble().coerceIn(0.0, 1.0)
-    private val ay = y1.toDouble()
-    private val bx = x2.toDouble().coerceIn(0.0, 1.0)
-    private val by = y2.toDouble()
-    private val cx = 3.0 * ax
-    private val bxC = 3.0 * (bx - ax) - cx
-    private val axC = 1.0 - cx - bxC
-    private val cy = 3.0 * ay
-    private val byC = 3.0 * (by - ay) - cy
-    private val ayC = 1.0 - cy - byC
+/** 标准数学解析缓动库（零 GC 60/120fps，供 @type motion 插件精确声明 OutQuint / OutExpo / OutPow10 / OutElastic 等曲线） */
+object MotionEasings {
+    val OutQuad = Easing { t -> val u = 1f - t; 1f - u * u }
+    val OutCubic = Easing { t -> val u = 1f - t; 1f - u * u * u }
+    val OutQuart = Easing { t -> val u = 1f - t; 1f - u * u * u * u }
+    val OutQuint = Easing { t -> val u = 1f - t; 1f - u * u * u * u * u }
+    val OutPow10 = Easing { t -> val u = (1.0 - t.toDouble()); (1.0 - u.pow(10.0)).toFloat() }
+    /** 归一化 OutExpo / OutExpoTail：前 20% 时间瞬间冲出 80%+，后 80% 形成超长丝滑留尾且末帧 0 跳变 */
+    private val expo10Norm = 1.0 / (1.0 - 2.0.pow(-10.0))
+    private val expo12Norm = 1.0 / (1.0 - 2.0.pow(-12.0))
+    val OutExpo = Easing { t -> if (t >= 1f) 1f else if (t <= 0f) 0f else ((1.0 - 2.0.pow(-10.0 * t)) * expo10Norm).toFloat() }
+    val OutExpoTail = Easing { t -> if (t >= 1f) 1f else if (t <= 0f) 0f else ((1.0 - 2.0.pow(-12.0 * t)) * expo12Norm).toFloat() }
+    val OutCirc = Easing { t -> val u = t - 1f; sqrt((1f - u * u).coerceAtLeast(0f)) }
+    val OutBack = Easing { t -> val u = t - 1f; 1f + 2.70158f * u * u * u + 1.70158f * u * u }
+    val OutElasticHalf = Easing { t ->
+        if (t <= 0f) 0f else if (t >= 1f) 1f
+        else (2.0.pow(-10.0 * t) * sin((0.5 * t - 0.075) * (2.0 * PI) / 0.3) + 1.0).toFloat()
+    }
+    val OutElasticQuarter = Easing { t ->
+        if (t <= 0f) 0f else if (t >= 1f) 1f
+        else (2.0.pow(-10.0 * t) * sin((0.25 * t - 0.075) * (2.0 * PI) / 0.3) + 1.0).toFloat()
+    }
+    val InOutCubic = Easing { t -> if (t < 0.5f) 4f * t * t * t else 1f - (-2f * t + 2f).let { it * it * it } / 2f }
+    val InOutQuint = Easing { t -> if (t < 0.5f) 16f * t * t * t * t * t else 1f - (-2f * t + 2f).let { it * it * it * it * it } / 2f }
 
+    fun byName(name: String, fallback: Easing): Easing = when (name.lowercase()) {
+        "linear" -> LinearEasing
+        "outquad" -> OutQuad
+        "outcubic" -> OutCubic
+        "outquart" -> OutQuart
+        "outquint" -> OutQuint
+        "outpow10" -> OutPow10
+        "outexpo" -> OutExpo
+        "outexpotail" -> OutExpoTail
+        "outcirc" -> OutCirc
+        "outback" -> OutBack
+        "outelastichalf" -> OutElasticHalf
+        "outelasticquarter" -> OutElasticQuarter
+        "inoutcubic" -> InOutCubic
+        "inoutquint" -> InOutQuint
+        "fastoutslowin" -> FastOutSlowInEasing
+        "decelout" -> DecelOut
+        else -> fallback
+    }
+}
+
+/** 64 位双精度三次贝塞尔缓动（牛顿迭代 + 二分兜底，精度 1e-7）：消除极端控制点末帧跳变顿挫 */
+data class SmoothBezierEasing(val x1: Float, val y1: Float, val x2: Float, val y2: Float) : Easing {
+    private val ax = x1.toDouble().coerceIn(0.0, 1.0); private val ay = y1.toDouble()
+    private val bx = x2.toDouble().coerceIn(0.0, 1.0); private val by = y2.toDouble()
+    private val cx = 3.0 * ax; private val bxC = 3.0 * (bx - ax) - cx; private val axC = 1.0 - cx - bxC
+    private val cy = 3.0 * ay; private val byC = 3.0 * (by - ay) - cy; private val ayC = 1.0 - cy - byC
     private fun sampleX(t: Double) = ((axC * t + bxC) * t + cx) * t
     private fun sampleY(t: Double) = ((ayC * t + byC) * t + cy) * t
     private fun sampleDerivX(t: Double) = (3.0 * axC * t + 2.0 * bxC) * t + cx
-
     override fun transform(fraction: Float): Float {
-        if (fraction <= 0f) return 0f
-        if (fraction >= 1f) return 1f
-        val x = fraction.toDouble()
-        var t = x
+        if (fraction <= 0f) return 0f; if (fraction >= 1f) return 1f
+        val x = fraction.toDouble(); var t = x
         for (i in 0 until 8) {
-            val err = sampleX(t) - x
-            if (kotlin.math.abs(err) < 1e-7) return sampleY(t).toFloat()
-            val d = sampleDerivX(t)
-            if (kotlin.math.abs(d) < 1e-7) break
+            val err = sampleX(t) - x; if (kotlin.math.abs(err) < 1e-7) return sampleY(t).toFloat()
+            val d = sampleDerivX(t); if (kotlin.math.abs(d) < 1e-7) break
             t = (t - err / d).coerceIn(0.0, 1.0)
         }
-        var lo = 0.0; var hi = 1.0
-        t = x
+        var lo = 0.0; var hi = 1.0; t = x
         repeat(24) {
-            val cur = sampleX(t)
-            if (kotlin.math.abs(cur - x) < 1e-7) return sampleY(t).toFloat()
-            if (cur < x) lo = t else hi = t
-            t = 0.5 * (lo + hi)
+            val cur = sampleX(t); if (kotlin.math.abs(cur - x) < 1e-7) return sampleY(t).toFloat()
+            if (cur < x) lo = t else hi = t; t = 0.5 * (lo + hi)
         }
         return sampleY(t).toFloat()
     }
 }
 
-/** osu! 招牌 OutExpo/OutQuint 缓出曲线：瞬间冲出、长尾丝滑刹停、零回弹 */
-val OsuOut = SmoothBezierEasing(0.16f, 1f, 0.3f, 1f)
 val DecelOut = SmoothBezierEasing(0f, 0f, 0.2f, 1f)
 
-/**
- * 统一动效令牌（所有 UI 组件统一消费此层，禁止散落硬编码 tween/spring 或曲线分支）：
- */
+/** 统一动效令牌（所有 UI 组件统一消费；当启用 @type motion 插件时自动由插件各通道接管） */
 object Motion {
-    val quickMs get() = if (AnimStyle.off) 0 else (AnimStyle.quickBaseMs / Anim.f).toInt().coerceAtLeast(1)
-    val standardMs get() = if (AnimStyle.off) 0 else (AnimStyle.standardBaseMs / Anim.f).toInt().coerceAtLeast(1)
-    val pageMs get() = if (AnimStyle.off) 0 else (AnimStyle.pageBaseMs / Anim.f).toInt().coerceAtLeast(1)
-    val crossfadeMs get() = if (AnimStyle.off) 0 else (AnimStyle.crossfadeBaseMs / Anim.f).toInt().coerceAtLeast(1)
+    val quickMs get() = if (AnimStyle.off) 0 else AnimStyle.pluginProfile?.quick?.scaledMs() ?: (AnimStyle.quickBaseMs / Anim.f).toInt().coerceAtLeast(1)
+    val standardMs get() = if (AnimStyle.off) 0 else AnimStyle.pluginProfile?.standard?.scaledMs() ?: (AnimStyle.standardBaseMs / Anim.f).toInt().coerceAtLeast(1)
+    val pageMs get() = if (AnimStyle.off) 0 else AnimStyle.pluginProfile?.page?.scaledMs() ?: (AnimStyle.pageBaseMs / Anim.f).toInt().coerceAtLeast(1)
+    val crossfadeMs get() = if (AnimStyle.off) 0 else AnimStyle.pluginProfile?.crossfade?.scaledMs() ?: (AnimStyle.crossfadeBaseMs / Anim.f).toInt().coerceAtLeast(1)
 
     fun <T> quick(): FiniteAnimationSpec<T> =
         if (AnimStyle.off) snap()
-        else tween(quickMs, easing = if (AnimStyle.style in listOf(2, 4, 5)) AnimStyle.activeEasing else DecelOut)
+        else AnimStyle.pluginProfile?.quick?.spec() ?: tween(quickMs, easing = if (AnimStyle.style in listOf(2, 4)) AnimStyle.activeEasing else DecelOut)
     fun <T> standard(): FiniteAnimationSpec<T> =
         if (AnimStyle.off) snap()
-        else tween(standardMs, easing = AnimStyle.activeEasing)
+        else AnimStyle.pluginProfile?.standard?.spec() ?: tween(standardMs, easing = AnimStyle.activeEasing)
     fun <T> page(): FiniteAnimationSpec<T> =
         if (AnimStyle.off) snap()
-        else tween(pageMs, easing = AnimStyle.activeEasing)
+        else AnimStyle.pluginProfile?.page?.spec() ?: tween(pageMs, easing = AnimStyle.activeEasing)
     fun <T> crossfade(): FiniteAnimationSpec<T> =
         if (AnimStyle.off) snap()
-        else tween(crossfadeMs, easing = AnimStyle.activeEasing)
+        else AnimStyle.pluginProfile?.crossfade?.spec() ?: tween(crossfadeMs, easing = AnimStyle.activeEasing)
     fun <T> hero(): FiniteAnimationSpec<T> =
         if (AnimStyle.off) snap()
-        else if (AnimStyle.style != 0) tween(pageMs, easing = AnimStyle.activeEasing)
-        else spring(dampingRatio = AnimStyle.springDamping, stiffness = Anim.stiff(AnimStyle.springStiffness))
+        else AnimStyle.pluginProfile?.hero?.spec()
+            ?: if (AnimStyle.style != 0) tween(pageMs, easing = AnimStyle.activeEasing)
+            else spring(dampingRatio = AnimStyle.springDamping, stiffness = Anim.stiff(AnimStyle.springStiffness))
 }
 
 val sp: FiniteAnimationSpec<IntOffset> get() = Motion.hero()

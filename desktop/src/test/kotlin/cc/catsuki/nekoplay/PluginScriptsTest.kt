@@ -42,6 +42,22 @@ class PluginScriptsTest {
             assertEquals("_test_feat", s2.id)
             assertTrue(s2.isFeature && Plugins.hasFeature("demo") && s2.caps.isNotEmpty())
         } finally { Plugins.delete(s2.id) }
+        val motionScript = """
+            // @id _test_motion
+            // @name Test Motion
+            // @type motion
+            // @version 1.0.0
+            // @api 2
+            nk.registerMotion({ profile() { return { name: 'test', page: { easing: 'outExpoTail', ms: 600 } }; } });
+        """.trimIndent()
+        val s3 = Plugins.import(motionScript)
+        try {
+            assertEquals("_test_motion", s3.id)
+            assertTrue(s3.isMotion && s3.has("profile"))
+            val p = Plugins.activeMotionProfile()
+            assertNotNull(p)
+            assertEquals("outExpoTail", p.second.getJSONObject("page").getString("easing"))
+        } finally { Plugins.delete(s3.id) }
     }
 
     @Test fun externalPluginRepoMatchesIndexIfPresent() = runBlocking {

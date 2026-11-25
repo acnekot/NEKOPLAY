@@ -50,10 +50,18 @@ object Plugins {
     /** 音源插件（全部 / 已启用） */
     val sources get(): List<JsSource> { ensureLoaded(); rev; return list.value.filter { it.isSource } }
     val enabledSources get(): List<JsSource> { ensureLoaded(); rev; return enabled.filter { it.isSource } }
-    /** 功能插件与页面插件（全部 / 已启用） */
+    /** 功能 / 页面 / 动效扩展插件（全部 / 已启用） */
     val features get(): List<JsSource> { ensureLoaded(); rev; return list.value.filter { it.isFeature } }
     val enabledFeatures get(): List<JsSource> { ensureLoaded(); rev; return enabled.filter { it.isFeature } }
     val enabledPages get(): List<JsSource> { ensureLoaded(); rev; return enabled.filter { it.isPage } }
+    val enabledMotions get(): List<JsSource> { ensureLoaded(); rev; return enabled.filter { it.isMotion } }
+    /** 读取当前启用的规范化动效插件（@type motion）导出的 profile() 配置 */
+    suspend fun activeMotionProfile(): Pair<JsSource, JSONObject>? {
+        val s = enabledMotions.firstOrNull() ?: return null
+        if (!s.start() || !s.has("profile")) return null
+        val o = runCatching { s.call("profile") as? JSONObject }.getOrNull() ?: return null
+        return s to o
+    }
     /** 是否启用了某个功能插件槽位（如 "coverflow"） */
     fun hasFeature(slot: String): Boolean {
         val key = slot.lowercase()
@@ -120,15 +128,23 @@ object Plugins {
         }
     }
     fun set(id: String, v: Boolean) {
-        off = if (v) off - id else off + id
+        val target = get(id)
+        // 动效插件互斥生效：开启一个新的 @type motion 插件时自动关闭其它动效插件，避免曲线冲突
+        val nextOff = if (v) {
+            val base = off - id
+            if (target?.isMotion == true) base + list.value.filter { it.isMotion && it.id != id }.map { it.id } else base
+        } else off + id
+        off = nextOff
         prefs.edit().putStringSet("off", off).apply()
         bump()
         kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
-            if (v) get(id)?.start() else get(id)?.close()?.join()
+            if (v) target?.start() else target?.close()?.join()
             bump()
-            PluginStore.refresh().join()
-            Store.refreshAll()
-            bump()
+            if (target == null || target.isSource) {
+                PluginStore.refresh().join()
+                Store.refreshAll()
+                bump()
+            }
         }
     }
 
@@ -142,7 +158,9 @@ object Plugins {
         if (!s.hostCompatible) { f.delete(); throw NcmError("插件需要 NEKOPLAY v${s.minHost} 或更高版本（当前 v$APP_VERSION）") }
         if (!s.start()) { f.delete(); throw NcmError("脚本运行出错：${s.error}") }
         list.value = list.value.filter { it.id != id } + s
-        off = off - id; prefs.edit().putStringSet("off", off).apply()
+        val baseOff = off - id
+        off = if (s.isMotion) baseOff + list.value.filter { it.isMotion && it.id != id }.map { it.id } else baseOff
+        prefs.edit().putStringSet("off", off).apply()
         bump()
         if (s.isSource) kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { PluginStore.refresh().join(); Store.refreshAll(); bump() }
         s

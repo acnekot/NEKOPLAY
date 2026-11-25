@@ -34,15 +34,16 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  * 本体不带任何在线音源；音源是用户导入的 .js 脚本，在内置的 QuickJS 里运行。
  * 脚本和本体之间只传 JSON 字符串，接口说明见 docs/source-api.md。
  */
-/** 插件大类：音源插件（曲库/搜索/播放/歌词）、功能插件（槽位扩展/钩子/歌词管道）、页面插件（声明式可热更新原生页面） */
+/** 插件大类：音源插件（曲库/搜索/播放/歌词）、功能插件（槽位扩展/钩子/歌词管道）、页面插件（声明式页面）、动效插件（规范化动效引擎包） */
 enum class PluginKind(val id: String, val label: String) {
     SOURCE("source", "音源插件"),
     FEATURE("feature", "功能插件"),
     PAGE("page", "页面插件"),
+    MOTION("motion", "动效插件"),
 }
 
 class JsSource(val file: File) {
-    /** 脚本开头注释里的信息：// @id xx  // @name xx  // @type source|feature|page  // @version 1.0.0  // @minHost 0.6.8  // @permissions ... */
+    /** 脚本开头注释里的信息：// @id xx  // @name xx  // @type source|feature|page|motion  // @version 1.0.0  // @minHost 0.6.8  // @permissions ... */
     val meta: Map<String, String> = Regex("""^\s*//\s*@(\w+)\s+(.+)$""", RegexOption.MULTILINE).findAll(file.readText().take(4000))
         .associate { it.groupValues[1] to it.groupValues[2].trim() }
     val id: String get() = meta["id"] ?: file.nameWithoutExtension
@@ -54,12 +55,14 @@ class JsSource(val file: File) {
     val hostCompatible: Boolean get() = minHost.isEmpty() || !PluginSubs.newer(minHost, APP_VERSION)
     /** 功能插件绑定的扩展槽位标识（头注释 // @feature coverflow 等） */
     val featureSlot: String get() = meta["feature"]?.lowercase()?.trim().orEmpty()
-    /** 插件类型：默认 source；支持 // @type feature|page 显式声明，未写时自动按槽位与导出能力识别 */
+    /** 插件类型：默认 source；支持 // @type feature|page|motion 显式声明，未写时自动按槽位与导出能力识别 */
     val kind: PluginKind get() = when (meta["type"]?.lowercase()) {
+        "motion", "anim", "animation" -> PluginKind.MOTION
         "page", "ui", "view" -> PluginKind.PAGE
         "feature", "ext", "extension", "tool", "hook" -> PluginKind.FEATURE
         "source", "music", "audio" -> PluginKind.SOURCE
         else -> when {
+            "profile" in caps && "stream" !in caps -> PluginKind.MOTION
             "render" in caps && "stream" !in caps -> PluginKind.PAGE
             featureSlot.isNotEmpty() || (caps.isNotEmpty() && "stream" !in caps && "search" !in caps &&
                 listOf("manifest", "config", "onTrackChange", "onPlayState", "transformLyric", "action").any { it in caps }) -> PluginKind.FEATURE
@@ -68,7 +71,8 @@ class JsSource(val file: File) {
     }
     val isSource: Boolean get() = kind == PluginKind.SOURCE
     val isPage: Boolean get() = kind == PluginKind.PAGE
-    val isFeature: Boolean get() = kind == PluginKind.FEATURE || kind == PluginKind.PAGE
+    val isMotion: Boolean get() = kind == PluginKind.MOTION
+    val isFeature: Boolean get() = kind != PluginKind.SOURCE
     /** 能搜的类型（头注释「// @search track,album,…」），没写就当单曲 / 专辑 / 歌单 */
     val searchTypes: Set<String> get() = meta["search"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet() ?: setOf("track", "album", "playlist")
 
@@ -250,6 +254,7 @@ class JsSource(val file: File) {
               register: (s) => { globalThis.source = s; },
               registerFeature: (s) => { globalThis.source = s; },
               registerPage: (s) => { globalThis.source = s; },
+              registerMotion: (s) => { globalThis.source = s; },
               host: { version: '${APP_VERSION}', platform: '${Plat.impl.name}' },
             };
             globalThis.console = { log: nk.log, warn: nk.log, error: nk.log };

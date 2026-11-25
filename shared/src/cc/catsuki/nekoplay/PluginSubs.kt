@@ -21,7 +21,7 @@ object PluginSubs {
     private const val LEGACY_OFFICIAL = "https://raw.githubusercontent.com/acnekot/NEKOPLAY/main/plugins/index.json"
 
     class Item(val id: String, val name: String, val version: String, val author: String, val desc: String, val url: String, val from: String, val type: String = "source") {
-        val isFeature: Boolean get() = type.equals("feature", ignoreCase = true)
+        val isFeature: Boolean get() = !type.equals("source", ignoreCase = true)
     }
     class Sub(val url: String, val name: String, val items: List<Item>, val error: String?)
 
