@@ -13,8 +13,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +24,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -42,9 +41,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sign
 
-private data class FlowItem(val key: String, val kind: String, val id: String, val title: String, val sub: String, val cover: String?, val presetTracks: List<Track>? = null)
-
-/** 经典 iOS 6 Apple Music Cover Flow 3D 封面墙：纯黑镜面舞台 + 平行 70° 侧翼唱片架 + 精确底部镜面倒影 + 惯性甩动 + 点击中心 180° 翻转看曲目 */
+/** 经典 iOS 6 Apple Music Cover Flow 3D 封面墙：外包式透明 CD 塑料壳 + 镜面倒影 + 惯性甩动 + 点击铰链翻开 CD 盒看完整曲目 */
 @Composable fun CoverFlowPage() {
     val nav = LocalNav.current
     val p = c
@@ -81,7 +78,7 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
     val pos = remember { Animatable(0f) }
     var targetIdx by remember { mutableIntStateOf(0) }
     var snapJob by remember { mutableStateOf<Job?>(null) }
-    var flippedKey by remember { mutableStateOf<String?>(null) }
+    var expandedKey by remember { mutableStateOf<String?>(null) }
     var stageW by remember { mutableFloatStateOf(0f) }
     var stageH by remember { mutableFloatStateOf(0f) }
     // 纯 GPU 零重组倾斜状态：桌面鼠标与手机陀螺仪均在协程里平滑驱动 Animatable，仅在 graphicsLayer / draw 阶段读取，全程 0 重组
@@ -108,14 +105,14 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
 
     LaunchedEffect(items.size) {
         if (items.isNotEmpty() && pos.value > items.lastIndex.toFloat()) { pos.snapTo(items.lastIndex.toFloat()); targetIdx = items.lastIndex }
-        flippedKey = null
+        expandedKey = null
     }
 
     fun snapTo(idx: Int, initialVel: Float = 0f) {
         if (items.isEmpty()) return
         val clamped = idx.coerceIn(0, items.lastIndex)
         targetIdx = clamped
-        if (flippedKey != null && items.getOrNull(clamped)?.key != flippedKey) flippedKey = null
+        if (expandedKey != null && items.getOrNull(clamped)?.key != expandedKey) expandedKey = null
         snapJob?.cancel()
         snapJob = scope.launch {
             if (AnimStyle.off) pos.snapTo(clamped.toFloat())
@@ -125,23 +122,25 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
 
     val curIdx by remember(items.size) { derivedStateOf { if (items.isEmpty()) 0 else pos.value.roundToInt().coerceIn(0, items.lastIndex) } }
     val curItem = items.getOrNull(curIdx)
+    val isExpanded = expandedKey != null && curItem?.key == expandedKey
+    val expandProg by animateFloatAsState(if (isExpanded) 1f else 0f, Motion.page(), label = "cfExp")
 
-    // 翻转背面时按需拉取当前专辑/歌单的曲目列表
-    var backTracks by remember { mutableStateOf<List<Track>?>(null) }
-    var backLoading by remember { mutableStateOf(false) }
-    LaunchedEffect(flippedKey) {
+    // 点开封面放大时按需拉取当前专辑/歌单的完整曲目列表
+    var sideTracks by remember { mutableStateOf<List<Track>?>(null) }
+    var sideLoading by remember { mutableStateOf(false) }
+    LaunchedEffect(expandedKey) {
         val it = curItem
-        if (flippedKey == null || it == null || it.key != flippedKey) { backTracks = null; backLoading = false; return@LaunchedEffect }
-        if (it.presetTracks != null) { backTracks = it.presetTracks; backLoading = false; return@LaunchedEffect }
-        backLoading = true
-        backTracks = runCatching {
+        if (expandedKey == null || it == null || it.key != expandedKey) { sideTracks = null; sideLoading = false; return@LaunchedEffect }
+        if (it.presetTracks != null) { sideTracks = it.presetTracks; sideLoading = false; return@LaunchedEffect }
+        sideLoading = true
+        sideTracks = runCatching {
             when (it.kind) {
                 "album" -> Ncm.album(it.id).second
                 "pl" -> Ncm.playlistTracks(it.id)
                 else -> emptyList()
             }
         }.getOrDefault(emptyList())
-        backLoading = false
+        sideLoading = false
     }
 
     val reflMask = remember { Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.30f), 0.18f to Color.Black.copy(alpha = 0.14f), 0.42f to Color.Black.copy(alpha = 0.03f), 0.68f to Color.Transparent, 1f to Color.Transparent) }
@@ -152,7 +151,7 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
             if (ls) { Box(Modifier.size(32.dp).press { nav.back() }, contentAlignment = Alignment.Center) { NIcon(NIcons.back, 18.dp) }; Spacer(Modifier.width(6.dp)) }
             listOf("全部", "专辑", "歌单", "最近").forEachIndexed { idx, label ->
                 val on = filter == idx
-                Box(Modifier.padding(end = 6.dp).press { filter = idx; flippedKey = null; scope.launch { pos.snapTo(0f) } }
+                Box(Modifier.padding(end = 6.dp).press { filter = idx; expandedKey = null; scope.launch { pos.snapTo(0f) } }
                     .background(if (on) p.p else p.k.copy(alpha = 0.08f)).padding(horizontal = if (ls) 10.dp else 12.dp, vertical = if (ls) 3.dp else 5.dp)) {
                     T(label, if (ls) 11 else 12, if (on) Color.White else p.k, 700)
                 }
@@ -168,13 +167,13 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
             return@Column
         }
 
-        // 核心 3D 封面舞台（纯黑镜面地板 + 惯性甩动 + 滚轮 + 点击）
+        // 核心 3D 封面舞台（纯黑镜面地板 + 惯性甩动 + 滚轮 + 点开放大看完整曲目）
         Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()
             .onSizeChanged { stageW = it.width.toFloat(); stageH = it.height.toFloat() }
             .pointerInput(items.size) {
                 val vt = VelocityTracker()
                 detectHorizontalDragGestures(
-                    onDragStart = { vt.resetTracking(); snapJob?.cancel(); flippedKey = null },
+                    onDragStart = { vt.resetTracking(); snapJob?.cancel(); expandedKey = null },
                     onDragEnd = {
                         val vx = vt.calculateVelocity().x
                         val stepPx = (stageW * 0.22f).coerceIn(100f * density, 240f * density)
@@ -197,7 +196,7 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                     while (true) {
                         val ev = awaitPointerEvent()
                         when (ev.type) {
-                            PointerEventType.Scroll -> {
+                            PointerEventType.Scroll -> if (expandedKey == null) {
                                 val d = ev.changes.fold(0f) { acc, ch -> acc + ch.scrollDelta.y + ch.scrollDelta.x }
                                 if (abs(d) > 0.01f) {
                                     ev.changes.forEach { it.consume() }
@@ -234,6 +233,9 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
             val rimDp = (coverDp * 0.018f).coerceIn(2.5.dp, 4.5.dp)
             val caseW = spineDp + coverDp + rimDp
             val caseH = coverDp + rimDp * 2
+            val caseWPx = with(LocalDensity.current) { caseW.toPx() }
+            val caseHPx = with(LocalDensity.current) { caseH.toPx() }
+            val maxOpenScale = if (caseWPx > 1f && caseHPx > 1f) minOf(stageW * 0.90f / (caseWPx * 2f), stageH * 0.88f / caseHPx).coerceIn(0.72f, 1.32f) else 1.15f
             // 经典 iOS 6 几何参数：中心 CD 盒无遮挡，两侧外缘靠前、内缘向内折向中心形成 V 型唱片架
             val centerGapPx = coverPx * 0.84f
             val stackStepPx = coverPx * 0.23f
@@ -247,8 +249,6 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                 val item = items[i]
                 key(item.key) {
                 val isCenter = i == curIdx
-                val isFlipped = isCenter && flippedKey == item.key
-                val flipDeg by animateFloatAsState(if (isFlipped) 180f else 0f, Motion.page(), label = "cfFlip")
                 val z = 100f - abs(i - curIdx) * 10f
 
                 Column(
@@ -260,66 +260,69 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                             val wingAngle = -64f * sign(d) * s
                             val extraGap = (centerGapPx - stackStepPx) * kotlin.math.tanh((ad * 1.35f).toDouble()).toFloat()
                             val tx = d * stackStepPx + sign(d) * extraGap
-                            val sc = 1f - 0.20f * s
+                            val ep = expandProg
+                            val sc = (1f - 0.20f * s) * (if (isCenter) 1f + (maxOpenScale - 1f) * ep else 1f)
                             val centerWeight = (1f - s).coerceIn(0f, 1f)
                             val tX = tiltX.value; val tY = tiltY.value
-                            val rotYExtra = if (isFlipped) 0f else tX * (4.5f + 7.5f * centerWeight)
-                            val rotXExtra = if (isFlipped) 0f else -tY * (3.2f + 5.8f * centerWeight)
-                            translationX = tx + tX * (10f * density * (0.35f + 0.65f * centerWeight))
-                            translationY = coverPx * (if (ls) 0.08f else 0.14f) + tY * (5f * density * centerWeight)
+                            val tiltDamp = 1f - 0.55f * ep
+                            // 翻开 CD 盒时：右托盘右移半个盒宽，左前盖沿左铰链向左侧翻开 180°，整体双页正好居中
+                            val expX = if (isCenter) caseWPx * 0.50f * sc * ep else sign(d) * ep * 64f * density
+                            translationX = tx + expX + tX * (10f * density * (0.35f + 0.65f * centerWeight) * tiltDamp)
+                            translationY = coverPx * (if (ls) 0.08f else 0.14f) * (1f - (if (isCenter) ep else 0f)) + tY * (5f * density * centerWeight * tiltDamp)
                             scaleX = sc; scaleY = sc
-                            rotationY = (if (isCenter) wingAngle + flipDeg else wingAngle) + rotYExtra
-                            rotationX = rotXExtra
-                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.368f)
-                            cameraDistance = 12f * density
-                            alpha = if (ad <= 3.2f) 1f else (1f - (ad - 3.2f) * 0.48f).coerceIn(0f, 1f)
-                        }
-                        .pointerInput(item.key, isCenter) {
-                            detectTapGestures {
-                                if (isCenter) flippedKey = if (flippedKey == item.key) null else item.key
-                                else snapTo(i)
-                            }
+                            rotationY = wingAngle + tX * (4.5f + 7.5f * centerWeight) * tiltDamp
+                            rotationX = -tY * (3.2f + 5.8f * centerWeight) * tiltDamp
+                            transformOrigin = TransformOrigin(0.5f, 0.368f)
+                            cameraDistance = 14f * density
+                            val baseAlpha = if (ad <= 3.2f) 1f else (1f - (ad - 3.2f) * 0.48f).coerceIn(0f, 1f)
+                            alpha = if (isCenter) baseAlpha else baseAlpha * (1f - ep * 1.45f).coerceIn(0f, 1f)
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    // 外包式透明亚克力 CD 塑料壳：左侧托盘脊柱 + 四周透明边框完全包裹在 1:1 封面外部，绝不遮挡专辑画作
+                    // 实体 CD 塑料盒：右侧托盘（翻开后露出完整曲目与光盘底纹）+ 沿左铰链 180° 翻开的透明前盖
                     Box(Modifier.size(caseW, caseH)) {
                         Box(Modifier.matchParentSize().graphicsLayer {
                             val d = i - pos.value; val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
-                            translationX = if (isFlipped) 0f else (sign(d) * s * 6.5.dp.toPx() - tiltX.value * 4.dp.toPx())
-                            translationY = if (isFlipped) 0f else (1.5.dp.toPx() - tiltY.value * 2.dp.toPx())
-                            alpha = (1f - flipDeg / 90f).coerceIn(0f, 1f)
+                            translationX = sign(d) * s * 6.5.dp.toPx() - tiltX.value * 4.dp.toPx()
+                            translationY = 1.5.dp.toPx() - tiltY.value * 2.dp.toPx()
+                            alpha = if (isCenter) (1f - expandProg * 1.6f).coerceIn(0f, 1f) else 1f
                         }.background(Brush.verticalGradient(listOf(Color(0x5CE4EEFA), Color(0x308292A8), Color(0x46202632)))).border(1.dp, Color(0x5CFFFFFF)))
-                        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color(0x32FFFFFF), Color(0x14B8C8DC), Color(0x28101620)))).border(1.2.dp, Color(if (isCenter) 0x88FFFFFF else 0x4EFFFFFF))) {
-                        if (flipDeg <= 90f) {
-                            Box(Modifier.padding(start = spineDp, top = rimDp, end = rimDp, bottom = rimDp)) {
-                                Cover(item.cover, coverDp, item.title, border = false, decodeSize = if (isCenter) 512.dp else 256.dp)
+
+                        // 右侧 CD 托盘层（随前盖沿左铰链翻开自然显露）
+                        if (isCenter && expandProg > 0.02f) {
+                            Box(Modifier.matchParentSize().graphicsLayer { alpha = (expandProg * 2.2f).coerceIn(0f, 1f) }) {
+                                CdTrayTracklist(item, sideTracks, sideLoading, compact = ls || stageW < 640f * density, onClose = { expandedKey = null }, onOpenDetail = {
+                                    when (item.kind) { "album" -> nav.push(Page.Album(item.id, item.title, item.cover)); "pl" -> nav.push(Page.Detail("pl", item.id, item.title, item.cover)); "lpl" -> nav.push(Page.Detail("lpl", item.id, item.title)); else -> item.presetTracks?.let { Engine.playList(it, 0); nav.player = true } }
+                                })
                             }
-                            // 外壳透明塑料细节（单 Pass Canvas）：左侧独立脊柱条 + 合页卡扣 + 外框折边与内缘定位扣 + 极淡表层斜向反光
-                            Box(Modifier.matchParentSize().drawWithContent {
-                                val w = size.width; val h = size.height; val spW = spineDp.toPx(); val rm = rimDp.toPx(); val d = i - pos.value; val ad = abs(d)
-                                drawRect(Brush.horizontalGradient(listOf(Color(0x3EFFFFFF), Color(0x16FFFFFF), Color(0x2C000000), Color(0x44FFFFFF)), 0f, spW), size = Size(spW, h))
-                                drawRect(Color(0x52000000), Offset(spW - 1.5f, 0f), Size(1.5f, h)); drawRect(Color(0x52FFFFFF), Offset(spW, 0f), Size(1.2f, h))
-                                for (r in 1..4) drawRect(Color(0x28FFFFFF), Offset(spW * r / 5f, rm), Size(1f, h - rm * 2f))
-                                listOf(0.14f, 0.86f).forEach { fy -> val hy = h * fy; drawRect(Color(0x54000000), Offset(2f, hy - 3f), Size(spW - 4.5f, 3f)); drawRect(Color(0x6EFFFFFF), Offset(2f, hy), Size(spW - 4.5f, 2f)) }
-                                listOf(0.28f, 0.72f).forEach { fx -> val tx = spW + (w - spW - rm) * fx; drawRect(Color(0x55FFFFFF), Offset(tx - 6f, 0f), Size(12f, rm)); drawRect(Color(0x44FFFFFF), Offset(tx - 6f, h - rm), Size(12f, rm)) }
-                                if (ad < 2.6f) {
-                                    val cw = (1f - kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat()).coerceIn(0f, 1f)
-                                    val sh = (-tiltX.value * 0.28f - d.coerceIn(-1f, 1f) * 0.16f) * w
-                                    drawRect(Brush.linearGradient(0f to Color.Transparent, 0.40f to Color.Transparent, 0.50f to Color.White.copy(alpha = 0.04f + 0.08f * cw), 0.56f to Color.White.copy(alpha = 0.02f + 0.03f * cw), 0.65f to Color.Transparent, 1f to Color.Transparent,
-                                        start = Offset(sh - w * 0.15f, -tiltY.value * h * 0.2f), end = Offset(sh + w * 1.05f, h * 0.85f - tiltY.value * h * 0.2f)))
+                        }
+
+                        // 透明亚克力前盖：以左缘铰链为轴翻开 -180°（前半程为外包封面，过 90° 后切为左盖内侧歌词本）
+                        Box(Modifier.matchParentSize()
+                            .graphicsLayer {
+                                rotationY = if (isCenter) -180f * expandProg else 0f
+                                transformOrigin = TransformOrigin(0f, 0.5f)
+                                cameraDistance = 16f * density
+                            }
+                            .pointerInput(item.key, isCenter) {
+                                detectTapGestures {
+                                    if (isCenter) expandedKey = if (expandedKey == item.key) null else item.key
+                                    else if (expandedKey == null) snapTo(i)
                                 }
-                                drawRect(Color(0x62FFFFFF), size = Size(w, 1.8f)); drawRect(Color(0x4CFFFFFF), Offset(w - 1.8f, 0f), Size(1.8f, h)); drawRect(Color(0x4C000000), Offset(0f, h - 2f), Size(w, 2f))
-                            })
-                            Box(Modifier.matchParentSize().graphicsLayer { val ad = abs(i - pos.value); val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat(); alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f) }.background(Color.Black))
-                        } else CoverBackTracklist(item, backTracks, backLoading, onClose = { flippedKey = null }, onOpenDetail = {
-                            when (item.kind) { "album" -> nav.push(Page.Album(item.id, item.title, item.cover)); "pl" -> nav.push(Page.Detail("pl", item.id, item.title, item.cover)); "lpl" -> nav.push(Page.Detail("lpl", item.id, item.title)); else -> item.presetTracks?.let { Engine.playList(it, 0); nav.player = true } }
-                        })
+                            }) {
+                            if (!isCenter || expandProg < 0.5f) {
+                                CdCaseFrontLid(item, coverDp, spineDp, rimDp, isCenter, { i - pos.value }, { tiltX.value }, { tiltY.value })
+                            } else {
+                                CdCaseInnerLid(item, coverDp, spineDp, rimDp, onClose = { expandedKey = null })
+                            }
                         }
                     }
-                    // 轻量高效底部镜面倒影：精确对齐外包 CD 盒尺寸与左脊柱
+                    // 轻量高效底部镜面倒影：精确对齐外包 CD 盒尺寸与左脊柱（翻开 CD 盒时平滑淡出）
                     if (abs(i - curIdx) <= 3) Box(Modifier.size(caseW, reflH).clipToBounds()
-                        .graphicsLayer { alpha = (1f - flipDeg / 90f).coerceIn(0f, 1f); compositingStrategy = CompositingStrategy.Offscreen }
+                        .graphicsLayer {
+                            alpha = if (isCenter) (1f - expandProg * 1.6f).coerceIn(0f, 1f) else 1f
+                            compositingStrategy = CompositingStrategy.Offscreen
+                        }
                         .drawWithContent {
                             drawContent()
                             drawRect(brush = reflMask, topLeft = Offset(-4f, -4f), size = Size(size.width + 8f, size.height + 8f), blendMode = BlendMode.DstIn)
@@ -349,7 +352,7 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.press { playCurrent() }.background(p.p).padding(horizontal = 12.dp, vertical = 5.dp)) { T("播放", 11, Color.White, 700) }
                 Spacer(Modifier.width(6.dp))
-                Box(Modifier.press { flippedKey = if (flippedKey == curItem.key) null else curItem.key }.nbf(1.dp, p.k).padding(horizontal = 10.dp, vertical = 5.dp)) { T(if (flippedKey == curItem.key) "封面" else "曲目", 11, p.k, 600) }
+                Box(Modifier.press { expandedKey = if (expandedKey == curItem.key) null else curItem.key }.nbf(1.dp, p.k).padding(horizontal = 10.dp, vertical = 5.dp)) { T(if (isExpanded) "合上" else "翻开", 11, p.k, 600) }
             } else Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 AnimatedContent(curItem, contentKey = { it.key }, transitionSpec = { fadeIn(Motion.quick()) togetherWith fadeOut(Motion.quick()) }, label = "cfMeta") { it ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -359,39 +362,14 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.press { playCurrent() }.background(p.p).padding(horizontal = 16.dp, vertical = 7.dp)) { T("立即播放", 12, Color.White, 700) }
-                    Box(Modifier.press { flippedKey = if (flippedKey == curItem.key) null else curItem.key }.nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 7.dp)) { T(if (flippedKey == curItem.key) "翻回封面" else "翻转曲目", 12, p.k, 600) }
+                    Box(Modifier.press { expandedKey = if (expandedKey == curItem.key) null else curItem.key }.nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 7.dp)) { T(if (isExpanded) "合上 CD 盒" else "翻开 CD 盒", 12, p.k, 600) }
                     if (curItem.kind != "tracks") Box(Modifier.press {
                         when (curItem.kind) { "album" -> nav.push(Page.Album(curItem.id, curItem.title, curItem.cover)); "pl" -> nav.push(Page.Detail("pl", curItem.id, curItem.title, curItem.cover)); "lpl" -> nav.push(Page.Detail("lpl", curItem.id, curItem.title)) }
                     }.nbf(1.dp, p.l2).padding(horizontal = 14.dp, vertical = 7.dp)) { T("进入详情", 12, p.k, 600) }
                 }
                 if (items.size > 1) {
                     Spacer(Modifier.height(10.dp))
-                    NSlider(pos.value.coerceIn(0f, items.lastIndex.toFloat()), 0f..items.lastIndex.toFloat(), onDone = { snapTo(pos.value.roundToInt()) }) { v -> snapJob?.cancel(); flippedKey = null; scope.launch { pos.snapTo(v) } }
-                }
-            }
-        }
-    }
-}
-
-@Composable private fun CoverBackTracklist(item: FlowItem, tracks: List<Track>?, loading: Boolean, onClose: () -> Unit, onOpenDetail: () -> Unit) {
-    val p = c
-    Column(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }.background(p.sheet.copy(alpha = 0.96f)).padding(12.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) { T(item.title, 13, p.k, 800, lines = 1); T(item.sub, 10, p.s, lines = 1) }
-            Box(Modifier.press(onClick = onClose).nbf(1.dp, p.l2).padding(horizontal = 8.dp, vertical = 4.dp)) { T("返回", 10, p.k, 700) }
-        }
-        Spacer(Modifier.height(8.dp)); Box(Modifier.fillMaxWidth().height(1.dp).background(p.l1))
-        when {
-            loading -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { T("LOADING…", 11, p.s, mono = true) }
-            tracks.isNullOrEmpty() -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Box(Modifier.press(onClick = onOpenDetail).background(p.p).padding(horizontal = 12.dp, vertical = 6.dp)) { T("查看完整详情", 11, Color.White, 700) }
-            }
-            else -> LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(vertical = 4.dp)) {
-                itemsIndexed(tracks) { idx, t ->
-                    Row(Modifier.fillMaxWidth().press { Engine.playList(tracks, idx) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                        T(two(idx + 1), 10, p.s, mono = true, modifier = Modifier.width(22.dp))
-                        T(t.title, 12, p.k, 600, lines = 1, modifier = Modifier.weight(1f))
-                    }
+                    NSlider(pos.value.coerceIn(0f, items.lastIndex.toFloat()), 0f..items.lastIndex.toFloat(), onDone = { snapTo(pos.value.roundToInt()) }) { v -> snapJob?.cancel(); expandedKey = null; scope.launch { pos.snapTo(v) } }
                 }
             }
         }
