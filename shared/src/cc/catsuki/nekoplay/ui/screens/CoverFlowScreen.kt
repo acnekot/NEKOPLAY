@@ -123,8 +123,21 @@ import kotlin.math.sign
 
     val curIdx by remember(items.size) { derivedStateOf { if (items.isEmpty()) 0 else pos.value.roundToInt().coerceIn(0, items.lastIndex) } }
     val curItem = items.getOrNull(curIdx)
-    val isExpanded = expandedKey != null && curItem?.key == expandedKey
+    // 交互逻辑分流：桌面宽屏与手机横屏支持 3D 翻开 CD 盒展开曲目；手机竖屏点击中心封面直接进专辑/歌单详情页
+    val canExpand = Screen.wide || ls
+    LaunchedEffect(canExpand) { if (!canExpand) expandedKey = null }
+    val isExpanded = canExpand && expandedKey != null && curItem?.key == expandedKey
     val expandProg by animateFloatAsState(if (isExpanded) 1f else 0f, if (AnimStyle.off) snap() else spring(dampingRatio = 0.85f, stiffness = Anim.stiff(88f)), label = "cfExp")
+
+    fun openDetail(it: FlowItem) = when (it.kind) {
+        "album" -> nav.push(Page.Album(it.id, it.title, it.cover))
+        "pl" -> nav.push(Page.Detail("pl", it.id, it.title, it.cover))
+        "lpl" -> nav.push(Page.Detail("lpl", it.id, it.title))
+        else -> it.presetTracks?.let { ts -> Engine.playList(ts, 0); nav.player = true }
+    }
+    fun onCenterTap(it: FlowItem) {
+        if (canExpand) expandedKey = if (expandedKey == it.key) null else it.key else openDetail(it)
+    }
 
     // 点开封面放大时按需拉取当前专辑/歌单的完整曲目列表
     var sideTracks by remember { mutableStateOf<List<Track>?>(null) }
@@ -297,22 +310,16 @@ import kotlin.math.sign
                         // 右侧 CD 托盘层（随前盖沿左铰链翻开自然显露，炫彩光盘随开合微转）
                         if (isCenter && expandProg > 0.02f) {
                             Box(Modifier.matchParentSize().graphicsLayer { alpha = smoothStep(0.10f, 0.58f, expandProg) }) {
-                                CdTrayTracklist(item, sideTracks, sideLoading, compact = ls || stageW < 640f * density, openProg = { expandProg }, onClose = { expandedKey = null }, onOpenDetail = {
-                                    when (item.kind) { "album" -> nav.push(Page.Album(item.id, item.title, item.cover)); "pl" -> nav.push(Page.Detail("pl", item.id, item.title, item.cover)); "lpl" -> nav.push(Page.Detail("lpl", item.id, item.title)); else -> item.presetTracks?.let { Engine.playList(it, 0); nav.player = true } }
-                                })
+                                CdTrayTracklist(item, sideTracks, sideLoading, compact = ls || stageW < 640f * density, openProg = { expandProg }, onClose = { expandedKey = null }, onOpenDetail = { openDetail(item) })
                             }
                         }
 
-                        // 透明亚克力前盖：以左缘铰链为轴翻开 -180°（带旋转流光高光，前半程为外包封面，过 90° 后切为左盖内侧歌词本）
+                        // 透明亚克力前盖：以左缘铰链为轴翻开 -180°（手机竖屏点击直进专辑页，横屏/桌面点击翻开 CD 盒）
                         Box(Modifier.matchParentSize()
-                            .graphicsLayer {
-                                rotationY = -180f * lidP
-                                transformOrigin = TransformOrigin(0f, 0.5f)
-                                cameraDistance = 18f * density
-                            }
-                            .pointerInput(item.key, isCenter) {
+                            .graphicsLayer { rotationY = -180f * lidP; transformOrigin = TransformOrigin(0f, 0.5f); cameraDistance = 18f * density }
+                            .pointerInput(item.key, isCenter, canExpand) {
                                 detectTapGestures {
-                                    if (isCenter) expandedKey = if (expandedKey == item.key) null else item.key
+                                    if (isCenter) onCenterTap(item)
                                     else if (expandedKey == null) snapTo(i)
                                 }
                             }) {
@@ -372,10 +379,8 @@ import kotlin.math.sign
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.press { playCurrent() }.background(p.p).padding(horizontal = 16.dp, vertical = 7.dp)) { T("立即播放", 12, Color.White, 700) }
-                    Box(Modifier.press { expandedKey = if (expandedKey == curItem.key) null else curItem.key }.nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 7.dp)) { T(if (isExpanded) "合上 CD 盒" else "翻开 CD 盒", 12, p.k, 600) }
-                    if (curItem.kind != "tracks") Box(Modifier.press {
-                        when (curItem.kind) { "album" -> nav.push(Page.Album(curItem.id, curItem.title, curItem.cover)); "pl" -> nav.push(Page.Detail("pl", curItem.id, curItem.title, curItem.cover)); "lpl" -> nav.push(Page.Detail("lpl", curItem.id, curItem.title)) }
-                    }.nbf(1.dp, p.l2).padding(horizontal = 14.dp, vertical = 7.dp)) { T("进入详情", 12, p.k, 600) }
+                    if (canExpand) Box(Modifier.press { onCenterTap(curItem) }.nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 7.dp)) { T(if (isExpanded) "合上 CD 盒" else "翻开 CD 盒", 12, p.k, 600) }
+                    if (curItem.kind != "tracks") Box(Modifier.press { openDetail(curItem) }.nbf(1.dp, p.l2).padding(horizontal = 14.dp, vertical = 7.dp)) { T("进入详情", 12, p.k, 600) }
                 }
                 if (items.size > 1) {
                     Spacer(Modifier.height(10.dp))
