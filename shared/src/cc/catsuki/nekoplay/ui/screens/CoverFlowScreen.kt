@@ -294,7 +294,7 @@ private fun smoothStep(x: Float): Float { val t = x.coerceIn(0f, 1f); return t *
                             drawContent()
                             drawRect(brush = reflMask, blendMode = BlendMode.DstIn)
                         }) {
-                        Box(Modifier.requiredSize(coverDp).align(Alignment.TopCenter).graphicsLayer { scaleY = -1f }) {
+                        Box(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).graphicsLayer { scaleY = -1f }) {
                             Cover(item.cover, coverDp, item.title, border = false, decodeSize = 256.dp)
                         }
                     }

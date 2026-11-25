@@ -102,20 +102,30 @@ fun main() {
         val show = {
             visible = true
             state.isMinimized = false
-            winRef[0]?.let { win ->
-                win.toFront()
-                win.requestFocus()
-                if (System.getProperty("os.name").orEmpty().lowercase().contains("win")) {
-                    win.isAlwaysOnTop = true
-                    win.isAlwaysOnTop = false
+            runCatching { if (java.awt.Desktop.isDesktopSupported()) java.awt.Desktop.getDesktop().requestForeground(true) }
+            java.awt.EventQueue.invokeLater {
+                winRef[0]?.let { win ->
+                    if (!win.isVisible) win.isVisible = true
+                    (win as? java.awt.Frame)?.let { it.extendedState = it.extendedState and java.awt.Frame.ICONIFIED.inv() }
+                    win.toFront()
+                    win.requestFocus()
+                    if (System.getProperty("os.name").orEmpty().lowercase().contains("win")) {
+                        win.isAlwaysOnTop = true
+                        win.isAlwaysOnTop = false
+                    }
                 }
             }
             Unit
         }
         val showRef by rememberUpdatedState(show)
         DisposableEffect(Unit) {
-            SingleInstance.onWake = { showRef() }
-            onDispose { SingleInstance.onWake = null }
+            SingleInstance.onWake = { java.awt.EventQueue.invokeLater { showRef() } }
+            val reopen = java.awt.desktop.AppReopenedListener { java.awt.EventQueue.invokeLater { showRef() } }
+            runCatching { if (java.awt.Desktop.isDesktopSupported()) java.awt.Desktop.getDesktop().addAppEventListener(reopen) }
+            onDispose {
+                SingleInstance.onWake = null
+                runCatching { if (java.awt.Desktop.isDesktopSupported()) java.awt.Desktop.getDesktop().removeAppEventListener(reopen) }
+            }
         }
         if (UiPref.tray && trayOk) NekoTrayHost(appIcon, show, quit)
         val close = { if (UiPref.tray && trayOk) { visible = false; Thread { Thread.sleep(1500); System.gc(); WinMem.trim() }.apply { isDaemon = true }.start() } else quit() }
@@ -299,6 +309,7 @@ private fun NekoTray(appIcon: androidx.compose.ui.graphics.painter.Painter, play
         val size = java.awt.SystemTray.getSystemTray().trayIconSize
         java.awt.TrayIcon(img.getScaledInstance(size.width, size.height, java.awt.Image.SCALE_SMOOTH), "NEKOPLAY").apply {
             isImageAutoSize = false
+            addActionListener { java.awt.EventQueue.invokeLater { showS() } }
             addMouseListener(object : java.awt.event.MouseAdapter() {
                 override fun mouseReleased(e: java.awt.event.MouseEvent) {
                     // 用系统鼠标位置：TrayIcon 事件里的坐标在 Windows 缩放（125%、175%…）下是物理像素，菜单会偏到右边
