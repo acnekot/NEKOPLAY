@@ -236,7 +236,7 @@ import kotlin.math.sign
             val caseH = coverDp + rimDp * 2
             val caseWPx = with(LocalDensity.current) { caseW.toPx() }
             val caseHPx = with(LocalDensity.current) { caseH.toPx() }
-            val maxOpenScale = if (caseWPx > 1f && caseHPx > 1f) minOf(stageW * 0.90f / (caseWPx * 2f), stageH * 0.88f / caseHPx).coerceIn(0.72f, 1.32f) else 1.15f
+            val maxOpenScale = if (caseWPx > 1f && caseHPx > 1f) minOf(stageW * 0.95f / (caseWPx * 2f), stageH * 0.95f / caseHPx).coerceIn(0.80f, 1.65f) else 1.40f
             // 经典 iOS 6 几何参数：中心 CD 盒无遮挡，两侧外缘靠前、内缘向内折向中心形成 V 型唱片架
             val centerGapPx = coverPx * 0.84f
             val stackStepPx = coverPx * 0.23f
@@ -273,7 +273,8 @@ import kotlin.math.sign
                             val expX = if (isCenter) caseWPx * 0.50f * sc * shiftP else sign(d) * smoothStep(0f, 0.65f, ep) * 76f * density
                             val liftY = if (isCenter) -14f * density * swirl else 0f
                             translationX = tx + expX + tX * (10f * density * (0.35f + 0.65f * centerWeight) * tiltDamp)
-                            translationY = coverPx * (if (ls) 0.08f else 0.14f) * (1f - (if (isCenter) zoomP else 0f)) + liftY + tY * (5f * density * centerWeight * tiltDamp)
+                            val baseY = coverPx * (if (ls) 0.08f else 0.14f)
+                            translationY = (if (isCenter) baseY + (caseHPx * 0.18f - baseY) * zoomP else baseY) + liftY + tY * (5f * density * centerWeight * tiltDamp)
                             scaleX = sc; scaleY = sc
                             rotationY = wingAngle + (if (isCenter) 22f * swirl else 0f) + tX * (4.5f + 7.5f * centerWeight) * tiltDamp
                             rotationX = (if (isCenter) 8f * swirl else 0f) - tY * (3.2f + 5.8f * centerWeight) * tiltDamp
