@@ -20,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -276,39 +278,37 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    // 封面主体 + 实体唱片盒 3D 厚度侧脊与底边接触阴影
+                    // CD 透明亚克力塑料壳：透光侧脊厚度 + 左侧塑料铰链托盘条 + 斜向高光反光 + 晶体倒角棱边
                     Box(Modifier.size(coverDp)) {
+                        // 透明塑料壳 3D 侧边厚度（透光亚克力边缘质感）
                         Box(Modifier.matchParentSize().graphicsLayer {
                             val d = i - pos.value; val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
-                            translationX = if (isFlipped) 0f else (sign(d) * s * 6.dp.toPx() - tiltX.value * 3.5.dp.toPx())
+                            translationX = if (isFlipped) 0f else (sign(d) * s * 6.5.dp.toPx() - tiltX.value * 4.dp.toPx())
                             translationY = if (isFlipped) 0f else (1.5.dp.toPx() - tiltY.value * 2.dp.toPx())
                             alpha = (1f - flipDeg / 90f).coerceIn(0f, 1f)
-                        }.background(Brush.verticalGradient(listOf(Color(0xFF3A414E), Color(0xFF1A1E26), Color(0xFF0E1016)))).border(1.dp, Color(0x38FFFFFF)))
-                        Box(Modifier.matchParentSize().border(1.dp, p.k.copy(alpha = if (isCenter) 0.28f else 0.14f)).background(p.sheet)) {
+                        }.background(Brush.verticalGradient(listOf(Color(0x66E4EEFA), Color(0x388292A8), Color(0x4D202632)))).border(1.dp, Color(0x66FFFFFF)))
+                        Box(Modifier.matchParentSize().border(1.2.dp, Color(if (isCenter) 0x7AFFFFFF else 0x44FFFFFF)).background(p.sheet)) {
                         if (flipDeg <= 90f) {
                             Cover(item.cover, coverDp, item.title, border = false, decodeSize = if (isCenter) 512.dp else 256.dp)
+                            // CD 塑料盒透明质感叠加层（单 Pass Canvas 零开销：左侧托盘脊条 + 上下卡扣 + 斜向塑料反光带 + 晶边高光）
                             Box(Modifier.matchParentSize().drawWithContent {
-                                val d = i - pos.value; val ad = abs(d)
-                                if (ad < 2.2f) {
-                                    val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat()
-                                    val gx = size.width * (0.38f - tiltX.value * 0.34f - d.coerceIn(-1f, 1f) * 0.18f)
-                                    val gy = size.height * (0.26f - tiltY.value * 0.32f)
-                                    drawRect(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.07f + 0.13f * (1f - s).coerceIn(0f, 1f)), Color.Transparent), center = androidx.compose.ui.geometry.Offset(gx, gy), radius = size.width * 0.92f))
+                                val w = size.width; val h = size.height; val spW = w * 0.088f; val d = i - pos.value; val ad = abs(d)
+                                drawRect(Brush.horizontalGradient(listOf(Color(0x42FFFFFF), Color(0x18FFFFFF), Color(0x30000000), Color(0x48FFFFFF)), 0f, spW), size = Size(spW, h))
+                                drawRect(Color(0x55000000), Offset(spW, 0f), Size(1.5f, h)); drawRect(Color(0x4DFFFFFF), Offset(spW + 1.5f, 0f), Size(1.5f, h))
+                                for (r in 1..3) drawRect(Color(0x24FFFFFF), Offset(spW * r / 4f, 0f), Size(1f, h))
+                                listOf(0.14f, 0.86f).forEach { fy -> val hy = h * fy; drawRect(Color(0x50000000), Offset(2f, hy - 3f), Size(spW - 4f, 3f)); drawRect(Color(0x66FFFFFF), Offset(2f, hy), Size(spW - 4f, 2f)) }
+                                if (ad < 2.6f) {
+                                    val cw = (1f - kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat()).coerceIn(0f, 1f)
+                                    val sh = (-tiltX.value * 0.28f - d.coerceIn(-1f, 1f) * 0.16f) * w
+                                    drawRect(Brush.linearGradient(0f to Color.Transparent, 0.36f to Color.Transparent, 0.48f to Color.White.copy(alpha = 0.08f + 0.14f * cw), 0.54f to Color.White.copy(alpha = 0.04f + 0.06f * cw), 0.66f to Color.Transparent, 1f to Color.Transparent,
+                                        start = Offset(sh - w * 0.15f, -tiltY.value * h * 0.2f), end = Offset(sh + w * 1.05f, h * 0.85f - tiltY.value * h * 0.2f)))
                                 }
-                                drawRect(Color.White.copy(alpha = 0.22f), size = androidx.compose.ui.geometry.Size(size.width, 1.5f))
-                                drawRect(Color.Black.copy(alpha = 0.38f), topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - 2f), size = androidx.compose.ui.geometry.Size(size.width, 2f))
+                                drawRect(Color(0x55FFFFFF), size = Size(w, 2f)); drawRect(Color(0x44FFFFFF), Offset(w - 2f, 0f), Size(2f, h)); drawRect(Color(0x48000000), Offset(0f, h - 2.5f), Size(w, 2.5f))
                             })
                             Box(Modifier.matchParentSize().graphicsLayer { val ad = abs(i - pos.value); val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat(); alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f) }.background(Color.Black))
-                        } else {
-                            CoverBackTracklist(item, backTracks, backLoading, onClose = { flippedKey = null }, onOpenDetail = {
-                                when (item.kind) {
-                                    "album" -> nav.push(Page.Album(item.id, item.title, item.cover))
-                                    "pl" -> nav.push(Page.Detail("pl", item.id, item.title, item.cover))
-                                    "lpl" -> nav.push(Page.Detail("lpl", item.id, item.title))
-                                    else -> item.presetTracks?.let { Engine.playList(it, 0); nav.player = true }
-                                }
-                            })
-                        }
+                        } else CoverBackTracklist(item, backTracks, backLoading, onClose = { flippedKey = null }, onOpenDetail = {
+                            when (item.kind) { "album" -> nav.push(Page.Album(item.id, item.title, item.cover)); "pl" -> nav.push(Page.Detail("pl", item.id, item.title, item.cover)); "lpl" -> nav.push(Page.Detail("lpl", item.id, item.title)); else -> item.presetTracks?.let { Engine.playList(it, 0); nav.player = true } }
+                        })
                         }
                     }
                     // 轻量高效底部镜面倒影：去掉逐卡实时高斯模糊（省下十余次 GPU Blur Pass），仅近处卡片合成倒影
