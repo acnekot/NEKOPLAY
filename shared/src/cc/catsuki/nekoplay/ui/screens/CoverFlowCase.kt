@@ -24,6 +24,8 @@ import kotlin.math.abs
 
 internal data class FlowItem(val key: String, val kind: String, val id: String, val title: String, val sub: String, val cover: String?, val presetTracks: List<Track>? = null)
 
+internal fun smoothStep(e0: Float, e1: Float, x: Float): Float { val t = ((x - e0) / (e1 - e0)).coerceIn(0f, 1f); return t * t * (3f - 2f * t) }
+
 /** 外包式透明亚克力 CD 塑料壳前盖：左侧独立防滑脊柱条 + 四周透明边框完全包裹 1:1 封面，绝不遮挡画作 */
 @Composable internal fun CdCaseFrontLid(
     item: FlowItem, coverDp: Dp, spineDp: Dp, rimDp: Dp, isCenter: Boolean,
