@@ -16,8 +16,9 @@ import org.json.JSONObject
  * 格式：{"name": "订阅名", "plugins": [{"id", "name", "version", "author"?, "desc"?, "url"}]}
  */
 object PluginSubs {
-    /** 官方订阅：仓库里的 plugins/index.json（raw 打不开时自动换 jsDelivr） */
-    const val OFFICIAL = "https://raw.githubusercontent.com/acnekot/NEKOPLAY/main/plugins/index.json"
+    /** 官方订阅：独立插件仓库里的 index.json（raw 打不开时自动换 jsDelivr） */
+    const val OFFICIAL = "https://raw.githubusercontent.com/acnekot/NEKOPLAY_PLUGINS/main/index.json"
+    private const val LEGACY_OFFICIAL = "https://raw.githubusercontent.com/acnekot/NEKOPLAY/main/plugins/index.json"
 
     class Item(val id: String, val name: String, val version: String, val author: String, val desc: String, val url: String, val from: String, val type: String = "source") {
         val isFeature: Boolean get() = type.equals("feature", ignoreCase = true)
@@ -33,7 +34,11 @@ object PluginSubs {
     fun load() {
         if (loaded) return
         loaded = true
-        urls = prefs.getString("subs", null)?.split('\n')?.filter { it.isNotBlank() } ?: listOf(OFFICIAL)
+        val raw = prefs.getString("subs", null)?.split('\n')?.filter { it.isNotBlank() }
+        if (raw == null) { urls = listOf(OFFICIAL); return }
+        val migrated = raw.map { if (it == LEGACY_OFFICIAL) OFFICIAL else it }.distinct()
+        urls = migrated
+        if (migrated != raw) save()
     }
     private fun save() { prefs.edit().putString("subs", urls.joinToString("\n")).apply() }
     fun add(url: String) { val u = url.trim(); if (!u.startsWith("http")) throw NcmError("订阅地址要以 http:// 或 https:// 开头"); if (u !in urls) { urls = urls + u; save() } }
