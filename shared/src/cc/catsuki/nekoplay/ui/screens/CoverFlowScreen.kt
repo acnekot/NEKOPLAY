@@ -158,6 +158,10 @@ import kotlin.math.sign
                 }
             }
             Spacer(Modifier.weight(1f))
+            if (Screen.wide) Box(Modifier.padding(end = 10.dp).press { nav.hideSidebar = !nav.hideSidebar }
+                .background(if (nav.hideSidebar) p.p else p.k.copy(alpha = 0.08f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                T(if (nav.hideSidebar) "展开侧栏" else "收起侧栏", 11, if (nav.hideSidebar) Color.White else p.k, 700)
+            }
             if (items.isNotEmpty()) T("${curIdx + 1} / ${items.size}", 11, p.s, 600, mono = true)
         }
 

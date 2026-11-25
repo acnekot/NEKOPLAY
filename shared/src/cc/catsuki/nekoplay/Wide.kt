@@ -1,12 +1,15 @@
 package cc.catsuki.nekoplay
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -53,7 +56,10 @@ import kotlinx.coroutines.flow.map
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.weight(1f).fillMaxWidth()) {
-                Sidebar()
+                val showSidebar = !(nav.stack.lastOrNull() == Page.CoverFlow && nav.hideSidebar)
+                AnimatedVisibility(showSidebar,
+                    enter = expandHorizontally(Motion.page()) + fadeIn(Motion.standard()),
+                    exit = shrinkHorizontally(Motion.page()) + fadeOut(Motion.quick())) { Sidebar() }
                 Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
                     WideContent()
                     // 右栏（歌词 / 队列 / 评论）：纯 GPU 位移滑入滑出，不改变主内容区宽度，避免每帧全页重排掉帧

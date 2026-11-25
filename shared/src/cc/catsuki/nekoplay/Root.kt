@@ -95,6 +95,8 @@ class Nav {
     var comments by mutableStateOf<Track?>(null)
     /** 宽屏右侧面板：0 关 / 1 歌词 / 2 播放队列 */
     var side by mutableIntStateOf(0) // 默认不打开
+    /** 封面墙宽屏模式下是否收起左侧边栏 */
+    var hideSidebar by mutableStateOf(false)
     var input by mutableStateOf<InputSpec?>(null)
     fun push(p: Page) { stack.add(p) }
     fun back(): Boolean = when {
