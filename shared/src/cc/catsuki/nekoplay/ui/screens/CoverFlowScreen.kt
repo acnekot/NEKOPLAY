@@ -262,18 +262,20 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                     Box(Modifier.size(coverDp).border(1.dp, p.k.copy(alpha = if (isCenter) 0.22f else 0.10f)).background(p.sheet)) {
                         if (flipDeg <= 90f) {
                             Cover(item.cover, coverDp, item.title, border = false, decodeSize = 512.dp)
-                            if (isCenter && (abs(tiltX) > 0.02f || abs(tiltY) > 0.02f)) {
-                                // 跟随鼠标移动的柔和镜面高光，增强 3D 立体转动质感
-                                Box(Modifier.matchParentSize().drawWithContent {
-                                    val gx = size.width * (0.5f - tiltX * 0.35f)
-                                    val gy = size.height * (0.5f - tiltY * 0.35f)
-                                    drawRect(Brush.radialGradient(
-                                        listOf(Color.White.copy(alpha = 0.16f), Color.Transparent),
-                                        center = androidx.compose.ui.geometry.Offset(gx, gy),
-                                        radius = size.width * 0.85f,
-                                    ))
-                                })
-                            }
+                            // 始终保持的连续镜面光照：随封面角度与鼠标位置平滑流动，切换封面时不闪烁、不突兀开关
+                            Box(Modifier.matchParentSize().drawWithContent {
+                                val d = i - pos.value
+                                val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
+                                val centerWeight = (1f - s).coerceIn(0f, 1f)
+                                val gx = size.width * (0.38f - tiltX * 0.34f - d.coerceIn(-1f, 1f) * 0.18f)
+                                val gy = size.height * (0.26f - tiltY * 0.32f)
+                                val sheenAlpha = 0.07f + 0.13f * centerWeight
+                                drawRect(Brush.radialGradient(
+                                    listOf(Color.White.copy(alpha = sheenAlpha), Color.Transparent),
+                                    center = androidx.compose.ui.geometry.Offset(gx, gy),
+                                    radius = size.width * 0.92f,
+                                ))
+                            })
                             Box(Modifier.matchParentSize().graphicsLayer {
                                 val ad = abs(i - pos.value)
                                 val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat()
