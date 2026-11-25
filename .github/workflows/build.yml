@@ -129,10 +129,9 @@ jobs:
   ios:
     uses: ./.github/workflows/ios.yml
 
-  # 推 v 开头的标签时：把所有版本放进同一个 GitHub Release
+  # 推 v 开头的标签时：把所有已成功构建的平台产物放进同一个 GitHub Release（不因单个平台失败/取消而整包跳过）
   release:
-    # 推 v* 标签，或手动运行时勾选「发布正式版」
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.release
+    if: always() && (startsWith(github.ref, 'refs/tags/v') || inputs.release) && (needs.android.result == 'success' || needs.desktop.result == 'success' || needs.ios.result == 'success')
     needs: [android, ios, desktop]
     runs-on: ubuntu-latest
     steps:
