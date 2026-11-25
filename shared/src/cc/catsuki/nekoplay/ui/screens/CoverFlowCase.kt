@@ -129,13 +129,20 @@ internal fun Modifier.cdThicknessEdge(dist: () -> Float, tiltX: () -> Float, til
     }
 }
 
-/** 翻开后的右侧 CD 托盘 + 完整曲目列表（带随开合微转的炫彩光盘碟片与中心卡扣底纹） */
+/** 翻开后的右侧 CD 托盘 + 完整曲目列表（适配放大倍率的高密度唱片内页排版：全宽标题、总时长、智能省略重复歌手、单屏展示 8~10 首） */
 @Composable internal fun CdTrayTracklist(
     item: FlowItem, tracks: List<Track>?, loading: Boolean, compact: Boolean,
     openProg: () -> Float, onClose: () -> Unit, onOpenDetail: () -> Unit,
 ) {
     val p = c
     val playingId = Engine.state.collectAsState().value.current?.id
+    val showArtist = tracks != null && tracks.map { it.artist }.distinct().size > 1
+    val totalMs = tracks?.sumOf { it.durationMs.coerceAtLeast(0L) } ?: 0L
+    val metaLine = buildList {
+        if (item.sub.isNotBlank()) add(item.sub)
+        if (tracks != null && !item.sub.contains("首")) add("${tracks.size} 首")
+        if (totalMs > 0L) add(fmt(totalMs))
+    }.joinToString(" · ")
     Column(Modifier.fillMaxSize()
         .background(p.sheet.copy(alpha = 0.90f))
         .border(1.2.dp, Color(0x78FFFFFF))
@@ -150,30 +157,29 @@ internal fun Modifier.cdThicknessEdge(dist: () -> Float, tiltX: () -> Float, til
             drawCircle(Color(0x34000000), rad * 0.14f, Offset(cx, cy))
             drawCircle(Color(0x32FFFFFF), rad * 0.14f, Offset(cx, cy), style = Stroke(1.2f))
         }
-        .padding(if (compact) 10.dp else 14.dp)) {
+        .padding(horizontal = if (compact) 8.dp else 10.dp, vertical = if (compact) 6.dp else 8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                T(item.title, if (compact) 13 else 15, p.k, 800, lines = 1)
-                T(item.sub + (tracks?.let { " · ${it.size} 首" } ?: ""), if (compact) 10 else 11, p.s, lines = 1)
+                T(item.title, if (compact) 10 else 11, p.k, 800, lines = 1)
+                if (metaLine.isNotEmpty()) T(metaLine, if (compact) 8 else 9, p.s, 500, lines = 1, mono = false)
             }
-            if (!tracks.isNullOrEmpty()) Box(Modifier.padding(end = 5.dp).press { Engine.playList(tracks, 0) }.background(p.p).padding(horizontal = 8.dp, vertical = 4.dp)) { T("播放", 10, Color.White, 700) }
-            if (item.kind != "tracks") Box(Modifier.padding(end = 5.dp).press(onClick = onOpenDetail).nbf(1.dp, p.l2).padding(horizontal = 8.dp, vertical = 4.dp)) { T("详情", 10, p.k, 600) }
-            Box(Modifier.press(onClick = onClose).nbf(1.dp, p.l2).padding(horizontal = 8.dp, vertical = 4.dp)) { T("合上", 10, p.k, 700) }
+            if (item.kind != "tracks") Box(Modifier.padding(start = 4.dp).press(onClick = onOpenDetail).nbf(0.8.dp, p.l2).padding(horizontal = 5.dp, vertical = 2.dp)) { T("详情", 8, p.k, 600) }
+            Box(Modifier.padding(start = 4.dp).press(onClick = onClose).nbf(0.8.dp, p.l2).padding(horizontal = 5.dp, vertical = 2.dp)) { T("×", 9, p.k, 700) }
         }
-        Spacer(Modifier.height(if (compact) 6.dp else 8.dp)); Box(Modifier.fillMaxWidth().height(1.dp).background(p.l1))
+        Spacer(Modifier.height(4.dp)); Box(Modifier.fillMaxWidth().height(0.8.dp).background(p.l1))
         when {
-            loading -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { T("LOADING…", 11, p.s, mono = true) }
-            tracks.isNullOrEmpty() -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { T("暂无曲目信息", 12, p.s) }
-            else -> LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(vertical = 4.dp)) {
+            loading -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { T("LOADING…", 9, p.s, mono = true) }
+            tracks.isNullOrEmpty() -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { T("暂无曲目信息", 10, p.s) }
+            else -> LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(vertical = 2.dp)) {
                 itemsIndexed(tracks, key = { idx, t -> "${t.id}_$idx" }) { idx, t ->
                     val on = playingId == t.id
-                    Row(Modifier.fillMaxWidth().press { Engine.playList(tracks, idx) }.background(if (on) p.p.copy(alpha = 0.14f) else Color.Transparent).padding(horizontal = 5.dp, vertical = if (compact) 4.dp else 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        T(two(idx + 1), 10, if (on) p.p else p.s, 600, mono = true, modifier = Modifier.width(24.dp))
+                    Row(Modifier.fillMaxWidth().press { Engine.playList(tracks, idx) }.background(if (on) p.p.copy(alpha = 0.15f) else Color.Transparent).padding(horizontal = 3.dp, vertical = if (showArtist) 3.dp else 3.5.dp), verticalAlignment = Alignment.CenterVertically) {
+                        T(two(idx + 1), 8, if (on) p.p else p.s, 600, mono = true, modifier = Modifier.width(18.dp))
                         Column(Modifier.weight(1f)) {
-                            T(t.title, if (compact) 11 else 12, if (on) p.p else p.k, if (on) 700 else 600, lines = 1)
-                            if (t.artist.isNotBlank()) T(t.artist, 9, p.s, lines = 1)
+                            T(t.title, if (compact) 9 else 10, if (on) p.p else p.k, if (on) 700 else 600, lines = 1)
+                            if (showArtist && t.artist.isNotBlank()) T(t.artist, 7, p.s, lines = 1)
                         }
-                        if (t.durationMs > 0) T(fmt(t.durationMs), 10, p.s, mono = true, modifier = Modifier.padding(start = 6.dp))
+                        if (t.durationMs > 0) T(fmt(t.durationMs), 8, p.s, mono = true, modifier = Modifier.padding(start = 4.dp))
                     }
                 }
             }
