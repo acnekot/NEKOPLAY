@@ -95,7 +95,7 @@ import org.json.JSONObject
         "row" -> Row(Modifier.fillMaxWidth().then(clickMod).padding(pad), horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
             for (i in 0 until children.length()) children.optJSONObject(i)?.let { Box(if (it.optBoolean("grow")) Modifier.weight(1f) else Modifier) { PluginNodeView(it, dispatch) } }
         }
-        "card" -> Column(Modifier.fillMaxWidth().background(p.sheet.copy(alpha = 0.85f)).nbf(1.dp, p.l2).then(clickMod).padding(if (pad.value > 0) pad else 14.dp), verticalArrangement = Arrangement.spacedBy(gap)) {
+        "card" -> Column(Modifier.fillMaxWidth().cascadeEnter().background(p.sheet.copy(alpha = 0.85f)).nbf(1.dp, p.l2).then(clickMod).padding(if (pad.value > 0) pad else 14.dp), verticalArrangement = Arrangement.spacedBy(gap)) {
             for (i in 0 until children.length()) children.optJSONObject(i)?.let { PluginNodeView(it, dispatch) }
         }
         "tag" -> Tag(node.optString("text"))

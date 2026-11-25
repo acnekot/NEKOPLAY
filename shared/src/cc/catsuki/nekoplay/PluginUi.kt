@@ -71,7 +71,7 @@ private val CAP_NAMES = linkedMapOf(
         }
         items(shown, key = { it.id }) { s ->
             val on = Plugins.on(s.id)
-            Column(Modifier.fillMaxWidth().bottomLine().padding(vertical = 14.dp)) {
+            Column(Modifier.fillMaxWidth().cascadeEnter().bottomLine().padding(vertical = 14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {

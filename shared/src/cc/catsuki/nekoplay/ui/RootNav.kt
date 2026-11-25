@@ -70,9 +70,11 @@ import kotlinx.coroutines.launch
     Row(Modifier.fillMaxWidth().background(barBg()).drawBehind { if (!Look.flat) drawRect(p.k, size = androidx.compose.ui.geometry.Size(size.width, 3.dp.toPx())) }.navigationBarsPadding().padding(top = 3.dp).height(56.dp)) {
         listOf(Triple(NIcons.home, "主页", 0), Triple(NIcons.library, "曲库", 1)).forEach { (i, l, k) ->
             val on = nav.tab == k && nav.stack.isEmpty()
-            Column(Modifier.weight(1f).fillMaxHeight().press(haptic = true) { nav.stack.clear(); nav.tab = k }.background(if (on) p.p else Color.Transparent),
+            val bg by androidx.compose.animation.animateColorAsState(if (on) p.p else Color.Transparent, Motion.standard(), label = "bnb")
+            val fg by androidx.compose.animation.animateColorAsState(if (on) Color.White else p.k, Motion.standard(), label = "bnf")
+            Column(Modifier.weight(1f).fillMaxHeight().press(haptic = true) { nav.stack.clear(); nav.tab = k }.background(bg),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                NIcon(i, 22.dp, if (on) Color.White else p.k); Spacer(Modifier.height(2.dp)); T(l, 11, if (on) Color.White else p.k, 700)
+                NIcon(i, 22.dp, fg); Spacer(Modifier.height(2.dp)); T(l, 11, fg, 700)
             }
         }
     }
@@ -91,7 +93,10 @@ import kotlinx.coroutines.launch
         .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
         Box(Modifier.fillMaxSize().background(p.page)) { BgLayer() }
         Column(Modifier.fillMaxSize()) {
-            AnimatedContent(pg, Modifier.weight(1f), transitionSpec = { fadeIn(Motion.standard()) togetherWith fadeOut(Motion.quick()) }, label = "sub") { page ->
+            AnimatedContent(pg, Modifier.weight(1f), transitionSpec = {
+                (androidx.compose.animation.slideInHorizontally(Motion.page()) { (it * .18f).toInt() } + fadeIn(Motion.page())) togetherWith
+                    (androidx.compose.animation.slideOutHorizontally(Motion.standard()) { -(it * .10f).toInt() } + fadeOut(Motion.quick()))
+            }, label = "sub") { page ->
                 PageContent(page)
             }
             if (Engine.state.collectAsState().value.current != null && !(Screen.landscape && pg == Page.CoverFlow)) MiniBar()

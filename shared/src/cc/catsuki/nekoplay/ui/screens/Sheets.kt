@@ -250,7 +250,9 @@ fun qualitySheet(nav: Nav) {
     LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         itemsIndexed(items) { i, l ->
             val on = i == sel
-            Box(Modifier.press { if (!on) onSel(i) }.background(if (on) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(l, 13, if (on) p.tagFg else p.k, 700) }
+            val bg by androidx.compose.animation.animateColorAsState(if (on) p.k else Color.Transparent, Motion.standard(), label = "chb")
+            val fg by androidx.compose.animation.animateColorAsState(if (on) p.tagFg else p.k, Motion.standard(), label = "chf")
+            Box(Modifier.press { if (!on) onSel(i) }.background(bg).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(l, 13, fg, 700) }
         }
     }
 }

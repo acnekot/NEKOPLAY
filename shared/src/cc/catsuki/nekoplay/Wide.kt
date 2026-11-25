@@ -224,20 +224,16 @@ import kotlinx.coroutines.flow.map
         AnimatedContent(top, Modifier.fillMaxSize(), transitionSpec = {
             if (AnimStyle.off) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
             else if (spatial) {
-                val ms = Motion.pageMs
-                val ease = AnimStyle.activeEasing
-                val enterT = tween<androidx.compose.ui.unit.IntOffset>(ms, easing = ease)
-                val enterF = tween<Float>(ms, easing = ease)
-                val exitT = tween<androidx.compose.ui.unit.IntOffset>((ms * .85f).toInt(), easing = ease)
-                val exitF = tween<Float>((ms * .65f).toInt(), easing = ease)
+                val scIn = if (MotionEffects.pageScale) scaleIn(Motion.page(), initialScale = 0.985f) else fadeIn(Motion.page())
+                val scOut = if (MotionEffects.pageScale) scaleOut(Motion.standard(), targetScale = 0.99f) else fadeOut(Motion.quick())
                 if (forward) {
-                    (slideInHorizontally(enterT) { (it * .24f).toInt() } + fadeIn(enterF)) togetherWith
-                        (slideOutHorizontally(exitT) { -(it * .14f).toInt() } + fadeOut(exitF))
+                    (slideInHorizontally(Motion.page()) { (it * .22f).toInt() } + fadeIn(Motion.page()) + scIn) togetherWith
+                        (slideOutHorizontally(Motion.standard()) { -(it * .12f).toInt() } + fadeOut(Motion.quick()) + scOut)
                 } else {
-                    (slideInHorizontally(enterT) { -(it * .14f).toInt() } + fadeIn(enterF)) togetherWith
-                        (slideOutHorizontally(exitT) { (it * .24f).toInt() } + fadeOut(exitF))
+                    (slideInHorizontally(Motion.page()) { -(it * .12f).toInt() } + fadeIn(Motion.page()) + scIn) togetherWith
+                        (slideOutHorizontally(Motion.standard()) { (it * .22f).toInt() } + fadeOut(Motion.quick()) + scOut)
                 }
-            } else fadeIn(Motion.quick()) togetherWith fadeOut(Motion.quick())
+            } else fadeIn(Motion.standard()) togetherWith fadeOut(Motion.quick())
         }, label = "widePage") { k ->
             if (k != null) Box(Modifier.fillMaxSize()) { PageContent(k) }
         }

@@ -34,7 +34,7 @@ private var recCache: List<Playlist>? = null
     val pls by Store.playlists.collectAsState()
     val rec by Store.recents.collectAsState()
     val p = c
-    Column(m.border(1.dp, Color.Gray.copy(alpha = .5f)).padding(12.dp)) {
+    Column(m.cascadeEnter().border(1.dp, Color.Gray.copy(alpha = .5f)).padding(12.dp)) {
         when (id) {
             "continue" -> {
                 val cur = st.current ?: daily.firstOrNull() ?: rec.firstOrNull()
