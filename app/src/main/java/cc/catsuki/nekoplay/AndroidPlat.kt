@@ -80,8 +80,8 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
                 val ty = ((rawY - baseY) / 3.2f).coerceIn(-1f, 1f)
                 smoothX += (tx - smoothX) * 0.18f
                 smoothY += (ty - smoothY) * 0.18f
-                TiltBus.x.value = smoothX
-                TiltBus.y.value = smoothY
+                if (kotlin.math.abs(TiltBus.x.value - smoothX) > 0.004f) TiltBus.x.value = smoothX
+                if (kotlin.math.abs(TiltBus.y.value - smoothY) > 0.004f) TiltBus.y.value = smoothY
             }
             override fun onAccuracyChanged(s: android.hardware.Sensor?, accuracy: Int) {}
         }

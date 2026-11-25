@@ -162,16 +162,16 @@ import kotlinx.coroutines.launch
                     dist == 2 -> .93f
                     else -> .91f
                 }
-                val targetBlur = when {
-                    !UiPref.lyricBlur || !Plat.impl.liveBlur || browsing || dist == 0 -> 0.dp
+                // 仅对可见邻近行（dist 1..4）应用离散静态景深模糊，避免 60+ 离屏行逐帧重建高斯模糊着色器造成掉帧
+                val blurDp = when {
+                    !UiPref.lyricBlur || !Plat.impl.liveBlur || browsing || dist == 0 || dist > 4 -> 0.dp
                     dist == 1 -> 0.9.dp
                     dist == 2 -> 1.8.dp
-                    dist == 3 -> 2.8.dp
-                    else -> 4.0.dp
+                    dist == 3 -> 2.6.dp
+                    else -> 3.4.dp
                 }
                 val alpha by animateFloatAsState(targetAlpha, spring(1f, Anim.stiff(Spring.StiffnessLow)), label = "aa")
                 val scale by animateFloatAsState(targetScale, spring(0.84f, Anim.stiff(Spring.StiffnessLow)), label = "as")
-                val blurDp by animateDpAsState(targetBlur, tween(280), label = "ab")
 
                 Box(Modifier.fillMaxWidth()
                     .onPlaced {
@@ -233,18 +233,21 @@ import kotlinx.coroutines.launch
 @Composable private fun AmllWordLine(line: LyricLine, offset: Long, centered: Boolean) {
     val p = c
     val words = line.words ?: return
-    val raw by Engine.position.collectAsState()
-    val pos = raw + offset
     val playing = Engine.state.collectAsState().value.playing && LocalLyricsActive.current
-    var now by remember { mutableLongStateOf(pos) }
-    LaunchedEffect(pos, playing) {
-        val base = pos; now = base
-        if (playing) {
-            val start = withFrameMillis { it }
-            while (true) {
-                withFrameMillis { f -> now = base + (f - start) }
-                if (UiPref.lowMem) delay(40)
+    var now by remember(line.t) { mutableLongStateOf(Engine.position.value + offset) }
+    LaunchedEffect(line.t, playing, offset) {
+        now = Engine.position.value + offset
+        if (!playing) return@LaunchedEffect
+        var base = now
+        var start = withFrameMillis { it }
+        while (true) {
+            withFrameMillis { f ->
+                val engineNow = Engine.position.value + offset
+                val est = base + (f - start)
+                if (kotlin.math.abs(engineNow - est) > 120L) { base = engineNow; start = f; now = engineNow }
+                else now = est
             }
+            if (UiPref.lowMem) delay(32)
         }
     }
     val baseSt = TextStyle(fontSize = LyricPref.size.sp, fontWeight = FontWeight(800), fontFamily = Typo.family, lineHeight = (LyricPref.size * 1.38f).sp)

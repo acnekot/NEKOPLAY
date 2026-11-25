@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
@@ -83,15 +82,25 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
     var flippedKey by remember { mutableStateOf<String?>(null) }
     var stageW by remember { mutableFloatStateOf(0f) }
     var stageH by remember { mutableFloatStateOf(0f) }
-    var pointerX by remember { mutableFloatStateOf(0f) } // -1..1 相对舞台中心（桌面鼠标）
-    var pointerY by remember { mutableFloatStateOf(0f) }
-    val gyroX by TiltBus.x.collectAsState()
-    val gyroY by TiltBus.y.collectAsState()
+    // 纯 GPU 零重组倾斜状态：桌面鼠标与手机陀螺仪均在协程里平滑驱动 Animatable，仅在 graphicsLayer / draw 阶段读取，全程 0 重组
+    val tiltX = remember { Animatable(0f) }
+    val tiltY = remember { Animatable(0f) }
+    var tiltJob by remember { mutableStateOf<Job?>(null) }
+    fun setTiltTarget(tx: Float, ty: Float) {
+        if (AnimStyle.off) return
+        tiltJob?.cancel()
+        tiltJob = scope.launch {
+            launch { tiltX.animateTo(tx, spring(0.88f, Anim.stiff(Spring.StiffnessLow))) }
+            launch { tiltY.animateTo(ty, spring(0.88f, Anim.stiff(Spring.StiffnessLow))) }
+        }
+    }
     DisposableEffect(Unit) { TiltBus.onObserve?.invoke(true); onDispose { TiltBus.onObserve?.invoke(false) } }
-    val rawTiltX = if (Plat.isDesktop) pointerX else gyroX
-    val rawTiltY = if (Plat.isDesktop) pointerY else gyroY
-    val tiltX by animateFloatAsState(if (AnimStyle.off) 0f else rawTiltX, spring(0.88f, Anim.stiff(Spring.StiffnessLow)), label = "cfTx")
-    val tiltY by animateFloatAsState(if (AnimStyle.off) 0f else rawTiltY, spring(0.88f, Anim.stiff(Spring.StiffnessLow)), label = "cfTy")
+    LaunchedEffect(Unit) {
+        if (!Plat.isDesktop) {
+            launch { TiltBus.x.collect { if (!AnimStyle.off) tiltX.snapTo(it) } }
+            launch { TiltBus.y.collect { if (!AnimStyle.off) tiltY.snapTo(it) } }
+        }
+    }
     val ls = Screen.landscape
     val density = LocalDensity.current.density
 
@@ -204,10 +213,10 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                             }
                             PointerEventType.Move, PointerEventType.Enter -> {
                                 ev.changes.firstOrNull()?.position?.let { pt ->
-                                    if (stageW > 1f && stageH > 1f) { pointerX = ((pt.x / stageW) * 2f - 1f).coerceIn(-1f, 1f); pointerY = ((pt.y / stageH) * 2f - 1f).coerceIn(-1f, 1f) }
+                                    if (stageW > 1f && stageH > 1f) setTiltTarget(((pt.x / stageW) * 2f - 1f).coerceIn(-1f, 1f), ((pt.y / stageH) * 2f - 1f).coerceIn(-1f, 1f))
                                 }
                             }
-                            PointerEventType.Exit -> { pointerX = 0f; pointerY = 0f }
+                            PointerEventType.Exit -> setTiltTarget(0f, 0f)
                         }
                     }
                 }
@@ -224,9 +233,10 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
             val stackStepPx = coverPx * 0.22f
             val reflH = coverDp * 0.36f
 
-            // 左右各渲染 6 张封面，使用 key(item.key) 稳定节点身份并在 graphicsLayer 内读 pos.value，避免切卡闪烁与整树重组
-            val minI = (curIdx - 6).coerceAtLeast(0)
-            val maxI = (curIdx + 6).coerceAtMost(items.lastIndex)
+            // 桌面左右各 5 张、移动端各 4 张，显著减少离屏合成与 GPU 填充率开销，稳定高帧率
+            val wingSpan = if (Plat.isDesktop) 5 else 4
+            val minI = (curIdx - wingSpan).coerceAtLeast(0)
+            val maxI = (curIdx + wingSpan).coerceAtMost(items.lastIndex)
             for (i in minI..maxI) {
                 val item = items[i]
                 key(item.key) {
@@ -240,23 +250,23 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                         .graphicsLayer {
                             val d = i - pos.value
                             val ad = abs(d)
-                            // C1 连续平滑曲线：消除 |d|=1 处速度突变造成的生硬顿挫
                             val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat()
                             val wingAngle = -64f * sign(d) * s
                             val extraGap = (centerGapPx - stackStepPx) * kotlin.math.tanh((ad * 1.35f).toDouble()).toFloat()
                             val tx = d * stackStepPx + sign(d) * extraGap
                             val sc = 1f - 0.20f * s
                             val centerWeight = (1f - s).coerceIn(0f, 1f)
-                            val rotYExtra = if (isFlipped) 0f else tiltX * (4.5f + 7.5f * centerWeight)
-                            val rotXExtra = if (isFlipped) 0f else -tiltY * (3.2f + 5.8f * centerWeight)
-                            translationX = tx + tiltX * (10f * density * (0.35f + 0.65f * centerWeight))
-                            translationY = coverPx * 0.14f + tiltY * (5f * density * centerWeight)
+                            val tX = tiltX.value; val tY = tiltY.value
+                            val rotYExtra = if (isFlipped) 0f else tX * (4.5f + 7.5f * centerWeight)
+                            val rotXExtra = if (isFlipped) 0f else -tY * (3.2f + 5.8f * centerWeight)
+                            translationX = tx + tX * (10f * density * (0.35f + 0.65f * centerWeight))
+                            translationY = coverPx * (if (ls) 0.08f else 0.14f) + tY * (5f * density * centerWeight)
                             scaleX = sc; scaleY = sc
                             rotationY = (if (isCenter) wingAngle + flipDeg else wingAngle) + rotYExtra
                             rotationX = rotXExtra
                             transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.368f)
                             cameraDistance = 12f * density
-                            alpha = if (ad <= 3.6f) 1f else (1f - (ad - 3.6f) * 0.42f).coerceIn(0f, 1f)
+                            alpha = if (ad <= 3.2f) 1f else (1f - (ad - 3.2f) * 0.48f).coerceIn(0f, 1f)
                         }
                         .pointerInput(item.key, isCenter) {
                             detectTapGestures {
@@ -266,23 +276,25 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    // 封面主体 + 实体唱片盒 3D 厚度侧脊与底边接触阴影（翻转超过 90° 时切为背面曲目清单）
+                    // 封面主体 + 实体唱片盒 3D 厚度侧脊与底边接触阴影
                     Box(Modifier.size(coverDp)) {
-                        // 实体厚度侧脊背板：随 3D 偏转角与鼠标倾斜动态露出物理侧边与高光棱线
                         Box(Modifier.matchParentSize().graphicsLayer {
                             val d = i - pos.value; val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
-                            translationX = if (isFlipped) 0f else (sign(d) * s * 6.dp.toPx() - tiltX * 3.5.dp.toPx())
-                            translationY = if (isFlipped) 0f else (1.5.dp.toPx() - tiltY * 2.dp.toPx())
+                            translationX = if (isFlipped) 0f else (sign(d) * s * 6.dp.toPx() - tiltX.value * 3.5.dp.toPx())
+                            translationY = if (isFlipped) 0f else (1.5.dp.toPx() - tiltY.value * 2.dp.toPx())
                             alpha = (1f - flipDeg / 90f).coerceIn(0f, 1f)
                         }.background(Brush.verticalGradient(listOf(Color(0xFF3A414E), Color(0xFF1A1E26), Color(0xFF0E1016)))).border(1.dp, Color(0x38FFFFFF)))
                         Box(Modifier.matchParentSize().border(1.dp, p.k.copy(alpha = if (isCenter) 0.28f else 0.14f)).background(p.sheet)) {
                         if (flipDeg <= 90f) {
-                            Cover(item.cover, coverDp, item.title, border = false, decodeSize = 512.dp)
+                            Cover(item.cover, coverDp, item.title, border = false, decodeSize = if (isCenter) 512.dp else 256.dp)
                             Box(Modifier.matchParentSize().drawWithContent {
-                                val d = i - pos.value; val s = kotlin.math.tanh((abs(d) * 1.45f).toDouble()).toFloat()
-                                val gx = size.width * (0.38f - tiltX * 0.34f - d.coerceIn(-1f, 1f) * 0.18f)
-                                val gy = size.height * (0.26f - tiltY * 0.32f)
-                                drawRect(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.07f + 0.13f * (1f - s).coerceIn(0f, 1f)), Color.Transparent), center = androidx.compose.ui.geometry.Offset(gx, gy), radius = size.width * 0.92f))
+                                val d = i - pos.value; val ad = abs(d)
+                                if (ad < 2.2f) {
+                                    val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat()
+                                    val gx = size.width * (0.38f - tiltX.value * 0.34f - d.coerceIn(-1f, 1f) * 0.18f)
+                                    val gy = size.height * (0.26f - tiltY.value * 0.32f)
+                                    drawRect(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.07f + 0.13f * (1f - s).coerceIn(0f, 1f)), Color.Transparent), center = androidx.compose.ui.geometry.Offset(gx, gy), radius = size.width * 0.92f))
+                                }
                                 drawRect(Color.White.copy(alpha = 0.22f), size = androidx.compose.ui.geometry.Size(size.width, 1.5f))
                                 drawRect(Color.Black.copy(alpha = 0.38f), topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - 2f), size = androidx.compose.ui.geometry.Size(size.width, 2f))
                             })
@@ -299,8 +311,8 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                         }
                         }
                     }
-                    // 精确底部镜面倒影：0dp 紧贴封面底边、同步侧翼暗角、二次曲线提前渐隐彻底消除底边硬裁切线
-                    Box(Modifier.size(coverDp, reflH).clipToBounds()
+                    // 轻量高效底部镜面倒影：去掉逐卡实时高斯模糊（省下十余次 GPU Blur Pass），仅近处卡片合成倒影
+                    if (abs(i - curIdx) <= 3) Box(Modifier.size(coverDp, reflH).clipToBounds()
                         .graphicsLayer {
                             alpha = (1f - flipDeg / 90f).coerceIn(0f, 1f)
                             compositingStrategy = CompositingStrategy.Offscreen
@@ -309,11 +321,11 @@ private data class FlowItem(val key: String, val kind: String, val id: String, v
                             drawContent()
                             drawRect(brush = reflMask, topLeft = androidx.compose.ui.geometry.Offset(-4f, -4f), size = androidx.compose.ui.geometry.Size(size.width + 8f, size.height + 8f), blendMode = BlendMode.DstIn)
                         }) {
-                        Box(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).graphicsLayer { scaleY = -1f }.then(if (Plat.impl.liveBlur) Modifier.blur(1.5.dp) else Modifier)) {
-                            Cover(item.cover, coverDp, item.title, border = false, decodeSize = 256.dp)
+                        Box(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).graphicsLayer { scaleY = -1f }) {
+                            Cover(item.cover, coverDp, item.title, border = false, decodeSize = 200.dp)
                             Box(Modifier.matchParentSize().graphicsLayer { val ad = abs(i - pos.value); val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat(); alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f) }.background(Color.Black))
                         }
-                    }
+                    } else Spacer(Modifier.height(reflH))
                 }
                 }
             }
