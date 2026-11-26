@@ -130,8 +130,15 @@ internal fun Modifier.geomRevealProgress(
  * - 未启用点线面几何插件时直接走原生 Crossfade（零开销）；
  * - 启用后，首次出现从左上角「点 → 线 → 面」展开；切歌时按插件设置支持先反向「面 → 线 → 点」收起再展开新封面，或直接覆盖扫开。
  */
-@Composable fun CoverRevealSwitch(url: String?, size: Dp, title: String, decodeSize: Dp = size) {
-    val cfg = MotionEffects.geom
+@Composable fun CoverRevealSwitch(
+    url: String?,
+    size: Dp,
+    title: String,
+    decodeSize: Dp = size,
+    revealKey: Any? = url,
+    forceCfg: GeomRevealConfig? = null,
+) {
+    val cfg = forceCfg ?: MotionEffects.geom
     if (cfg == null) {
         Crossfade(url, animationSpec = tween(Motion.crossfadeMs), label = "coverCf") { u ->
             Cover(u, size, title, decodeSize = decodeSize)
@@ -140,26 +147,27 @@ internal fun Modifier.geomRevealProgress(
     }
     var activeUrl by remember { mutableStateOf(url) }
     var activeTitle by remember { mutableStateOf(title) }
+    var activeKey by remember { mutableStateOf(revealKey) }
     var underUrl by remember { mutableStateOf<String?>(null) }
     var underTitle by remember { mutableStateOf("") }
     var firstRun by remember { mutableStateOf(true) }
     val prog = remember { Animatable(0f) }
-    LaunchedEffect(url, cfg) {
+    LaunchedEffect(url, revealKey, cfg) {
         val dur = Motion.crossfadeMs.coerceAtLeast(120)
         if (firstRun) {
             firstRun = false
-            activeUrl = url; activeTitle = title; underUrl = null
+            activeUrl = url; activeTitle = title; activeKey = revealKey; underUrl = null
             prog.snapTo(0f)
             prog.animateTo(1f, tween(dur, easing = LinearEasing))
-        } else if (url != activeUrl) {
+        } else if (url != activeUrl || revealKey != activeKey) {
             if (cfg.reverse && prog.value > 0.05f) {
                 underUrl = null
                 prog.animateTo(0f, tween((dur * 0.62f).toInt().coerceAtLeast(80), easing = LinearEasing))
-                activeUrl = url; activeTitle = title
+                activeUrl = url; activeTitle = title; activeKey = revealKey
                 prog.animateTo(1f, tween(dur, easing = LinearEasing))
             } else {
                 underUrl = activeUrl; underTitle = activeTitle
-                activeUrl = url; activeTitle = title
+                activeUrl = url; activeTitle = title; activeKey = revealKey
                 prog.snapTo(0f)
                 prog.animateTo(1f, tween(dur, easing = LinearEasing))
                 underUrl = null

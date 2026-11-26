@@ -5,9 +5,13 @@
 
 ## [未发布]
 
+## [0.6.8-nightly.20261126.7] - 2026-11-26
+
+预发布构建（全五端：Android / Windows / macOS / Linux / iOS）：新增独立**点线面几何动效（`geom_motion.js`）**插件与实机演示台，并将**播放历史**升级为按天划分、彻底移除 100 条上限。
+
 ### 新增与优化
 - **独立「点线面几何动效」插件能力（`@type motion` · `geom_motion.js`）**：
-  - 扩展 Plugin API v2 `@type motion` 规范（新增 `geomReveal`、`geomLineRatio`、`geomLineDp`、`geomReverse`、`geomContainer`、`geomAccent`）并新增零开销纯 GPU 绘制引擎 `GeomMotion.kt`（`Modifier.geomReveal`、`Modifier.geomContainerReveal`、`CoverRevealSwitch`）；未启用插件时零额外开销，安装并启用官方插件库「点线面几何动效（`geom_motion.js`）」后生效
+  - 扩展 Plugin API v2 `@type motion` 规范（新增 `geomReveal`、`geomLineRatio`、`geomLineDp`、`geomReverse`、`geomContainer`、`geomAccent`）并新增零开销纯 GPU 绘制引擎 `GeomMotion.kt`（`Modifier.geomReveal`、`Modifier.geomContainerReveal`、`CoverRevealSwitch`）；声明式页面 `cover` 节点同步支持 `revealKey` / `geomPreview`，插件页内置原生 120fps 实机交互演示台，可一键重播点→线→面与切封面实测
   - 正方形封面（播放页大封面切歌/入场、迷你条封面、歌单/专辑/歌手页头图）及可选页面/播放页容器均从左上角原点 `(0, 0)` 先沿 `OutExpo` 横向极速拉出顶边光束线，再沿 `OutQuint` 垂直向下扫面展开并伴随轻微落位缩放，支持切歌/收起反向「面 → 线 → 点」缩回左上顶点与三套预设（PRTS 标准 / 锐利极速 / 仪式慢展）热切换
 - **播放历史按天划分并移除 100 条上限**：
   - `Store` 新增带本地日期与播放时间戳的 `RecentEntry` 与按天分组器 `RecentDayGroup`，彻底移除原先 100 条截断限制；改为异步防抖原子落盘（兼容旧版无时间戳记录平滑归入「更早记录」并支持加密/明文备份完整往返），同日重复听同一首歌置顶刷新时间、跨天记录各自完整保留

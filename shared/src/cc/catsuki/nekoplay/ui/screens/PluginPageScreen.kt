@@ -116,7 +116,14 @@ import org.json.JSONObject
                 T(node.optString("text", "按钮"), 12, if (primary) Color.White else p.k, 700)
             }
         }
-        "cover" -> Cover(node.optString("url").takeIf { it.isNotEmpty() }, node.optInt("size", 64).coerceIn(28, 280).dp, node.optString("title"), border = true)
+        "cover" -> {
+            val u = node.optString("url").takeIf { it.isNotEmpty() }
+            val sz = node.optInt("size", 64).coerceIn(28, 280).dp
+            val title = node.optString("title")
+            val rk = node.optString("revealKey").takeIf { it.isNotEmpty() }
+            if (rk != null) CoverRevealSwitch(u, sz, title, revealKey = rk, forceCfg = if (node.optBoolean("geomPreview")) MotionEffects.geom ?: GeomRevealConfig() else null)
+            else Cover(u, sz, title, border = true)
+        }
         "divider" -> Rule()
         "spacer" -> Spacer(Modifier.height(node.optInt("size", 12).coerceIn(2, 64).dp))
     }

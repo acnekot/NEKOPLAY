@@ -61,7 +61,7 @@ import androidx.compose.runtime.withFrameMillis
     Box(Modifier.fillMaxWidth().height(60.dp).onSizeChanged { barW = it.width.toFloat().coerceAtLeast(1f) }) {
         Row(Modifier.fillMaxSize().background(barBg()).drawBehind { if (!Look.flat) drawRect(p.l2, size = Size(size.width, 1.dp.toPx())) }
             .press { SharedHero.capture("now:${t.id}", t.cover, t.title, tag = "mini"); nav.lyrics = false; nav.player = true }.padding(start = 14.dp, end = 6.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Cover(t.cover, 40.dp, t.title, modifier = Modifier.heroAnchor("now:${t.id}", t.cover, t.title, tag = "mini", priority = 2).geomReveal(t.cover))
+            Cover(t.cover, 40.dp, t.title, modifier = Modifier.heroAnchor("now:${t.id}", t.cover, t.title, tag = "mini", priority = 2).geomReveal(t.id))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) { T(t.title, 15, w = 700, lh = 1.3f); T(t.artist, 12, p.s, lh = 1.3f) }
             Box(Modifier.size(40.dp, 48.dp).holdScrub(-1, enabled = !st.fm, haptic = true) { if (st.fm) { Engine.fmTrash(); nav.toast = "不再推荐这首" } else Engine.prev() }, contentAlignment = Alignment.Center) { NIcon(if (st.fm) NIcons.trash else NIcons.prev, 19.dp, if (ScrubController.dir < 0) p.p else p.k) }
@@ -209,7 +209,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                             }
                         }
                     }.then(Modifier.clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { nav.lyrics = !nav.lyrics })) {
-                        CoverRevealSwitch(t.cover, coverDp, t.title)
+                        CoverRevealSwitch(t.cover, coverDp, t.title, revealKey = t.id)
                     }
                     // 标题：两套各在自己的位置淡入淡出
                     // 信息块：和封面左边对齐，宽度等于封面；爱心在歌名同一行最右，对齐封面右边缘
@@ -319,7 +319,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             Column(Modifier.width(cover + 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 // 解码尺寸固定 560dp；接入 heroAnchor 支持从底部播放条直飞大封面
                 Box(Modifier.onPlaced { val ny = it.positionInRoot().y; if (kotlin.math.abs(ny - coverY) > 1f) coverY = ny }.heroAnchor("now:${t.id}", t.cover, t.title, isTarget = true)) {
-                    CoverRevealSwitch(t.cover, cover, t.title, decodeSize = 560.dp)
+                    CoverRevealSwitch(t.cover, cover, t.title, decodeSize = 560.dp, revealKey = t.id)
                 }
                 Spacer(Modifier.height(22.dp))
                 Row(Modifier.width(cover), verticalAlignment = Alignment.Top) {
