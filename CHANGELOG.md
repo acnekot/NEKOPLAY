@@ -5,6 +5,10 @@
 
 ## [未发布]
 
+## [0.6.8-nightly.20261126.6] - 2026-11-26
+
+预发布构建（全五端：Android / Windows / macOS / Linux / iOS）：新增独立**源点空间动效（`origin_motion.js`）**插件底座（点哪个就从哪展开、多级栈原路回缩、点击邻近波纹与多级方向继承），并彻底修复播放页内切歌左上角闪出小封面重影的问题。
+
 ### 新增与优化
 - **独立「源点空间动效」插件能力（`@type motion` · `origin_motion.js`）**：
   - 扩展 Plugin API v2 `@type motion` 规范（新增 `originExpand`、`originRipple`、`originInherit`、`originCornerDp`、`selectCoverScale`、`selectFontScale`），本体默认保持零开销纯净，安装并启用官方插件库独立动效插件「源点空间动效（`origin_motion.js`）」后即刻生效，并支持插件内热切换预设（丝滑源点 / 灵动弹性 / 轻盈极速）与单项能力开关
