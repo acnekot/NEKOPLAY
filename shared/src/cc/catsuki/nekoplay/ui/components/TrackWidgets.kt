@@ -183,7 +183,12 @@ fun img(url: String?, px: Int): String? {
         enter = fadeIn(Motion.quick()) + scaleIn(Motion.quick(), if (MotionEffects.pageScale) .8f else 1f),
         exit = fadeOut(Motion.quick()) + scaleOut(Motion.quick(), if (MotionEffects.pageScale) .8f else 1f)) {
         Box(Modifier.size(44.dp).press(.92f, true) {
-            scope.launch { ls.animateScrollToItem(target, -(ls.layoutInfo.viewportEndOffset / 3)) }
+            scope.launch {
+                val off = -(ls.layoutInfo.viewportEndOffset / 3)
+                // 远距离跳转直接落位到目标视口，避免先跳顶再回滑把上下行拆成两股同时入场
+                if (kotlin.math.abs(ls.firstVisibleItemIndex - target) > 25) ls.scrollToItem(target, off)
+                else ls.animateScrollToItem(target, off)
+            }
         }.background(c.sheet).border(if (Look.flat) 0.dp else 1.dp, c.k), contentAlignment = Alignment.Center) { NIcon(NIcons.locate, 20.dp, c.p) }
     }
 }

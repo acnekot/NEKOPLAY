@@ -217,7 +217,7 @@ import java.util.Calendar
             "radio" -> try { value = Ncm.radioPrograms(p.id) } catch (e: Exception) { err = e.message }
             else -> {
                 withContext(Dispatchers.IO) { Store.cachedTracks(p.id) }?.let { value = it }
-                try { value = Store.tracksOf(p.id, refresh = true) } catch (e: Exception) { if (value == null) err = e.message }
+                try { val fresh = Store.tracksOf(p.id, refresh = true); if (fresh != value) value = fresh } catch (e: Exception) { if (value == null) err = e.message }
             }
         }
     }
