@@ -86,7 +86,9 @@ interface Audio {
 }
 
 interface PlatImpl {
-    val name: String               // "android" / "desktop"
+    val name: String               // "android" / "desktop" / "ios"
+    /** 本平台音频内核是否已实现内置效果器/均衡器 */
+    val supportsFx: Boolean get() = true
     val filesDir: File
     val cacheDir: File
     fun prefs(name: String): KV

@@ -2,63 +2,55 @@
 
 ## 总体
 
-NEKOPLAY 是一份 Kotlin + Compose 代码跑在三个平台上：
+NEKOPLAY 是一份 Kotlin + Compose Multiplatform 代码运行在三大平台（Desktop / Android / iOS）：
 
 ```
-            ┌──────────────── shared/src（共用代码）────────────────┐
-            │  ui ──► player ──► data ──► core                     │
-            │  （页面）  （播放）   （数据 / 插件）  （平台接口）         │
-            └───────────────────────────▲──────────────────────────┘
+            ┌──────────────── shared/src（共用代码，单文件 ≤ 400 行）────────┐
+            │  ui ──► player ──► data ──► core                              │
+            │  （页面）  （播放）   （数据 / 插件）  （平台接口与守门）          │
+            └───────────────────────────▲───────────────────────────────────┘
                                         │ PlatImpl
-            ┌───────────────┬───────────┴───────┬──────────────────┐
-            │ app（安卓）     │ desktop（桌面）     │ ios（iOS）        │
-            │ ExoPlayer     │ libmpv            │ AVPlayer         │
-            │ WebView       │ WebView2 / JavaFX │ WKWebView        │
-            └───────────────┴───────────────────┴──────────────────┘
+            ┌───────────────┬───────────┴───────┬──────────────────────────┐
+            │ app（安卓）     │ desktop（桌面）     │ ios（iOS）               │
+            │ ExoPlayer     │ libmpv            │ AVPlayer / CarPlay       │
+            │ WebView       │ 扫码 / Cookie      │ WKWebView                │
+            └───────────────┴───────────────────┴──────────────────────────┘
 ```
 
-`shared/src` 不是一个单独的 Gradle 模块：三个平台模块各自把它加进自己的源码目录一起编译。
-所以共用代码里能用的 API = 三个平台都有的 API（iOS 缺的 JVM 类在 `ios/src/iosArm64Main` 里补）。
+`shared/src` 以源码目录形式参与三端联合编译；iOS 缺失的最小 JVM 兼容层在 `ios/src/iosArm64Main` 补齐。每次提交均由 `./gradlew archCheck` 强制校验 **0 反向 UI 依赖** 与 **共享 `.kt` 单文件 ≤ 400 行**。
 
-## 子包
+## 分层职责
 
-| 包 | 内容 | 依赖 |
+| 层 | 核心模块 | 依赖方向 |
 |---|---|---|
-| `core` | `Plat` / `PlatImpl`（平台接口：文件、配置、音频、图片、网页）、版本号、调试日志、性能统计、功能开关、检查更新、备份 | 无 |
-| `data` | 数据模型（`Track`、`Playlist`…）、`Ncm`（对插件的统一门面）、插件引擎 `Plugins` / `JsSource`、插件订阅、`Store`（账号歌单和喜欢）、本地库、本地音乐、WebDAV、下载、统计 | core |
-| `player` | 播放引擎 `Engine`（队列、无缝切歌、预加载）、效果器、睡眠定时、歌词解析和显示、私人 FM、桌面歌词、播放页 | core、data |
-| `ui` | 导航 `Nav` / `Page`、根布局、通用组件和主题、各页面、首页模块、插件管理和登录页、宽屏布局、背景和取色 | 全部 |
+| `core` | `Plat` / `PlatImpl`、`AppGraph`、`Version`、`Hash`（MD5 + 原子写盘）、`Features`（5 大关联功能集群）、`Backup`（可选 AES-256 加密）、`Updater`、`Perf`、`Debug` | 无 |
+| `data` | `Ncm`、`Plugin` / `Plugins` / `PluginSubs`（QuickJS API v2）、`Store`、`LocalLib`、`LocalMusic`、`Dav`、`Download`、`Stats`（异步防抖原子落盘） | `core` |
+| `player` | `Engine` / `EngineQueue`（随机历史栈、FM、缓存检索）、`EngineScrub`（`@feature scrub` 插件槽位）、`Fx`、`Sleep`、`Lrc`、`DeskLyric` | `core`、`data` |
+| `ui` | `ui/Motion` / `ui/MotionEasings`（简单/高级分层 + `@type motion` 剥离）、`ui/InputBus`、`ui/RootNav`、`ui/components/`、`ui/player/`、`ui/screens/`、`ui/settings/` | 全部 |
 
-目前各子包之间通过通配导入互相引用，有少量反向依赖（比如 `data` 里的页面用到 `ui` 的组件）。新代码尽量按上表的方向依赖。
+## 插件体系（Plugin API v2）
 
-## 插件
+- 本体不内置任何在线音源，官方插件托管于独立 MIT 仓库 `acnekot/NEKOPLAY_PLUGINS`。
+- 划分四大插件类型：`source`（音源）、`feature`（功能槽位，如 `coverflow` / `scrub`）、`page`（声明式原生页）、`motion`（外置动效引擎，如瀑布入场与长留尾缓动）。
+- 权限守门：声明 `@permissions` 的非音源插件未包含 `network` 时自动拦截 `nk.http`。
+- 并发调度：`JsSource` 内建事件循环，慢速网络请求在 QuickJS 锁外异步并发执行；`Plugins` 使用单一托管 `SupervisorJob` 作用域并对并发刷新去重。
+- 详细接口规范见 [plugin-api.md](plugin-api.md)。
 
-在线音源全部是 `plugins/*.js`，在 QuickJS 里运行（`data/Plugin.kt`）：
+## 功能开关集群（`Features`）
 
-- 脚本用 `nk.register({...})` 注册方法，宿主按方法名判断插件有哪些能力（搜索、播放、歌词、登录…）
-- 宿主接口 `nk.http` / `nk.store` / `nk.md5` / `nk.aes` 等由 Kotlin 实现
-- **调度**：quickjs-kt 的一次 `evaluate` 要等它里面所有异步任务结束，多次 `evaluate` 之间排队。
-  所以引擎自己做事件循环：`evaluate` 只负责「开始一次调用」（`__call`）或「把网络结果交回脚本」（`__resolve`），马上返回；
-  网络请求在脚本外并发执行。这样一个慢调用（长轮询、大歌单）不会挡住切歌和歌词
-- 歌曲 / 歌单 id 带插件前缀 `@插件id:原始id`（网易云沿用不带前缀的数字 id），`Plugins.of(id)` 据此找到插件
-- 接口文档：[plugin-api.md](plugin-api.md)
+全部内置可选模块统一对齐为 5 大关联集群（支持「关联集群」一键总控与「单功能」精细开关，并在功能管理页同步总控外置功能插件）：
+1. **曲库与存储**：本地音乐 / WebDAV 音乐 / 本地下载
+2. **音频增强**：效果器与均衡器（按平台 `supportsFx` 门控） / 外部音频插件宿主（桌面）
+3. **播放与歌词**：桌面歌词（桌面） / 通知栏歌词（移动） / 歌词偏移 / 歌词卡片 / 定时关闭
+4. **外观与动效**：自定义背景 / 动态取色 / 动效与曲线
+5. **数据与扩展**：听歌统计 / WebDAV 备份 / 侧拉模式（桌面） / Discord 状态（桌面）
 
-## 播放
+## 数据与可靠性
 
-`player/Engine.kt` 管理队列和播放状态，通过 `PlatImpl.audio` 调平台播放器：
+- 所有高频 JSON 状态文件（`stats.json`、`locallib.json`、`store` 缓存、插件脚本）统一使用 `File.writeTextAtomic()`（同目录 `.tmp` + 原子替换）防止强杀损坏。
+- 备份支持可选口令 AES-256-CBC + MAC 完整性校验加密，涵盖设置、主题、统计、本机曲库、插件脚本与可选凭证。
 
-- 在线歌曲：`Ncm.stream` → 插件的 `stream` 拿地址（缓存 8 分钟）→ 平台播放器
-- 本地 / WebDAV：曲目自带 `src`；WebDAV 的 `dav:/路径` 在播放时才拼上账号密码
-- 快播完时预取下一首地址并交给平台播放器排队，实现无缝切歌
+## 构建与质量守门
 
-## 数据存放
-
-- 配置：`Plat.prefs(名字)`，安卓是 SharedPreferences，桌面是用户目录下的 `.properties` 文件，iOS 是应用支持目录下的 JSON 文件
-- 插件脚本：`filesDir/plugins/<id>.js`；每个插件的存储：`prefs("plugin_<id>")`
-- 本机喜欢 / 本地歌单：`filesDir/locallib.json`
-
-## 构建和发布
-
-- `.github/workflows/check.yml`：每次推送和 PR，Linux 上编译、测试、风格检查
-- `.github/workflows/build.yml`：手动运行或推 `v*` 标签时打包五个平台，推标签时同时发布 Release
-- 版本号：`Version.kt`；打包时生成 `BuildMeta`（提交号、提交时间），检查更新用
+- `.github/workflows/check.yml`：每次推送与 PR 自动执行 `archCheck`、桌面单测、Android 与 iOS 三端编译校验。
+- `.github/workflows/build.yml`：支持全平台标签发版与按平台勾选的 `workflow_dispatch` 预发布构建。

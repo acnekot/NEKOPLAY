@@ -139,7 +139,7 @@ import java.util.Calendar
         item { NavRow("首页布局", "调整首页模块的顺序，或关掉不需要的", "${HomeLayout.visible.size}/${HomeLayout.ALL.size}") { nav.push(Page.HomeLayout) } }
         if (HomeSrc.options.size > 1) item {
             val opts = HomeSrc.options
-            SetLine("首页内容来源", "首页显示哪个音源的内容，搜索也默认用它；混合 = 网易云的日推 / 推荐，加上 QQ 音乐、酷狗的排行榜") {
+            SetLine("首页内容来源", "决定首页与默认搜索使用的音源插件；「混合」将自动聚合各已启用音源的推荐与排行榜") {
                 ChipRow(opts.map { it.first }, opts.indexOfFirst { it.second == HomeSrc.current }.coerceAtLeast(0)) { HomeSrc.set(opts[it].second) }
             }
         }

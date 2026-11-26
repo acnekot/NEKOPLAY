@@ -49,6 +49,7 @@ class IosPlat : PlatImpl {
     }
 
     override val name = "ios"
+    override val supportsFx: Boolean = false
     override val filesDir: File = File(support, "files").apply { mkdirs() }
     override val cacheDir: File = File(caches, "nekoplay").apply { mkdirs() }
     private val kvs = HashMap<String, KV>()

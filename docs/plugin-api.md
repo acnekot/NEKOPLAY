@@ -1,122 +1,104 @@
-# NEKOPLAY 插件接口（v1）
+# NEKOPLAY 插件接口（Plugin API v2）
 
-NEKOPLAY 本体不带任何在线音源。音源和其它在线服务都写成 **JS 插件**，由用户在「设置 → 插件」里从文件或网址导入。
-插件运行在本体内置的 QuickJS 里（安卓、桌面、iOS 都一样），没有 DOM、没有 `fetch`，网络、加密、存储都通过本体提供的 `nk` 对象完成。
+NEKOPLAY 本体完全中立，不内置任何在线音源与重型特色扩展。在线音源、功能扩展、声明式页面与特色动效引擎均以 **JS 插件** 形式运行在跨端内置的 QuickJS 环境中（Android / Windows / macOS / Linux / iOS 一致），通过宿主注入的 `nk` 对象与系统交互。
 
-插件实现了哪些方法，本体就打开哪些功能：实现了 `search` 就出现在搜索的来源里，实现了 `toplists` 首页就出现它的排行榜，实现了 `loginQr` 插件管理和曲库里就有登录入口。
+---
 
-## 文件头
+## 插件类型（`@type`）
 
-脚本开头用注释写插件信息，`@id` 必填，只能用字母、数字、`_`、`-`，同 id 再次导入会覆盖旧版本。
+| `@type` | 注册入口 | 定位与职责 |
+|---|---|---|
+| `source`（默认） | `nk.register({...})` | 音源插件：曲库、搜索、取流、歌词、评论、歌单、登录等 |
+| `feature` | `nk.registerFeature({...})` | 功能插件：槽位扩展（如 `@feature coverflow`、`@feature scrub`）、生命周期钩子、歌词后处理、热更新 `config()` |
+| `page` | `nk.registerPage({...})` | 声明式页面插件：导出 `render(ctx)` 与 `onAction(action, payload)`，由原生 Compose 五端渲染 |
+| `motion` | `nk.registerMotion({...})` | 动效引擎插件：导出 `profile()` 声明解析缓动曲线、通道时长与列表瀑布入场参数（多动效插件互斥生效） |
+
+---
+
+## 文件头元数据
+
+脚本开头注释声明元数据，`@id` 必填（仅允许字母、数字、`_`、`-`），同 id 再次导入覆盖旧版本：
 
 ```js
-// @id qqmusic
-// @name QQ 音乐
+// @id demo_plugin
+// @name 示例插件
+// @type feature
+// @feature scrub
 // @version 1.0.0
+// @minHost 0.6.8
+// @permissions player.control, storage
 // @author 你的名字
 // @desc 一句话说明
-// @api 1
-// @search track,album,artist,playlist,user,lyric   // 能搜的类型，省略时只有 track,album,playlist
+// @api 2
+// @search track,album,artist,playlist,user,lyric   // 仅 source 插件：支持的搜索类型
 ```
 
-## 注册
+### 权限声明与守门（`@permissions`）
+- 常用权限：`network`、`storage`、`library.read`、`player.control`、`sensor.tilt`、`ui.sidebar`、`motion.profile`。
+- **运行期守门**：`feature` / `page` / `motion` 插件若声明了 `@permissions` 且未包含 `network`，宿主会自动拦截 `nk.http` 请求，防止纯本地插件意外外联。
 
-```js
-nk.register({
-  async search(q, type, page) { ... },
-  async stream(id, quality) { ... },
-  // ……
-});
-```
+---
 
-所有方法都可以是 `async`。抛出的错误（`throw new Error('原因')`）会以原文提示给用户。
+## 音源插件（`@type source`）
 
-## 数据格式
+插件内所有 id 均为插件原始 id，宿主自动添加 `@插件id:` 前缀并在回调时剥离。
 
-插件里的 id 都是插件自己的原始 id。本体会统一加上 `@插件id:` 前缀，调回插件时再去掉，插件不用关心前缀。
-
+### 数据模型
 | 类型 | 字段 |
 |---|---|
-| Track 歌曲 | `id`、`title`、`artist`、`album?`、`duration`（毫秒）、`cover?`、`artists?: [{id, name}]`、`albumId?`、`vip?` |
-| Playlist 歌单 | `id`、`name`、`count?`、`cover?`、`liked?`（是「我喜欢」）、`mine?`（自己建的）、`desc?` |
-| Album 专辑 | `id`、`name`、`cover?`、`artist?`、`year?`、`count?` |
+| Track | `id`、`title`、`artist`、`album?`、`duration`（毫秒）、`cover?`、`artists?: [{id, name}]`、`albumId?`、`vip?` |
+| Playlist | `id`、`name`、`count?`、`cover?`、`liked?`、`mine?`、`desc?` |
+| Album | `id`、`name`、`cover?`、`artist?`、`year?`、`count?` |
 
-## 方法
+### 常用能力方法
+| 方法 | 说明 |
+|---|---|
+| `search(q, type, page)` | 按 `@search` 声明的类型分页搜索 |
+| `stream(id, quality)` | 返回 `{url, ext?, kbps?, level?, trial?, message?}` 或 `{error}` |
+| `lyric(id)` | 返回 `{lrc, tr?, yrc?}` |
+| `playlist(id)` / `album(id)` / `artist(id)` / `artistAlbums(id, page)` | 歌单、专辑、歌手详情 |
+| `toplists()` / `newAlbums()` / `newSongs()` / `daily()` / `fm()` / `recPlaylists()` / `square(cat, page)` | 首页与发现模块 |
+| `comments(id, page)` / `commentFloor(...)` / `commentLike(...)` / `commentPost(...)` | 评论与楼中楼互动 |
+| `account()` / `user(uid)` / `myPlaylists()` / `like(id, on)` / `signin()` | 账号、主页、收藏与签到 |
+| `loginModes()` / `loginQr(mode)` / `loginCheck(key)` / `loginWeb(opt)` / `setCookie(raw)` / `logout()` | 扫码 / 网页 / Cookie 通用登录 |
 
-| 方法 | 参数 | 返回 | 打开的功能 |
-|---|---|---|---|
-| `search` | `q`、`type`（`@search` 里写的类型）、`page`（从 1 开始） | 对应类型的数组；`artist` 是 `{id, name, cover?}`，`user` 是 `{uid, name, avatar?}` | 搜索来源 |
-| `stream` | `id`、`quality`（0 标准、1 较高、2 极高、3 无损、4 Hi-Res，拿不到就往下降） | `{url, ext?, kbps?, level?, trial?, message?}`；没有地址时返回 `{error: '原因'}` | 播放 |
-| `lyric` | `id` | `{lrc, tr?}`（LRC 文本，`tr` 是翻译） | 歌词 |
-| `playlist` | 歌单 `id` | Track 数组 | 歌单详情 |
-| `album` | 专辑 `id` | `{album: Album, tracks: Track[]}` | 专辑页 |
-| `artist` | 歌手 `id` | `{name, cover?, desc?, tracks: Track[]}` | 歌手页 |
-| `toplists` | 无 | Playlist 数组（id 交给 `playlist` 取歌） | 首页排行榜 |
-| `newAlbums` | 无 | Album 数组 | 首页新碟 |
-| `account` | 无 | `{name, avatar?}`，没登录返回 `null` | 账号显示 |
-| `myPlaylists` | 无 | Playlist 数组 | 曲库里的歌单 |
-| `like` | `id`、`on` | 无 | 点喜欢同步到账号 |
-| `loginModes` | 无 | `[{id, name, web?}]`，登录页上的切换按钮；`web: true` 的走网页登录，其它的把 `id` 传给 `loginQr` | 多种登录方式 |
-| `loginQr` | `mode`（`loginModes` 里的 id） | `{image?(PNG base64), text?(二维码内容), key, hint?, poll?(轮询间隔毫秒), saveApp?(手机上「存图并打开」的地址), saveAppName?}` | 扫码登录 |
-| `loginCheck` | `key` | `{state: 'wait' / 'scanned' / 'done' / 'expired' / 'refused', message?}` | 扫码登录 |
-| `loginWeb` | 无 | `{url, done(正则), open?(正则), hint?, pc?}`：内嵌打开 `url`，跳到匹配 `done` 的地址算登录完成，匹配 `open` 的交给系统打开（拉起别的 App） | 网页登录（只在有内嵌浏览器的平台） |
-| `loginWebDone` | 匹配 `done` 的地址 | `{state: 'done'}`，失败就抛错 | 网页登录 |
-| `loginWebOpen` | 地址、`{ios, id(本 App 包名), scheme('nekoplay://')}` | 改写后的地址（比如带上回跳 scheme） | 网页登录 |
-| `loginWebBack` | 别的 App 跳回来的 `nekoplay://…` | 要继续加载的网页地址，没有就 `null` | 网页登录 |
-| `setCookie` | 粘贴的文本 | 无，不认就抛错 | 登录页的「粘贴 Cookie」 |
-| `logout` | 无 | 无 | 退出登录 |
+---
 
-首页来源选了哪个插件，账号、日推、私人 FM、推荐歌单、歌单广场、评论这些没有 id 的功能就找它；它没实现的再找第一个实现了的插件。
-首页模块按首页来源里的插件有没有对应方法显示：每日推荐 `daily`、私人 FM `fm`、推荐歌单 `recPlaylists`、排行榜 `toplists`、新碟 `newAlbums`、歌单广场 `square`。
-点喜欢时，来源插件实现了 `like` 并且登录了就同步到账号；否则记在本机的「本机喜欢」里。
+## 功能 / 页面 / 动效插件（API v2）
 
-`stream` 返回 `trial: true` 时本体会提示「只能放试听」，提示文字用 `message`。
+- **功能槽位（`@feature <slot>`）**：
+  - `coverflow`：解锁 3D 封面墙入口与手机横屏自动展开，通过 `config()` 热更新 3D 外观与交互策略。
+  - `scrub`：解锁切歌按钮长按变速快进 / 快退，通过 `config()` 热更新预设、变调开关与触发时长。
+- **生命周期与管道钩子**：`onTrackChange(track)`、`onPlayState(state)`、`transformLyric(track, lyric)`、`action(track)`。
+- **声明式页面（`render(ctx)` / `onAction(act, payload)`）**：支持 `column`、`row`、`card`、`tag`、`text`、`button`、`cover`、`divider`、`spacer` 原生节点，返回 `{ toast?, open?, refresh? }`。
+- **动效引擎（`profile()`）**：返回 `{ name, presetLabel, quick, standard, page, crossfade, hero, effects }`，支持 `outQuad / outCubic / outQuart / outQuint / outExpo / outExpoTail / outPow10 / outCirc / outBack / outElasticHalf / outElasticQuarter / bezier / spring` 以及 `listStaggerMs` / `listSlideDp` 瀑布入场参数。
 
-## 本体提供的 `nk`
+---
+
+## 宿主 API（`nk`）
 
 ```js
-// 网络：不受跨域限制；默认跟随跳转，redirect: false 时把 3xx 原样返回
-const r = await nk.http({
-  url: 'https://example.com/api',
-  method: 'POST',              // 省略时：有 body / form / json 就 POST，否则 GET
-  headers: { Referer: '...' }, // 不写 User-Agent 时用桌面 Chrome 的
-  json: { a: 1 },              // 或 form: {k: 'v'}，或 body: '文本'
-  redirect: false,
-  binary: true,                // 返回 r.bodyBase64，不返回 r.body
-  timeout: 35,                 // 读超时（秒），长轮询用
-});
-r.status; r.url; r.body; r.json(); r.header('location'); r.cookies(); r.headers['set-cookie'] // 值都是数组
-
-nk.md5('文本')                    // 十六进制
-nk.md5Base64('base64 数据')
-nk.aes({ data: '文本', key: '16 位', iv: '16 位', mode: 'cbc' /* 或 ecb */, padding: true, decrypt: false }) // 返回 base64；解密时传 dataBase64
-nk.base64.encode('文本'); nk.base64.decode('base64')
-nk.store.get('k'); nk.store.set('k', 任意可 JSON 化的值)   // 每个插件独立保存，卸载前一直在
-nk.log('调试信息')                 // 显示在 设置 → 高级 → 请求记录（打开调试后）
+const r = await nk.http({ url, method, headers, json, form, body, redirect, binary, timeout });
+nk.md5(text);
+nk.md5Base64(b64);
+nk.aes({ data, dataBase64, key, iv, mode: 'cbc', padding: true, decrypt: false });
+nk.base64.encode(s); nk.base64.decode(b64);
+nk.store.get(k); nk.store.set(k, v);
+nk.log(...args);
+nk.host; // { version, platform }
 ```
 
-插件在一个长期存在的脚本环境里运行，全局变量会保留（比如扫码登录过程中的 cookie）。
-关闭插件、重新加载或重新导入时环境会重建。
+---
 
-## 例子
+## 插件订阅（`index.json`）
 
-完整的例子见 `plugins/qqmusic.js`。
-
-
-## 插件订阅
-
-在 设置 → 插件 → 订阅 里添加一个 `index.json` 地址，就能从列表里一键安装、更新插件。默认带官方订阅（本仓库的 `plugins/index.json`，raw.githubusercontent.com 打不开时自动换 jsDelivr）。
+官方插件仓库独立托管于 [`acnekot/NEKOPLAY_PLUGINS`](https://github.com/acnekot/NEKOPLAY_PLUGINS)（MIT 协议），默认订阅地址指向其 `index.json`（并自动以 jsDelivr 作为镜像兜底）：
 
 ```json
 {
   "name": "订阅名",
   "plugins": [
-    { "id": "netease", "name": "网易云音乐", "version": "1.0.1", "author": "…", "desc": "…", "url": "netease.js" }
+    { "id": "demo", "name": "示例插件", "type": "feature", "version": "1.0.0", "author": "…", "desc": "…", "url": "demo.js" }
   ]
 }
 ```
-
-- `url` 可以是完整地址，也可以是相对 `index.json` 的路径
-- `version` 比已装的新就显示「更新」；更新时保留插件原来的开关状态
-- 下载到的脚本开头的 `@id` 必须和这里的 `id` 一样，否则不安装
-- 本仓库改了插件版本号后运行 `python3 plugins/gen-index.py` 重新生成 `index.json`

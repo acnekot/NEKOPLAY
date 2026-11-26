@@ -14,7 +14,7 @@ import androidx.compose.runtime.setValue
  */
 object Features {
     class Cluster(val id: String, val name: String, val desc: String)
-    class F(val id: String, val name: String, val desc: String, val desktop: Boolean? = null, val group: String = "")
+    class F(val id: String, val name: String, val desc: String, val desktop: Boolean? = null, val group: String = "", val supported: () -> Boolean = { true })
 
     val CLUSTERS = listOf(
         Cluster("library", "曲库与存储", "本地音乐、网盘曲库与离线下载"),
@@ -28,8 +28,8 @@ object Features {
         F("local", "本地音乐", "扫描并播放本机的音乐文件", group = "library"),
         F("davmusic", "WebDAV 音乐", "直接播放网盘（WebDAV）里的歌", group = "library"),
         F("dl", "本地下载", "按音质下载歌曲与歌词；下载管理页", group = "library"),
-        F("fx", "效果器与均衡器", "10 段均衡器、低音增强、环绕与响度", group = "audio"),
-        F("vst", "外部音频插件 (Beta)", "桌面端加载外部音频插件与悬浮窗口", desktop = true, group = "audio"),
+        F("fx", "效果器与均衡器", "10 段均衡器、低音增强、环绕与响度", group = "audio", supported = { Plat.impl.supportsFx }),
+        F("vst", "外部音频插件 (Beta)", "桌面端加载外部音频插件与悬浮窗口", desktop = true, group = "audio", supported = { Plat.impl.vst != null }),
         F("desk", "桌面歌词", "置顶悬浮歌词窗（支持一键回正与悬停解锁）", desktop = true, group = "play"),
         F("notify", "通知栏歌词", "播放通知与状态栏同步显示当前歌词", desktop = false, group = "play"),
         F("offset", "歌词偏移", "单首歌实时微调歌词提前 / 推后", group = "play"),
@@ -44,7 +44,7 @@ object Features {
         F("discord", "Discord 状态", "在 Discord 上展示正在听的歌", desktop = true, group = "ext"),
     )
 
-    val list get() = ALL.filter { it.desktop == null || it.desktop == Plat.isDesktop }
+    val list get() = ALL.filter { (it.desktop == null || it.desktop == Plat.isDesktop) && it.supported() }
     val clusters get() = CLUSTERS.filter { c -> list.any { it.group == c.id } }
     var off by mutableStateOf(setOf<String>())
 

@@ -51,7 +51,9 @@ class JsSource(val file: File) {
     val version: String get() = meta["version"] ?: "0"
     val apiVersion: Int get() = meta["api"]?.toIntOrNull() ?: 1
     val minHost: String get() = meta["minHost"].orEmpty()
-    val permissions: Set<String> get() = meta["permissions"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
+    val permissions: Set<String> get() = meta["permissions"]?.split(',')?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
+    /** 网络权限守门：音源插件与未声明权限的 v1 旧脚本默认允许联网；声明了 @permissions 的功能/页面/动效插件必须显式包含 network */
+    val canNetwork: Boolean get() = isSource || permissions.isEmpty() || "network" in permissions || "net" in permissions || "http" in permissions
     val hostCompatible: Boolean get() = minHost.isEmpty() || !PluginSubs.newer(minHost, APP_VERSION)
     /** 功能插件绑定的扩展槽位标识（头注释 // @feature coverflow 等） */
     val featureSlot: String get() = meta["feature"]?.lowercase()?.trim().orEmpty()
@@ -190,6 +192,7 @@ class JsSource(val file: File) {
     /** {url, method, headers{}, body(字符串), form{}, json(对象), redirect:false, binary:true} → {status, url, headers{小写名:[值]}, body | bodyBase64} */
     @OptIn(ExperimentalEncodingApi::class)
     private suspend fun http(o: JSONObject): JSONObject = withContext(Dispatchers.IO) {
+        if (!canNetwork) throw NcmError("插件「$name」未声明 network 权限，已拦截网络请求")
         val b = Request.Builder().url(o.getString("url"))
         o.optJSONObject("headers")?.let { h -> h.keys().forEach { k -> b.header(k, h.optString(k)) } }
         if (o.optJSONObject("headers")?.has("User-Agent") != true && o.optJSONObject("headers")?.has("user-agent") != true) b.header("User-Agent", UA)

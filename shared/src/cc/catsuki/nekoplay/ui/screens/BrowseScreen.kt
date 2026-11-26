@@ -134,7 +134,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
         item {
             Column {
                 Tag("HISTORY"); Spacer(Modifier.height(4.dp))
-                T("历史日推", Fs.HERO, w = 800, lh = 1.3f); T("网易云只保留最近几天的每日推荐", 13, p.s)
+                T("历史日推", Fs.HERO, w = 800, lh = 1.3f); T("仅保留当前音源支持的最近几天每日推荐", 13, p.s)
                 Spacer(Modifier.height(12.dp)); Rule()
                 when { err != null -> T("加载失败：$err", 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 24.dp))
                     dates == null -> T("LOADING", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp))

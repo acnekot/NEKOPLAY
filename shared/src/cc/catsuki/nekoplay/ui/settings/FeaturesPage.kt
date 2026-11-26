@@ -124,9 +124,19 @@ import cc.catsuki.nekoplay.press
         } else {
             items(extFeatures, key = { "ext_${it.id}" }) { s ->
                 val kindTag = when (s.kind) { PluginKind.MOTION -> "动效"; PluginKind.PAGE -> "页面"; else -> "功能" }
+                val on = Plugins.on(s.id)
                 val desc = listOfNotNull("[$kindTag]", s.meta["desc"]).joinToString(" ")
-                Box(Modifier.padding(start = if (viewMode == 0) 10.dp else 0.dp)) {
-                    SwitchRow(s.name, desc, Plugins.on(s.id)) { Plugins.set(s.id, it) }
+                Row(
+                    Modifier.fillMaxWidth().padding(start = if (viewMode == 0) 10.dp else 0.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) {
+                        SwitchRow(s.name, desc, on) { Plugins.set(s.id, it) }
+                    }
+                    if (on && s.has("render")) {
+                        Spacer(Modifier.width(8.dp))
+                        LinkBtn("设置", 12) { nav.push(Page.PluginPage(s.id)) }
+                    }
                 }
             }
         }
