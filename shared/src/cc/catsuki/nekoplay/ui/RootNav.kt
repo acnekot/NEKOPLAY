@@ -85,9 +85,11 @@ import kotlinx.coroutines.launch
                 val fg = if (on) Color.White else p.k
                 Column(Modifier.weight(1f).fillMaxHeight().press(haptic = true) { nav.stack.clear(); nav.tab = k },
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                    Box(Modifier.graphicsLayer { val s = 1f + .10f * selA.value; scaleX = s; scaleY = s }) { NIcon(i, 22.dp, fg) }
+                    val cGain = (MotionEffects.selectCoverScale - 1f).coerceAtLeast(0f)
+                    val fGain = (MotionEffects.selectFontScale - 1f).coerceAtLeast(0f)
+                    Box(Modifier.graphicsLayer { val s = 1f + cGain * selA.value; scaleX = s; scaleY = s }) { NIcon(i, 22.dp, fg) }
                     Spacer(Modifier.height(2.dp))
-                    Box(Modifier.graphicsLayer { val s = 1f + .06f * selA.value; scaleX = s; scaleY = s }) { T(l, 11, fg, 700) }
+                    Box(Modifier.graphicsLayer { val s = 1f + fGain * selA.value; scaleX = s; scaleY = s }) { T(l, 11, fg, 700) }
                 }
             }
         }
@@ -108,18 +110,28 @@ import kotlinx.coroutines.launch
     SideEffect { lastDepth = nav.stack.size }
     val p = c
     val widthState by rememberUpdatedState(w.coerceAtLeast(1f))
-    Box(Modifier.fillMaxSize().graphicsLayer { translationX = size.width * (1f - sub.value) }
-        .drawBehind {
+    val originExp = MotionEffects.originExpand
+    val containerMod = if (originExp) {
+        Modifier.fillMaxSize().originContainerExpand({ sub.value }, { OriginBus.activePageOrigin() })
+    } else {
+        Modifier.fillMaxSize().graphicsLayer { translationX = size.width * (1f - sub.value) }.drawBehind {
             val edgeW = 14.dp.toPx()
             drawRect(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .14f * sub.value)), -edgeW, 0f),
                 Offset(-edgeW, 0f), androidx.compose.ui.geometry.Size(edgeW, size.height))
         }
-        .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
+    }
+    Box(containerMod.pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
         Box(Modifier.fillMaxSize().background(p.page)) { BgLayer() }
         Column(Modifier.fillMaxSize()) {
             AnimatedContent(pg, Modifier.weight(1f), transitionSpec = {
                 if (AnimStyle.off) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
-                else if (forward) {
+                else if (originExp) {
+                    val to = OriginBus.originTransformOrigin(useClosing = !forward)
+                    if (forward) (androidx.compose.animation.scaleIn(Motion.page(), 0.84f, to) + fadeIn(Motion.page())) togetherWith
+                        (androidx.compose.animation.scaleOut(Motion.standard(), 0.95f) + fadeOut(Motion.quick()))
+                    else (androidx.compose.animation.scaleIn(Motion.page(), 0.95f) + fadeIn(Motion.page())) togetherWith
+                        (androidx.compose.animation.scaleOut(Motion.standard(), 0.84f, to) + fadeOut(Motion.quick()))
+                } else if (forward) {
                     (androidx.compose.animation.slideInHorizontally(Motion.page()) { (it * .20f).toInt() } + fadeIn(Motion.page())) togetherWith
                         (androidx.compose.animation.slideOutHorizontally(Motion.standard()) { -(it * .12f).toInt() } + fadeOut(Motion.quick()))
                 } else {

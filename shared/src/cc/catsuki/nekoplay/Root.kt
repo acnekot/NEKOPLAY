@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -183,9 +184,10 @@ object Boot {
             if (Screen.landscape != ls) Screen.landscape = ls
         }
         LaunchedEffect(dens.density, UiScalePreview.freezeBreakpoint) { updateBreakpoints(rootPx, dens.density) }
+        LaunchedEffect(nav.stack.size, nav.stack.lastOrNull(), MotionEffects.originActive) { OriginBus.syncStack(nav.stack.toList()) }
         // 用普通 Box + onSizeChanged + liveScaleContainer 代替顶层 BoxWithConstraints：
         // 拖动缩放滑块或窗口时全程纯 GPU 实时响应、0 Subcompose、0 整树重组
-        Box(Modifier.fillMaxSize().backdrop().liveScaleContainer().onSizeChanged { sz ->
+        Box(Modifier.fillMaxSize().backdrop().liveScaleContainer().onPlaced { OriginBus.updateHost(it) }.onSizeChanged { sz ->
             rootPx = sz
             updateBreakpoints(sz, dens.density)
         }) {
@@ -215,12 +217,17 @@ object Boot {
                     val sub = remember { Animatable(0f) }
                     val inSub = nav.stack.isNotEmpty()
                     LaunchedEffect(inSub) { sub.animateTo(if (inSub) 1f else 0f, spF) }
-                    // 首页 / 曲库：子页面推入时往左退 28% 并轻微景深微缩 + 变暗，全程纯 graphicsLayer/drawBehind 0 重组
+                    // 首页 / 曲库：源点模式下就地景深微缩，常规模式下往左退 28% 形成视差，全程纯 graphicsLayer/drawBehind 0 重组
+                    val originExp = MotionEffects.originExpand
                     Column(Modifier.fillMaxSize().graphicsLayer {
                         val sv = sub.value
                         if (sv > 0.001f) {
-                            translationX = -size.width * .28f * sv
-                            if (MotionEffects.pageScale) { val sc = 1f - .025f * sv; scaleX = sc; scaleY = sc }
+                            if (originExp) {
+                                val sc = 1f - .04f * sv; scaleX = sc; scaleY = sc
+                            } else {
+                                translationX = -size.width * .28f * sv
+                                if (MotionEffects.pageScale) { val sc = 1f - .025f * sv; scaleX = sc; scaleY = sc }
+                            }
                         }
                     }) {
                         Box(Modifier.weight(1f).fillMaxWidth()) { Tabs() }

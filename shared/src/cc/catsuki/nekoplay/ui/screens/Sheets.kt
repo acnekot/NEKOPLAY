@@ -147,9 +147,10 @@ data class InputSpec(val title: String, val hint: String, val onDone: (String) -
     AnimatedVisibility(show, enter = fadeIn(Motion.standard()), exit = fadeOut(Motion.quick())) {
         Box(Modifier.fillMaxSize().background(Color(0x80000000)).pointerInput(Unit) { detectTapGestures { nav.input = null } })
     }
+    val popOrigin = remember(show) { OriginBus.tapTransformOrigin() }
     AnimatedVisibility(show, Modifier.fillMaxSize(),
-        enter = fadeIn(Motion.standard()) + scaleIn(Motion.hero(), initialScale = if (MotionEffects.pageScale) .92f else 1f),
-        exit = fadeOut(Motion.quick()) + scaleOut(Motion.quick(), targetScale = if (MotionEffects.pageScale) .96f else 1f)) {
+        enter = fadeIn(Motion.standard()) + scaleIn(Motion.hero(), initialScale = if (MotionEffects.originExpand) .84f else if (MotionEffects.pageScale) .92f else 1f, transformOrigin = popOrigin),
+        exit = fadeOut(Motion.quick()) + scaleOut(Motion.quick(), targetScale = if (MotionEffects.originExpand) .86f else if (MotionEffects.pageScale) .96f else 1f, transformOrigin = popOrigin)) {
         val spec = last ?: return@AnimatedVisibility
         var text by remember(spec) { mutableStateOf("") }
         val fr = remember { androidx.compose.ui.focus.FocusRequester() }
@@ -190,10 +191,11 @@ fun openArtists(nav: Nav, t: Track) {
     AnimatedVisibility(nav.sheet != null, enter = fadeIn(Motion.standard()), exit = fadeOut(Motion.quick())) {
         Box(Modifier.fillMaxSize().background(Color(if (wide) 0x55000000 else 0x80000000)).pointerInput(Unit) { detectTapGestures { nav.sheet = null } })
     }
-    // PC 宽屏：居中的小弹窗（缩放 + 淡入）；手机：底部弹出
+    // PC 宽屏：居中的小弹窗（源点插件启用时从被点控件方向展开并缩回）；手机：底部弹出
+    val sheetOrigin = remember(nav.sheet) { OriginBus.tapTransformOrigin() }
     if (wide) AnimatedVisibility(nav.sheet != null, Modifier.fillMaxSize(),
-        enter = fadeIn(Motion.standard()) + scaleIn(Motion.hero(), initialScale = if (MotionEffects.pageScale) .92f else 1f),
-        exit = fadeOut(Motion.quick()) + scaleOut(Motion.quick(), targetScale = if (MotionEffects.pageScale) .96f else 1f)) {
+        enter = fadeIn(Motion.standard()) + scaleIn(Motion.hero(), initialScale = if (MotionEffects.originExpand) .84f else if (MotionEffects.pageScale) .92f else 1f, transformOrigin = sheetOrigin),
+        exit = fadeOut(Motion.quick()) + scaleOut(Motion.quick(), targetScale = if (MotionEffects.originExpand) .86f else if (MotionEffects.pageScale) .96f else 1f, transformOrigin = sheetOrigin)) {
         val s = last ?: return@AnimatedVisibility
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(Modifier.width(380.dp).heightIn(max = 620.dp).background(p.sheet).nb(1.dp, p.k).topLine().pointerInput(Unit) { detectTapGestures { } }

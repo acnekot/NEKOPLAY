@@ -91,15 +91,19 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     val scope = rememberCoroutineScope()
     val copy = rememberCopy()
     var wasOpen by remember { mutableStateOf(nav.player) }
-    LaunchedEffect(nav.player) {
-        if (wasOpen && !nav.player && drag.value < 24f) {
-            Engine.state.value.current?.let { SharedHero.flyBack("now:${it.id}") }
-        }
+    val originExp = MotionEffects.originExpand
+    val originProg = remember { Animatable(if (nav.player) 1f else 0f) }
+    LaunchedEffect(nav.player, originExp) {
+        if (wasOpen != nav.player) OriginBus.onPlayerToggle(nav.player)
+        if (wasOpen && !nav.player && drag.value < 24f) Engine.state.value.current?.let { SharedHero.flyBack("now:${it.id}") }
         wasOpen = nav.player
+        if (originExp) originProg.animateTo(if (nav.player) 1f else 0f, if (nav.player) Motion.page() else Motion.standard())
+        else originProg.snapTo(if (nav.player) 1f else 0f)
     }
-    AnimatedVisibility(nav.player,
-        enter = if (MotionEffects.pageScale && !AnimStyle.off) slideInVertically(Motion.page()) { it / 4 } + fadeIn(Motion.page()) + scaleIn(Motion.page(), initialScale = .96f) else slideInVertically(sp) { it },
-        exit = if (MotionEffects.pageScale && !AnimStyle.off) slideOutVertically(Motion.standard()) { it / 4 } + fadeOut(Motion.quick()) + scaleOut(Motion.standard(), targetScale = .97f) else slideOutVertically(sp) { it }) {
+    val showOriginPlayer by remember { derivedStateOf { originExp && (nav.player || originProg.value > 0.002f) } }
+    AnimatedVisibility(if (originExp) showOriginPlayer else nav.player,
+        enter = if (originExp) fadeIn(androidx.compose.animation.core.snap()) else if (MotionEffects.pageScale && !AnimStyle.off) slideInVertically(Motion.page()) { it / 4 } + fadeIn(Motion.page()) + scaleIn(Motion.page(), initialScale = .96f) else slideInVertically(sp) { it },
+        exit = if (originExp) fadeOut(androidx.compose.animation.core.snap()) else if (MotionEffects.pageScale && !AnimStyle.off) slideOutVertically(Motion.standard()) { it / 4 } + fadeOut(Motion.quick()) + scaleOut(Motion.standard(), targetScale = .97f) else slideOutVertically(sp) { it }) {
         LaunchedEffect(Unit) { drag.snapTo(0f) }
         val st by Engine.state.collectAsState()
         val t = st.current
@@ -112,15 +116,17 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
         val p = c
         var rootH by remember { mutableFloatStateOf(1f) }
         val wideP = Screen.wide
-        // 播放页整块吃掉点击：外层改用普通 Box + onSizeChanged；下拉时联动微缩与速度甩关，空间过渡连贯
+        // 播放页整块吃掉点击：启用源点插件时直接从点击的播放条/封面位置撑开并原路缩回；下拉联动微缩与速度甩关
         Box(Modifier.fillMaxSize().onSizeChanged { rootH = it.height.toFloat().coerceAtLeast(1f) }.drawBehind {
             val dv = drag.value
             if (dv > 0.5f) {
                 val remain = (1f - dv / (rootH * 0.7f)).coerceIn(0f, 1f)
                 drawRect(Color.Black.copy(alpha = 0.22f * remain))
+            } else if (originExp && originProg.value < 0.999f) {
+                drawRect(Color.Black.copy(alpha = 0.20f * originProg.value))
             }
         }) {
-        Box(Modifier.fillMaxSize().graphicsLayer {
+        Box(Modifier.fillMaxSize().then(if (originExp) Modifier.originContainerExpand({ originProg.value }, { OriginBus.activePlayerOrigin() }) else Modifier).graphicsLayer {
             val dv = drag.value
             translationY = dv
             if (dv > 0.5f && MotionEffects.pageScale) {

@@ -97,10 +97,16 @@ NEKOPLAY 本体完全中立，不内置任何在线音源与重型特色扩展�
   "page": { "easing": "outQuint", "ms": 420 },
   "crossfade": { "easing": "outQuint", "ms": 460 },
   "hero": { "easing": "spring", "damping": 0.82, "stiffness": 420 },
-  "effects": { "hoverShiftDp": 5, "hoverTint": true, "pressScale": 0.985, "pageScale": true, "listStaggerMs": 24, "listSlideDp": 36 }
+  "effects": {
+    "hoverShiftDp": 5, "hoverTint": true, "pressScale": 0.985, "pageScale": true,
+    "listStaggerMs": 24, "listSlideDp": 36,
+    "originExpand": true, "originRipple": true, "originInherit": true,
+    "originCornerDp": 18, "selectCoverScale": 1.10, "selectFontScale": 1.06
+  }
 }
 ```
 支持缓动名称：`outQuad` / `outCubic` / `outQuart` / `outQuint` / `outExpo` / `outExpoTail` / `outPow10` / `outCirc` / `outBack` / `outElasticHalf` / `outElasticQuarter` / `bezier`（配 `x1,y1,x2,y2`） / `spring`（配 `damping,stiffness`）。
+`effects` 可选源点空间字段：`originExpand`（源点容器展开与原路回缩）、`originRipple`（列表点击邻近物理波纹联动）、`originInherit`（多级跳转与目标页内容动量继承）、`originCornerDp`（展开圆角变形 0–36dp）、`selectCoverScale` / `selectFontScale`（选中项封面与字体微放大倍率）。
 
 ---
 

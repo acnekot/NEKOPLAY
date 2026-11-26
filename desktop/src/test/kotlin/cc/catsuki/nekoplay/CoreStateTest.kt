@@ -8,6 +8,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -296,6 +297,77 @@ class CoreStateTest {
             assertTrue(SharedHero.isHidden(miniTok))
         } finally {
             SharedHero.resetForTest()
+            AnimStyle.style = prevStyle
+        }
+    }
+
+    @Test fun originMotionPluginParsesAndTracksStackedOriginsWithInheritance() = runBlocking {
+        TestEnv.init()
+        val prevStyle = AnimStyle.style
+        AnimStyle.style = 0
+        OriginBus.resetForTest()
+        val script = """
+            // @id _test_origin_motion
+            // @name Origin Test
+            // @type motion
+            // @permissions motion.profile, storage
+            // @version 1.0.0
+            // @api 2
+            nk.registerMotion({
+              profile() {
+                return {
+                  name: '源点测试',
+                  presetLabel: '丝滑',
+                  page: { easing: 'spring', ms: 340, damping: 0.86, stiffness: 420 },
+                  effects: {
+                    originExpand: true, originRipple: true, originInherit: true,
+                    originCornerDp: 20, selectCoverScale: 1.12, selectFontScale: 1.07,
+                    listStaggerMs: 20, listSlideDp: 32
+                  }
+                };
+              }
+            });
+        """.trimIndent()
+        val s = Plugins.import(script)
+        try {
+            val prof = Plugins.activeMotionProfile()
+            assertNotNull(prof)
+            AnimStyle.applyPlugin(prof)
+            assertTrue(MotionEffects.originExpand)
+            assertTrue(MotionEffects.originRipple)
+            assertTrue(MotionEffects.originInherit)
+            assertEquals(20f, MotionEffects.originCornerDp, 0.01f)
+            assertEquals(1.12f, MotionEffects.selectCoverScale, 0.001f)
+            assertEquals(1.07f, MotionEffects.selectFontScale, 0.001f)
+
+            // 模拟 A -> B -> C 多级跳转与「从哪来回哪去」
+            val rCardA = androidx.compose.ui.geometry.Rect(20f, 600f, 160f, 740f)
+            val rItemB = androidx.compose.ui.geometry.Rect(240f, 120f, 380f, 200f)
+            OriginBus.recordTapRect(rCardA)
+            assertNotNull(OriginBus.wave)
+            val p1 = Page.Detail("pl", "1", "List1")
+            val p2 = Page.Album("2", "Alb2")
+            OriginBus.syncStack(listOf(p1))
+            assertEquals(rCardA, OriginBus.activePageOrigin())
+            assertNotNull(OriginBus.activeInherit())
+            assertTrue(OriginBus.activeInherit()!!.vector.y > 0f) // 源点在下方 → 继承向量向下起点向上承接
+
+            OriginBus.recordTapRect(rItemB)
+            OriginBus.syncStack(listOf(p1, p2))
+            assertEquals(rItemB, OriginBus.activePageOrigin())
+
+            // 点返回按钮（即使 lastTapRect 被返回按钮覆盖），弹出 C 时仍按栈精准缩回 rItemB 并发出回响波纹
+            val waveBeforePop = OriginBus.wave!!.seq
+            OriginBus.recordTapRect(androidx.compose.ui.geometry.Rect(0f, 0f, 44f, 44f))
+            OriginBus.syncStack(listOf(p1))
+            assertEquals(rItemB, OriginBus.closingPageRect)
+            assertEquals(rCardA, OriginBus.activePageOrigin())
+            assertTrue(OriginBus.wave!!.seq > waveBeforePop)
+            assertEquals(rItemB.center.y, OriginBus.wave!!.cy, 0.01f)
+        } finally {
+            AnimStyle.applyPlugin(null)
+            OriginBus.resetForTest()
+            Plugins.delete(s.id)
             AnimStyle.style = prevStyle
         }
     }

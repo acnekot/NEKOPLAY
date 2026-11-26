@@ -55,20 +55,12 @@ data class MotionChannel(
 
 /** 由外部 @type motion 插件（如 osu_motion.js）下发的完整规范化动效配置包 */
 data class MotionPluginProfile(
-    val pluginId: String,
-    val pluginName: String,
-    val presetLabel: String,
-    val quick: MotionChannel,
-    val standard: MotionChannel,
-    val page: MotionChannel,
-    val crossfade: MotionChannel,
-    val hero: MotionChannel,
-    val hoverShiftDp: Float? = null,
-    val hoverTint: Boolean? = null,
-    val pressScale: Float? = null,
-    val pageScale: Boolean? = null,
-    val listStaggerMs: Int? = null,
-    val listSlideDp: Float? = null,
+    val pluginId: String, val pluginName: String, val presetLabel: String,
+    val quick: MotionChannel, val standard: MotionChannel, val page: MotionChannel, val crossfade: MotionChannel, val hero: MotionChannel,
+    val hoverShiftDp: Float? = null, val hoverTint: Boolean? = null, val pressScale: Float? = null, val pageScale: Boolean? = null,
+    val listStaggerMs: Int? = null, val listSlideDp: Float? = null,
+    val originExpand: Boolean? = null, val originRipple: Boolean? = null, val originInherit: Boolean? = null,
+    val originCornerDp: Float? = null, val selectCoverScale: Float? = null, val selectFontScale: Float? = null,
 ) {
     val displayName: String get() = if (presetLabel.isNotBlank()) "$pluginName · $presetLabel" else pluginName
 }
@@ -92,9 +84,16 @@ object MotionEffects {
     var pageScale: Boolean
         get() = AnimStyle.pluginProfile?.pageScale ?: userPageScale
         set(v) { userPageScale = v }
-    /** 瀑布错峰入场仅由外置 @type motion 插件提供；未安装动效插件时始终为 0（纯净默认） */
+    /** 瀑布错峰入场与源点空间动效仅由外置 @type motion 插件提供；未安装动效插件时保持纯净轻量默认 */
     val listStaggerMs: Int get() = AnimStyle.pluginProfile?.listStaggerMs ?: 0
     val listSlideDp: Float get() = AnimStyle.pluginProfile?.listSlideDp ?: 0f
+    val originExpand: Boolean get() = !AnimStyle.off && AnimStyle.pluginProfile?.originExpand == true
+    val originRipple: Boolean get() = !AnimStyle.off && AnimStyle.pluginProfile?.originRipple == true
+    val originInherit: Boolean get() = !AnimStyle.off && AnimStyle.pluginProfile?.originInherit == true
+    val originCornerDp: Float get() = AnimStyle.pluginProfile?.originCornerDp ?: 18f
+    val selectCoverScale: Float get() = AnimStyle.pluginProfile?.selectCoverScale ?: 1.09f
+    val selectFontScale: Float get() = AnimStyle.pluginProfile?.selectFontScale ?: 1.05f
+    val originActive: Boolean get() = originExpand || originRipple || originInherit
 
     private val k get() = Plat.prefs("ui")
     fun load() {
@@ -187,6 +186,12 @@ object AnimStyle {
             pageScale = fx?.takeIf { it.has("pageScale") }?.optBoolean("pageScale"),
             listStaggerMs = fx?.takeIf { it.has("listStaggerMs") }?.optInt("listStaggerMs", 24)?.coerceIn(0, 80),
             listSlideDp = fx?.takeIf { it.has("listSlideDp") }?.optDouble("listSlideDp", 36.0)?.toFloat()?.coerceIn(0f, 80f),
+            originExpand = fx?.takeIf { it.has("originExpand") }?.optBoolean("originExpand"),
+            originRipple = fx?.takeIf { it.has("originRipple") }?.optBoolean("originRipple"),
+            originInherit = fx?.takeIf { it.has("originInherit") }?.optBoolean("originInherit"),
+            originCornerDp = fx?.takeIf { it.has("originCornerDp") }?.optDouble("originCornerDp", 18.0)?.toFloat()?.coerceIn(0f, 36f),
+            selectCoverScale = fx?.takeIf { it.has("selectCoverScale") }?.optDouble("selectCoverScale", 1.09)?.toFloat()?.coerceIn(1f, 1.25f),
+            selectFontScale = fx?.takeIf { it.has("selectFontScale") }?.optDouble("selectFontScale", 1.05)?.toFloat()?.coerceIn(1f, 1.18f),
         )
     }
 
@@ -332,7 +337,12 @@ object ListStagger {
             batch.forEach { if (!it.delayMs.isCompleted) it.delayMs.complete(0L) }
             return
         }
-        batch.sortWith(compareBy<CascadeTicket> { kotlin.math.round(it.y / 8f) }.thenBy { it.x })
+        val inh = OriginBus.activeInherit()
+        if (inh != null) {
+            batch.sortBy { t -> val dx = t.x - inh.origin.x; val dy = t.y - inh.origin.y; dx * dx + dy * dy }
+        } else {
+            batch.sortWith(compareBy<CascadeTicket> { kotlin.math.round(it.y / 8f) }.thenBy { it.x })
+        }
         val now = System.currentTimeMillis()
         val minY = batch.first().y
         val maxQueueLag = (step * 4L).coerceAtMost(140L)
@@ -366,10 +376,19 @@ object ListStagger {
         if (d > 0L) delay(d)
         prog.animateTo(1f, Motion.page())
     }
+    val inh = remember { OriginBus.activeInherit() }
+    val vxDp = inh?.vector?.x ?: slideDp
+    val vyDp = inh?.vector?.y ?: 0f
     return this.onPlaced { coords ->
         if (!ticket.placed) {
             val pos = coords.positionInRoot()
-            ListStagger.register(ticket, pos.x, pos.y)
+            ListStagger.register(ticket, pos.x - OriginBus.hostOrigin.x, pos.y - OriginBus.hostOrigin.y)
         }
-    }.graphicsLayer { val p = prog.value; alpha = p.coerceIn(0f, 1f); translationX = (1f - p) * slideDp.dp.toPx() }
+    }.graphicsLayer {
+        val p = prog.value; val inv = 1f - p
+        alpha = p.coerceIn(0f, 1f)
+        translationX = inv * vxDp.dp.toPx()
+        if (vyDp != 0f) translationY = inv * vyDp.dp.toPx()
+        if (inh != null && inv > 0.001f) { val s = 1f - 0.04f * inv; scaleX = s; scaleY = s }
+    }
 }

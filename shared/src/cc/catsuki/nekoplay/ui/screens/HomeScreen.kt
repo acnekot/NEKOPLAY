@@ -309,7 +309,7 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
 
 // ======================= 曲库 =======================
 @Composable fun ListRow(cover: @Composable () -> Unit, title: String, meta: String, onLong: (() -> Unit)? = null, onClick: () -> Unit) =
-    Row(Modifier.fillMaxWidth().height(76.dp).cascadeEnter().press(onLong = onLong, onClick = onClick).bottomLine(), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().height(76.dp).cascadeEnter().originRippleItem().press(onLong = onLong, onClick = onClick).bottomLine(), verticalAlignment = Alignment.CenterVertically) {
         cover(); Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) { T(trKnown(title), 16, w = 700, lh = 1.35f); T(trKnown(meta), 12, c.s, mono = true, ls = .04f) }
         NIcon(NIcons.chevronRight, 16.dp)

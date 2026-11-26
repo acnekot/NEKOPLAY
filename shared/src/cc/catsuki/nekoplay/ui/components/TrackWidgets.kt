@@ -54,7 +54,7 @@ import kotlinx.coroutines.launch
     }
     val shiftDp = if (desktopHover && MotionEffects.hoverShiftDp > 0.1f) MotionEffects.hoverShiftDp * 0.55f else 0f
     val showTint = desktopHover && MotionEffects.hoverTint
-    Row(Modifier.fillMaxWidth().height(64.dp).cascadeEnter()
+    Row(Modifier.fillMaxWidth().height(64.dp).cascadeEnter().originRippleItem()
         .then(if (hovAnim != null && shiftDp > 0f) Modifier.graphicsLayer { val h = hovAnim.value; if (h > 0.001f) translationX = (h * shiftDp).dp.toPx() } else Modifier)
         .then(if (desktopHover) Modifier.hoverable(src) else Modifier)
         .press(onLong = onLong, interactionSource = src, onClick = onClick)
@@ -70,8 +70,10 @@ import kotlinx.coroutines.launch
             }
             if (!Look.flat) drawRect(p.l1, Offset(if (current) -ext else 0f, size.height - 1.dp.toPx()), Size(size.width + if (current) ext * 2 else 0f, 1.dp.toPx()))
         }, verticalAlignment = Alignment.CenterVertically) {
+        val coverGain = (MotionEffects.selectCoverScale - 1f).coerceAtLeast(0f)
+        val fontGain = (MotionEffects.selectFontScale - 1f).coerceAtLeast(0f)
         Box(Modifier.graphicsLayer {
-            val s = 1f + .09f * curAnim.value
+            val s = 1f + coverGain * curAnim.value
             scaleX = s; scaleY = s
         }) { Cover(t.cover, 44.dp, t.title) }
         Spacer(Modifier.width(12.dp))
@@ -80,7 +82,7 @@ import kotlinx.coroutines.launch
             if (ca > 0.001f) translationX = 3.dp.toPx() * ca
         }) {
             Row(Modifier.graphicsLayer {
-                val s = 1f + .05f * curAnim.value
+                val s = 1f + fontGain * curAnim.value
                 scaleX = s; scaleY = s
                 transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
             }, verticalAlignment = Alignment.CenterVertically) {

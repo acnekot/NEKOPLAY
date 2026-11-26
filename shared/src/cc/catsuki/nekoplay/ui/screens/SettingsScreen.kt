@@ -355,7 +355,7 @@ import java.util.Calendar
 @Composable private fun Group(tag: String) = Box(Modifier.padding(top = 22.dp, bottom = 8.dp)) { Tag(tag) }
 
 @Composable fun SwitchRow(title: String, sub: String?, on: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) =
-    Row(Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).cascadeEnter().bottomLine().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).cascadeEnter().originRippleItem().bottomLine().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { T(tr(title), 16, if (enabled) c.k else c.s); if (sub != null) T(tr(sub), 13, c.s, lh = 1.4f, lines = 3) }
         Box(Modifier.graphicsAlpha(if (enabled) 1f else .45f)) { NSwitch(on) { if (enabled) onChange(it) } }
     }
@@ -363,7 +363,7 @@ import java.util.Calendar
 private fun Modifier.graphicsAlpha(a: Float) = this.graphicsLayer { alpha = a }
 
 @Composable private fun NavRow(title: String, sub: String?, value: String?, clickable: Boolean = true, onClick: () -> Unit) =
-    Row(Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).cascadeEnter().then(if (clickable) Modifier.press(onClick = onClick) else Modifier).bottomLine().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).cascadeEnter().originRippleItem().then(if (clickable) Modifier.press(onClick = onClick) else Modifier).bottomLine().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { T(tr(title), 16); if (sub != null) T(tr(sub), 13, c.s, lh = 1.4f, lines = 3) }
         if (value != null) T(trKnown(value), 13, c.s)
         if (clickable) { Spacer(Modifier.width(6.dp)); NIcon(NIcons.chevronRight, 16.dp, c.s) }

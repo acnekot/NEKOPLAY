@@ -41,6 +41,8 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
@@ -83,11 +85,15 @@ import kotlinx.coroutines.launch
 ): Modifier {
     val src = interactionSource ?: remember { MutableInteractionSource() }
     val h = LocalHapticFeedback.current
+    val trackOrigin = MotionEffects.originActive
+    val tapRef = remember { arrayOfNulls<LayoutCoordinates>(1) }
     val clickMod = combinedClickable(src, null,
-        onLongClick = onLong?.let { { h.performHapticFeedback(HapticFeedbackType.LongPress); it() } }) {
+        onLongClick = onLong?.let { { if (trackOrigin) OriginBus.recordTap(tapRef[0]); h.performHapticFeedback(HapticFeedbackType.LongPress); it() } }) {
+        if (trackOrigin) OriginBus.recordTap(tapRef[0])
         if (haptic) h.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick()
     }
-    if (AnimStyle.off) return this.then(clickMod)
+    val placedMod = if (trackOrigin) Modifier.onPlaced { tapRef[0] = it } else Modifier
+    if (AnimStyle.off) return this.then(placedMod).then(clickMod)
     val effScale = if (scale != 1f) scale else MotionEffects.pressScale
     val prog = remember(src) { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(src) {
@@ -111,7 +117,7 @@ import kotlinx.coroutines.launch
             }
         }
     }
-    return this.graphicsLayer {
+    return this.then(placedMod).graphicsLayer {
         val v = prog.value
         if (v > 0.001f) {
             alpha = 1f - 0.28f * v

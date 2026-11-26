@@ -175,21 +175,20 @@ import kotlinx.coroutines.launch
     }
     val shiftDp = if (deskHover) MotionEffects.hoverShiftDp else 0f
     val showTint = deskHover && MotionEffects.hoverTint
-    Row(Modifier.fillMaxWidth().height(44.dp).then(if (deskHover) Modifier.hoverable(src) else Modifier).press(interactionSource = src, onClick = onClick)
+    val cGain = (MotionEffects.selectCoverScale - 1f).coerceAtLeast(0f)
+    val fGain = (MotionEffects.selectFontScale - 1f).coerceAtLeast(0f)
+    Row(Modifier.fillMaxWidth().height(44.dp).originRippleItem().then(if (deskHover) Modifier.hoverable(src) else Modifier).press(interactionSource = src, onClick = onClick)
         .drawBehind {
             if (on && !slidingBg) drawRect(p.p)
             else if (showTint && !on && hov != null && hov.value > 0.01f) drawRect(p.k.copy(alpha = .06f * hov.value))
         }
         .padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.then(if (hov != null && shiftDp > 0.1f && !on) Modifier.graphicsLayer { val v = hov.value; if (v > 0.001f) translationX = (v * shiftDp).dp.toPx() } else Modifier), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.graphicsLayer { val s = 1f + .09f * selAnim.value; scaleX = s; scaleY = s }) { NIcon(icon, 18.dp, if (on) Color.White else p.k) }
+            Box(Modifier.graphicsLayer { val s = 1f + cGain * selAnim.value; scaleX = s; scaleY = s }) { NIcon(icon, 18.dp, if (on) Color.White else p.k) }
             Spacer(Modifier.width(12.dp))
             Box(Modifier.graphicsLayer {
-                val sa = selAnim.value
-                val s = 1f + .05f * sa
-                scaleX = s; scaleY = s
-                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
-                translationX = 1.5.dp.toPx() * sa
+                val sa = selAnim.value; val s = 1f + fGain * sa
+                scaleX = s; scaleY = s; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f); translationX = 1.5.dp.toPx() * sa
             }) { T(label, 15, if (on) Color.White else p.k, 700) }
         }
     }
@@ -214,7 +213,9 @@ import kotlinx.coroutines.launch
     }
     val shiftDp = if (deskHover) MotionEffects.hoverShiftDp * .85f else 0f
     val showTint = deskHover && MotionEffects.hoverTint
-    Row(Modifier.fillMaxWidth().height(44.dp).then(if (deskHover) Modifier.hoverable(src) else Modifier).press(interactionSource = src, onClick = onClick)
+    val cGain = (MotionEffects.selectCoverScale - 1f).coerceAtLeast(0f)
+    val fGain = (MotionEffects.selectFontScale - 1f).coerceAtLeast(0f)
+    Row(Modifier.fillMaxWidth().height(44.dp).originRippleItem().then(if (deskHover) Modifier.hoverable(src) else Modifier).press(interactionSource = src, onClick = onClick)
         .drawBehind {
             val sa = selAnim.value
             if (sa > 0.01f) {
@@ -225,14 +226,11 @@ import kotlinx.coroutines.launch
         }
         .padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.then(if (hov != null && shiftDp > 0.1f) Modifier.graphicsLayer { val v = hov.value; if (v > 0.001f) translationX = (v * shiftDp).dp.toPx() } else Modifier), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.graphicsLayer { val s = 1f + .10f * selAnim.value; scaleX = s; scaleY = s }) { cover() }
+            Box(Modifier.graphicsLayer { val s = 1f + cGain * selAnim.value; scaleX = s; scaleY = s }) { cover() }
             Spacer(Modifier.width(10.dp))
             Box(Modifier.weight(1f).graphicsLayer {
-                val sa = selAnim.value
-                val s = 1f + .05f * sa
-                scaleX = s; scaleY = s
-                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
-                translationX = 2.5.dp.toPx() * sa
+                val sa = selAnim.value; val s = 1f + fGain * sa
+                scaleX = s; scaleY = s; transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f); translationX = 2.5.dp.toPx() * sa
             }) { T(label, 14, if (on) p.p else p.k, if (on) 700 else 500) }
         }
     }
@@ -283,9 +281,14 @@ import kotlinx.coroutines.launch
                 Centered { LibraryPage() }
             }
         }
+        val originExp = MotionEffects.originExpand
         AnimatedContent(top, Modifier.fillMaxSize(), transitionSpec = {
             if (AnimStyle.off) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
-            else if (spatial) {
+            else if (originExp) {
+                val to = OriginBus.originTransformOrigin(useClosing = !forward)
+                if (forward) (scaleIn(Motion.page(), 0.84f, to) + fadeIn(Motion.page())) togetherWith (scaleOut(Motion.standard(), 0.96f) + fadeOut(Motion.quick()))
+                else (scaleIn(Motion.page(), 0.96f) + fadeIn(Motion.page())) togetherWith (scaleOut(Motion.standard(), 0.84f, to) + fadeOut(Motion.quick()))
+            } else if (spatial) {
                 val scIn = if (MotionEffects.pageScale) scaleIn(Motion.page(), initialScale = 0.985f) else fadeIn(Motion.page())
                 val scOut = if (MotionEffects.pageScale) scaleOut(Motion.standard(), targetScale = 0.99f) else fadeOut(Motion.quick())
                 if (forward) {
