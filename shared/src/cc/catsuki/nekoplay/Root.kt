@@ -167,6 +167,8 @@ object Boot {
 
     CompositionLocalProvider(LocalNav provides nav) {
         val dens = LocalDensity.current
+        var showSplash by remember { mutableStateOf(LaunchSplashState.shouldPlay()) }
+        val splashReveal = remember { Animatable(if (showSplash) 0f else 1f) }
         // 用普通 Box + onSizeChanged 代替顶层 BoxWithConstraints（SubcomposeLayout），
         // 拖动缩放窗口时只要没跨过 900dp 宽窄阈值，整个 Root 树 0 重组、0 Subcompose，原生丝滑
         Box(Modifier.fillMaxSize().backdrop().onSizeChanged { sz ->
@@ -179,6 +181,14 @@ object Boot {
             if (Screen.landscape != ls) Screen.landscape = ls
         }) {
             val wide = Screen.wide
+            Box(Modifier.fillMaxSize().then(if (showSplash) Modifier.graphicsLayer {
+                val rv = splashReveal.value
+                if (rv < 0.999f) {
+                    val s = 0.935f + 0.065f * rv
+                    scaleX = s; scaleY = s
+                    translationY = (1f - rv) * 18.dp.toPx()
+                }
+            } else Modifier)) {
             BgLayer()
             Column(Modifier.fillMaxSize()) {
             chrome?.invoke()
@@ -196,16 +206,18 @@ object Boot {
                     val sub = remember { Animatable(0f) }
                     val inSub = nav.stack.isNotEmpty()
                     LaunchedEffect(inSub) { sub.animateTo(if (inSub) 1f else 0f, spF) }
-                    // 首页 / 曲库：子页面推入时往左退 28% 并变暗（视差），和 Flutter 版一致
+                    // 首页 / 曲库：子页面推入时往左退 28% 并变暗（视差），遮罩仅在 drawBehind 读 sub.value，推入全程 0 重组
                     Column(Modifier.fillMaxSize().graphicsLayer { translationX = -w * .28f * sub.value }) {
                         Box(Modifier.weight(1f).fillMaxWidth()) { Tabs() }
                         if (hasTrack) MiniBar()
                         BottomNav()
                     }
-                    if (sub.value > 0f) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .16f * sub.value)))
+                    val showSubScrim by remember { derivedStateOf { sub.value > 0.001f } }
+                    if (showSubScrim) Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black.copy(alpha = .16f * sub.value)) })
                     SubLayer(sub, w)
                     PlayerOverlay()
                 }
+            }
             }
             }
             }
@@ -227,6 +239,7 @@ object Boot {
                 Box(Modifier.background(c.k).padding(horizontal = 16.dp, vertical = 11.dp)) { T(nav.toast ?: "", 14, c.tagFg, lines = 3, lh = 1.4f, align = TextAlign.Center) }
             }
             PerfOverlay(Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 6.dp, bottom = 140.dp))
+            if (showSplash) MobileLaunchCover(splashReveal) { showSplash = false }
         }
     }
 }
