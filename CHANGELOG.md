@@ -5,6 +5,10 @@
 
 ## [未发布]
 
+## [0.6.8-nightly.20261127.1] - 2026-11-27
+
+预发布构建（全五端：Android / Windows / macOS / Linux / iOS）：为声明式插件页与插件管理页全面加入 `FlowRow` 自动换行，修复手机窄屏下插件选项与操作按钮显示不全的问题。
+
 ### 修复与优化
 - **插件页面与插件列表操作项自动换行**：
   - 声明式插件页宿主 `PluginPageScreen` 为无 `grow` 子项的 `row` 容器默认启用 `FlowRow` 自动换行（并新增显式 `flow` 节点与 `wrap` 开关），同时放宽按钮与多行说明的换行限制，彻底修复手机窄屏下 `geom_motion`、`origin_motion`、`osu_motion`、`scrub`、`vibe_board` 等插件选项按钮超出屏幕显示不全的问题
