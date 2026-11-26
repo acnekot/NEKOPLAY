@@ -2,6 +2,7 @@ package cc.catsuki.nekoplay
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
@@ -14,8 +15,8 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.HoverInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -38,6 +39,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /**
  * PC 宽屏布局（窗口 ≥ 900dp）：
@@ -130,7 +132,7 @@ import kotlinx.coroutines.flow.map
             item { SideList("最近播放", (top as? Page.Detail)?.kind == "recent", { RecentCover(rec.firstOrNull()?.cover, 32.dp) }) { nav.stack.clear(); nav.push(Page.Detail("recent", "recent", "最近播放")) } }
             if (Features.on("local")) item { SideList("本地音乐", top == Page.Local, { IconCover(NIcons.disc, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.Local) } }
             if (Features.on("dl")) item { SideList("本地下载", top == Page.DlList, { IconCover(NIcons.download, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.DlList) } }
-            items(pls.filter { !it.liked }, key = { "sp" + it.id }) { pl ->
+            items(pls.filter { !it.liked }, key = { "sp" + it.id }, contentType = { "pl" }) { pl ->
                 SideList(pl.name, (top as? Page.Detail)?.id == pl.id, { Cover(pl.cover, 32.dp, pl.name, decodeSize = 64.dp) }) { nav.stack.clear(); nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
             }
         }
@@ -148,14 +150,29 @@ import kotlinx.coroutines.flow.map
 
 @Composable private fun SideItem(icon: String, label: String, on: Boolean, slidingBg: Boolean = false, onClick: () -> Unit) {
     val p = c
+    val deskHover = Plat.isDesktop && !AnimStyle.off && (MotionEffects.hoverTint || MotionEffects.hoverShiftDp > 0.1f)
     val src = remember { MutableInteractionSource() }
-    val hover by src.collectIsHoveredAsState()
-    val shiftDp = MotionEffects.hoverShiftDp
-    val shift = if (shiftDp > 0.1f && !AnimStyle.off) animateFloatAsState(if (hover && !on) shiftDp else 0f, Motion.standard(), label = "sh") else null
-    Row(Modifier.fillMaxWidth().height(44.dp).hoverable(src).press(onClick = onClick)
-        .background(if (on && !slidingBg) p.p else if (hover && !on && MotionEffects.hoverTint) p.k.copy(alpha = .06f) else Color.Transparent)
+    val hov = if (deskHover) remember(src) { Animatable(0f) } else null
+    if (deskHover && hov != null) {
+        LaunchedEffect(src) {
+            var j: kotlinx.coroutines.Job? = null
+            src.interactions.collect { ev ->
+                when (ev) {
+                    is HoverInteraction.Enter -> { j?.cancel(); j = launch { hov.animateTo(1f, Motion.quick()) } }
+                    is HoverInteraction.Exit -> { j?.cancel(); j = launch { hov.animateTo(0f, Motion.standard()) } }
+                }
+            }
+        }
+    }
+    val shiftDp = if (deskHover) MotionEffects.hoverShiftDp else 0f
+    val showTint = deskHover && MotionEffects.hoverTint
+    Row(Modifier.fillMaxWidth().height(44.dp).then(if (deskHover) Modifier.hoverable(src) else Modifier).press(interactionSource = src, onClick = onClick)
+        .drawBehind {
+            if (on && !slidingBg) drawRect(p.p)
+            else if (showTint && !on && hov != null && hov.value > 0.01f) drawRect(p.k.copy(alpha = .06f * hov.value))
+        }
         .padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-        Row(Modifier.graphicsLayer { if (shift != null) translationX = shift.value.dp.toPx() }, verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.then(if (hov != null && shiftDp > 0.1f && !on) Modifier.graphicsLayer { val v = hov.value; if (v > 0.001f) translationX = (v * shiftDp).dp.toPx() } else Modifier), verticalAlignment = Alignment.CenterVertically) {
             NIcon(icon, 18.dp, if (on) Color.White else p.k); Spacer(Modifier.width(12.dp)); T(label, 15, if (on) Color.White else p.k, 700)
         }
     }
@@ -163,14 +180,29 @@ import kotlinx.coroutines.flow.map
 
 @Composable private fun SideList(label: String, on: Boolean, cover: @Composable () -> Unit, onClick: () -> Unit) {
     val p = c
+    val deskHover = Plat.isDesktop && !AnimStyle.off && (MotionEffects.hoverTint || MotionEffects.hoverShiftDp > 0.1f)
     val src = remember { MutableInteractionSource() }
-    val hover by src.collectIsHoveredAsState()
-    val shiftDp = MotionEffects.hoverShiftDp
-    val shift = if (shiftDp > 0.1f && !AnimStyle.off) animateFloatAsState(if (hover) shiftDp * .85f else 0f, Motion.standard(), label = "sl") else null
-    Row(Modifier.fillMaxWidth().height(44.dp).hoverable(src).press(onClick = onClick)
-        .background(if (on) p.hl else if (hover && MotionEffects.hoverTint) p.k.copy(alpha = .05f) else Color.Transparent)
+    val hov = if (deskHover) remember(src) { Animatable(0f) } else null
+    if (deskHover && hov != null) {
+        LaunchedEffect(src) {
+            var j: kotlinx.coroutines.Job? = null
+            src.interactions.collect { ev ->
+                when (ev) {
+                    is HoverInteraction.Enter -> { j?.cancel(); j = launch { hov.animateTo(1f, Motion.quick()) } }
+                    is HoverInteraction.Exit -> { j?.cancel(); j = launch { hov.animateTo(0f, Motion.standard()) } }
+                }
+            }
+        }
+    }
+    val shiftDp = if (deskHover) MotionEffects.hoverShiftDp * .85f else 0f
+    val showTint = deskHover && MotionEffects.hoverTint
+    Row(Modifier.fillMaxWidth().height(44.dp).then(if (deskHover) Modifier.hoverable(src) else Modifier).press(interactionSource = src, onClick = onClick)
+        .drawBehind {
+            if (on) drawRect(p.hl)
+            else if (showTint && hov != null && hov.value > 0.01f) drawRect(p.k.copy(alpha = .05f * hov.value))
+        }
         .padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Row(Modifier.graphicsLayer { if (shift != null) translationX = shift.value.dp.toPx() }, verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.then(if (hov != null && shiftDp > 0.1f) Modifier.graphicsLayer { val v = hov.value; if (v > 0.001f) translationX = (v * shiftDp).dp.toPx() } else Modifier), verticalAlignment = Alignment.CenterVertically) {
             cover(); Spacer(Modifier.width(10.dp)); T(label, 14, if (on) p.p else p.k, if (on) 700 else 500)
         }
     }
@@ -288,7 +320,7 @@ import kotlinx.coroutines.flow.map
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
         LazyColumn(Modifier.fillMaxSize(), ls, contentPadding = PaddingValues(start = 18.dp, end = 10.dp, bottom = 12.dp)) {
-            itemsIndexed(st.queue, key = { i, x -> "$i${x.id}" }) { i, x ->
+            itemsIndexed(st.queue, key = { i, x -> "$i${x.id}" }, contentType = { _, _ -> "track" }) { i, x ->
                 TrackRow(x, i == st.index, null) { Engine.playAt(i) }
             }
         }

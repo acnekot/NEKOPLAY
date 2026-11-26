@@ -111,7 +111,6 @@ val LocalLyricsActive = compositionLocalOf { true }
 private val HydrogenEase = androidx.compose.animation.core.CubicBezierEasing(0.4f, 0f, 0.12f, 1f)
 
 @Composable private fun LyricsFlow(l: List<LyricLine>, cur: Int, showTr: Boolean, offset: Long, onBlank: (() -> Unit)? = null) {
-    val p = c
     val copy = rememberCopy()
     val tops = remember(l) { FloatArray(l.size) { -1f } }
     var measuredCount by remember(l) { mutableIntStateOf(0) }
@@ -119,8 +118,9 @@ private val HydrogenEase = androidx.compose.animation.core.CubicBezierEasing(0.4
     val offs = remember(l) { List(l.size) { Animatable(0f) } }
     var settled by remember(l) { mutableStateOf(false) }
     var lastCur by remember(l) { mutableIntStateOf(-1) }
-    var ready by remember(l) { mutableStateOf(false) } // 第一次排好位置之前先不显示，避免从顶部闪一下
-    val gap = with(LocalDensity.current) { LyricPref.gap.dp.toPx() }
+    val readyState = remember(l) { mutableStateOf(false) } // 第一次排好位置之前先不显示，避免从顶部闪一下
+    val gapDp = LyricPref.gap.dp
+    val gap = with(LocalDensity.current) { gapDp.toPx() }
     var vh by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current.density
     val centered = LyricPref.align == 1
@@ -139,18 +139,18 @@ private val HydrogenEase = androidx.compose.animation.core.CubicBezierEasing(0.4
         // 刚打开歌词页或仅排版变化：直接到位，不抽动
         val jump = !settled || cur == lastCur
         settled = true; lastCur = cur
-        if (jump) { l.indices.forEach { offs[it].snapTo(target) }; ready = true; return@LaunchedEffect }
+        if (jump) { l.indices.forEach { offs[it].snapTo(target) }; readyState.value = true; return@LaunchedEffect }
         val stag = LyricPref.staggerMs
         val dur = (LyricPref.scrollMs / Anim.f).toInt().coerceIn(120, 1500)
         if (stag <= 0) {
-            // Hydrogen 顺滑 / 居中经典：整体用 cubic-bezier(0.4, 0, 0.12, 1) 同步滑入，无错行抖动
-            l.indices.forEach { i ->
-                if (i < first - 2 || i > cur + 12) launch { offs[i].snapTo(target) }
+            // Hydrogen 顺滑 / 居中经典：离屏行直接对齐，仅对视口邻近行启动动画，避免每句派生上百协程
+            for (i in l.indices) {
+                if (i < first - 2 || i > cur + 12) { if (offs[i].value != target) offs[i].snapTo(target) }
                 else launch { offs[i].animateTo(target, tween(dur, easing = HydrogenEase)) }
             }
         } else {
-            l.indices.forEach { i ->
-                if (i < first || i > cur + 10) launch { offs[i].snapTo(target) }
+            for (i in l.indices) {
+                if (i < first || i > cur + 10) { if (offs[i].value != target) offs[i].snapTo(target) }
                 else launch {
                     kotlinx.coroutines.delay(((i - first) * stag.toLong() / Anim.f).toLong())
                     offs[i].animateTo(target, spring(.86f, Anim.stiff(140f)))
@@ -177,6 +177,14 @@ private val HydrogenEase = androidx.compose.animation.core.CubicBezierEasing(0.4
         }
     }
     val drag = androidx.compose.foundation.gestures.rememberDraggableState { dy -> scope.launch { manual.snapTo(manual.value + dy) } }
+    val onSeekLine = remember(l, offset) {
+        { tMs: Long ->
+            Engine.seek((tMs - offset).coerceAtLeast(0))
+            backJob?.cancel(); browsing = false
+            scope.launch { manual.animateTo(0f, tween(320, easing = HydrogenEase)) }
+            Unit
+        }
+    }
     Box(Modifier.fillMaxSize().clipToBounds().onSizeChanged { vh = it.height.toFloat() }
         .then(if (onBlank == null) Modifier else Modifier.pointerInput(onBlank) { detectTapGestures { onBlank() } })
         .pointerInput(l, cur) {
@@ -201,44 +209,82 @@ private val HydrogenEase = androidx.compose.animation.core.CubicBezierEasing(0.4
         Column(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).padding(start = 22.dp, end = 30.dp, top = 8.dp)) {
             val sMax = LyricPref.activeScale.coerceIn(1f, 1.35f)
             l.forEachIndexed { i, line ->
-                val dist = kotlin.math.abs(i - cur)
-                val targetAlpha = if (browsing) (if (dist == 0) 1f else .7f) else if (LyricPref.style == 1) when (dist) { 0 -> 1f; 1 -> .42f; 2 -> .28f; else -> .18f } else when (dist) { 0 -> 1f; 1 -> .5f; 2 -> .36f; else -> .26f }
-                val a = animateFloatAsState(targetAlpha, tween(260, easing = HydrogenEase), label = "la")
-                Box(Modifier.fillMaxWidth()
-                    .onPlaced {
-                        val y = it.positionInParent().y
+                val distBand = kotlin.math.abs(i - cur).coerceAtMost(6)
+                LyricLineItem(
+                    line = line,
+                    nextTime = l.getOrNull(i + 1)?.t ?: (line.t + 5000),
+                    distBand = distBand,
+                    browsing = browsing,
+                    centered = centered,
+                    showTr = showTr,
+                    offset = offset,
+                    sMax = sMax,
+                    gapDp = gapDp,
+                    off = offs[i],
+                    manual = manual,
+                    readyState = readyState,
+                    onPlacedY = { y ->
                         val first = tops[i] < 0f
                         tops[i] = y
                         if (first) {
                             measuredCount++
                             if (measuredCount >= l.size) readyMeasured = true
                         }
-                    }
-                    .graphicsLayer { translationY = offs[i].value + manual.value; alpha = if (ready) a.value else 0f }
-                    .then(if (UiPref.lyricBlur && !browsing && dist in 2..5 && Plat.impl.liveBlur) Modifier.blur(1.2.dp) else Modifier)
-                    .padding(bottom = with(LocalDensity.current) { gap.toDp() }),
-                    contentAlignment = if (centered) Alignment.Center else Alignment.CenterStart) {
-                  val big = animateFloatAsState(if (i == cur && !browsing) sMax else 1f, if (LyricPref.staggerMs <= 0) tween(340, easing = HydrogenEase) else spring(.8f, Anim.stiff(Spring.StiffnessLow)), label = "lz")
-                  Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (LyricPref.accentBar && !centered) {
-                        val barA by animateFloatAsState(if (i == cur && !browsing && line.text.isNotEmpty()) 1f else 0f, tween(220), label = "bar")
-                        Box(Modifier.width(3.dp).height((LyricPref.size * 1.15f).dp).graphicsLayer { alpha = barA }.background(p.p))
-                        Spacer(Modifier.width(10.dp))
-                    }
-                    Box(Modifier.layout { m, cs -> val pl = m.measure(cs.copy(minWidth = 0, maxWidth = (cs.maxWidth / sMax).toInt().coerceAtLeast(1))); layout(pl.width, pl.height) { pl.place(0, 0) } }
-                      .graphicsLayer { scaleX = big.value; scaleY = big.value; transformOrigin = TransformOrigin(if (centered) .5f else 0f, .5f) }
-                      .press(onLong = { if (line.text.isNotEmpty()) copy(if (showTr && line.tr != null) line.text + "\n" + line.tr else line.text, "歌词") }) { Engine.seek((line.t - offset).coerceAtLeast(0)); backJob?.cancel(); browsing = false; scope.launch { manual.animateTo(0f, tween(320, easing = HydrogenEase)) } }) {
-                      if (line.text.isEmpty()) {
-                          InterludeDots(i == cur, line.t, l.getOrNull(i + 1)?.t ?: (line.t + 5000), offset)
-                      } else Column(horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
-                          if (UiPref.karaoke && i == cur && line.words != null && !browsing) KaraokeLine(line, offset) else T(line.text, LyricPref.size.toFloat(), p.k, 800, lines = 6, lh = 1.25f)
-                          if (showTr && line.tr != null) T(line.tr, Fs.SUB, p.s, lines = 4, lh = 1.45f, modifier = Modifier.padding(top = 4.dp))
-                      }
-                    }
-                  }
-                }
+                    },
+                    onCopy = copy,
+                    onSeek = onSeekLine,
+                )
             }
             Spacer(Modifier.height(400.dp))
+        }
+    }
+}
+
+/** 独立可跳过行作用域：按 distBand 分桶，换句时远端行完全跳过重组，动画值仅在 graphicsLayer 读取 */
+@Composable private fun LyricLineItem(
+    line: LyricLine,
+    nextTime: Long,
+    distBand: Int,
+    browsing: Boolean,
+    centered: Boolean,
+    showTr: Boolean,
+    offset: Long,
+    sMax: Float,
+    gapDp: androidx.compose.ui.unit.Dp,
+    off: Animatable<Float, androidx.compose.animation.core.AnimationVector1D>,
+    manual: Animatable<Float, androidx.compose.animation.core.AnimationVector1D>,
+    readyState: State<Boolean>,
+    onPlacedY: (Float) -> Unit,
+    onCopy: (String, String) -> Unit,
+    onSeek: (Long) -> Unit,
+) {
+    val p = c
+    val isCur = distBand == 0
+    val targetAlpha = if (browsing) (if (isCur) 1f else .7f) else if (LyricPref.style == 1) when (distBand) { 0 -> 1f; 1 -> .42f; 2 -> .28f; else -> .18f } else when (distBand) { 0 -> 1f; 1 -> .5f; 2 -> .36f; else -> .26f }
+    val a = animateFloatAsState(targetAlpha, tween(260, easing = HydrogenEase), label = "la")
+    val big = animateFloatAsState(if (isCur && !browsing) sMax else 1f, if (LyricPref.staggerMs <= 0) tween(340, easing = HydrogenEase) else spring(.8f, Anim.stiff(Spring.StiffnessLow)), label = "lz")
+    Box(Modifier.fillMaxWidth()
+        .onPlaced { onPlacedY(it.positionInParent().y) }
+        .graphicsLayer { translationY = off.value + manual.value; alpha = if (readyState.value) a.value else 0f }
+        .then(if (UiPref.lyricBlur && !browsing && distBand in 2..5 && Plat.impl.liveBlur) Modifier.blur(1.2.dp) else Modifier)
+        .padding(bottom = gapDp),
+        contentAlignment = if (centered) Alignment.Center else Alignment.CenterStart) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (LyricPref.accentBar && !centered) {
+                val barA = animateFloatAsState(if (isCur && !browsing && line.text.isNotEmpty()) 1f else 0f, tween(220), label = "bar")
+                Box(Modifier.width(3.dp).height((LyricPref.size * 1.15f).dp).graphicsLayer { alpha = barA.value }.background(p.p))
+                Spacer(Modifier.width(10.dp))
+            }
+            Box(Modifier.layout { m, cs -> val pl = m.measure(cs.copy(minWidth = 0, maxWidth = (cs.maxWidth / sMax).toInt().coerceAtLeast(1))); layout(pl.width, pl.height) { pl.place(0, 0) } }
+                .graphicsLayer { scaleX = big.value; scaleY = big.value; transformOrigin = TransformOrigin(if (centered) .5f else 0f, .5f) }
+                .press(onLong = { if (line.text.isNotEmpty()) onCopy(if (showTr && line.tr != null) line.text + "\n" + line.tr else line.text, "歌词") }) { onSeek(line.t) }) {
+                if (line.text.isEmpty()) {
+                    InterludeDots(isCur, line.t, nextTime, offset)
+                } else Column(horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
+                    if (UiPref.karaoke && isCur && line.words != null && !browsing) KaraokeLine(line, offset) else T(line.text, LyricPref.size.toFloat(), p.k, 800, lines = 6, lh = 1.25f)
+                    if (showTr && line.tr != null) T(line.tr, Fs.SUB, p.s, lines = 4, lh = 1.45f, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
         }
     }
 }
@@ -247,42 +293,62 @@ private val HydrogenEase = androidx.compose.animation.core.CubicBezierEasing(0.4
 
 @Composable private fun InterludeDots(active: Boolean, start: Long, next: Long, offset: Long) {
     val p = c
-    val prog = if (active) {
-        val raw by Engine.position.collectAsState()
-        ((raw + offset - start).toFloat() / (next - start).coerceAtLeast(300)).coerceIn(0f, 1f)
-    } else 0f
+    val lit = if (active) {
+        val span = (next - start).coerceAtLeast(300L)
+        remember(start, span, offset) {
+            Engine.position.map { pos ->
+                val prog = ((pos + offset - start).toFloat() / span).coerceIn(0f, 1f)
+                when { prog > 2f / 3f -> 3; prog > 1f / 3f -> 2; prog > 0f -> 1; else -> 0 }
+            }.distinctUntilChanged()
+        }.collectAsState(0).value
+    } else 0
     Row(Modifier.height(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        repeat(3) { k -> Box(Modifier.size(8.dp).background(if (active && prog > k / 3f) p.k else p.k.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape)) }
+        repeat(3) { k -> Box(Modifier.size(8.dp).background(if (active && k < lit) p.k else p.k.copy(alpha = .3f), androidx.compose.foundation.shape.CircleShape)) }
     }
 }
 
-/** 逐字高亮：底下一层半透明文字，上面一层实色文字按字的进度裁出来；进度用帧时钟在两次位置更新之间插值，扫过去是连续的 */
+/** 逐字高亮：底下一层半透明文字，上面一层实色文字按字的进度裁出来；纯绘制层帧时钟驱动，扫光期间 0 重组 */
 @Composable private fun KaraokeLine(line: LyricLine, offset: Long) {
     val p = c
     val words = line.words ?: return
-    val raw by Engine.position.collectAsState()
-    val pos = raw + offset
-    // 歌词藏在封面后面时不逐帧推进（老设备上这是播放页卡顿的主要来源）
-    val playing = Engine.state.collectAsState().value.playing && LocalLyricsActive.current
-    var now by remember { mutableLongStateOf(pos) }
-    LaunchedEffect(pos, playing) {
-        val base = pos; now = base
-        if (playing) { val start = withFrameMillis { it }; while (true) { withFrameMillis { f -> now = base + (f - start) }; if (UiPref.lowMem) kotlinx.coroutines.delay(40) } }
+    val playing by remember { Engine.state.map { it.playing }.distinctUntilChanged() }.collectAsState(Engine.state.value.playing)
+    val active = playing && LocalLyricsActive.current
+    val now = remember(line.t) { mutableLongStateOf(Engine.position.value + offset) }
+    LaunchedEffect(line.t, active, offset) {
+        now.longValue = Engine.position.value + offset
+        if (!active) return@LaunchedEffect
+        var base = now.longValue
+        var start = withFrameMillis { it }
+        while (true) {
+            withFrameMillis { f ->
+                val eng = Engine.position.value + offset
+                val est = base + (f - start)
+                if (kotlin.math.abs(eng - est) > 120L) { base = eng; start = f; now.longValue = eng }
+                else now.longValue = est
+            }
+            if (UiPref.lowMem) kotlinx.coroutines.delay(32)
+        }
     }
     var lay by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
     // 复用 Path，避免 120Hz 下每秒分配 120 个 Native Skia Path 对象
     val path = remember { androidx.compose.ui.graphics.Path() }
-    val st = androidx.compose.ui.text.TextStyle(fontSize = LyricPref.size.sp, fontWeight = androidx.compose.ui.text.font.FontWeight(800), fontFamily = Typo.family, lineHeight = (LyricPref.size * 1.25f).sp)
+    val dimSt = remember(LyricPref.size, Typo.family, p.k) {
+        androidx.compose.ui.text.TextStyle(fontSize = LyricPref.size.sp, fontWeight = androidx.compose.ui.text.font.FontWeight(800), fontFamily = Typo.family, lineHeight = (LyricPref.size * 1.25f).sp, color = p.k.copy(alpha = .32f))
+    }
+    val litSt = remember(LyricPref.size, Typo.family, p.k) {
+        androidx.compose.ui.text.TextStyle(fontSize = LyricPref.size.sp, fontWeight = androidx.compose.ui.text.font.FontWeight(800), fontFamily = Typo.family, lineHeight = (LyricPref.size * 1.25f).sp, color = p.k)
+    }
     Box {
-        androidx.compose.foundation.text.BasicText(line.text, style = st.copy(color = p.k.copy(alpha = .32f)), maxLines = 6, onTextLayout = { lay = it })
-        androidx.compose.foundation.text.BasicText(line.text, style = st.copy(color = p.k), maxLines = 6, modifier = Modifier.drawWithContent {
+        androidx.compose.foundation.text.BasicText(line.text, style = dimSt, maxLines = 6, onTextLayout = { lay = it })
+        androidx.compose.foundation.text.BasicText(line.text, style = litSt, maxLines = 6, modifier = Modifier.drawWithContent {
             val l = lay ?: return@drawWithContent
+            val t = now.longValue
             val n = l.layoutInput.text.length
             path.reset()
             var ci = 0
             for (w in words) {
                 val len = w.s.length
-                val f = ((now - w.t).toFloat() / w.d.coerceAtLeast(1)).coerceIn(0f, 1f)
+                val f = ((t - w.t).toFloat() / w.d.coerceAtLeast(1)).coerceIn(0f, 1f)
                 if (f > 0f) for (k in 0 until len) {
                     val idx = ci + k; if (idx >= n) break
                     val cf = (f * len - k).coerceIn(0f, 1f); if (cf <= 0f) break

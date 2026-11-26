@@ -128,57 +128,62 @@ fun LazyListScope.deskLyricSettings(p: Pal) {
     val p = c
     val st by Engine.state.collectAsState()
     val t = st.current
-    val raw by Engine.position.collectAsState()
-    val pos = raw + (t?.let { LyricOffset.of(it.id) } ?: 0)
+    val offset = t?.let { LyricOffset.of(it.id) } ?: 0L
     DisposableEffect(Unit) { Engine.fastPos++; onDispose { Engine.fastPos-- } }
     var lines by remember(t?.id) { mutableStateOf(t?.let { LyricCache.peek(it.id) }) }
     LaunchedEffect(t?.id) { if (t != null && lines == null) lines = runCatching { LyricCache.get(t.id) }.getOrDefault(emptyList()) }
-    // 播放中按帧推算进度，高亮扫得更顺
-    var now by remember { mutableLongStateOf(pos) }
-    LaunchedEffect(pos, st.playing) {
-        val base = pos; now = base
-        if (st.playing) { val s0 = withFrameMillis { it }; while (true) withFrameMillis { f -> now = base + (f - s0) } }
+    // 播放中按帧推算进度（漂移校正），暂停时监听 seek；now 仅在 derivedStateOf / drawWithContent 读取，扫光期间 0 重组
+    val now = remember(t?.id) { mutableLongStateOf(Engine.position.value + offset) }
+    LaunchedEffect(t?.id, st.playing, offset) {
+        now.longValue = Engine.position.value + offset
+        if (!st.playing) {
+            Engine.position.collect { raw -> now.longValue = raw + offset }
+        } else {
+            var base = now.longValue
+            var s0 = withFrameMillis { it }
+            while (true) {
+                withFrameMillis { f ->
+                    val eng = Engine.position.value + offset
+                    val est = base + (f - s0)
+                    if (kotlin.math.abs(eng - est) > 120L) { base = eng; s0 = f; now.longValue = eng }
+                    else now.longValue = est
+                }
+            }
+        }
     }
     val l = lines.orEmpty()
-    val i = if (l.isEmpty()) -1 else Lrc.indexAt(l, now).coerceAtLeast(0)
+    val i by remember(l) { derivedStateOf { if (l.isEmpty()) -1 else Lrc.indexAt(l, now.longValue).coerceAtLeast(0) } }
     val cur = l.getOrNull(i)
     val text = cur?.text?.ifEmpty { "♪" } ?: t?.let { "${it.title} - ${it.artist}" } ?: "NEKOPLAY"
-    val nextText = l.drop(i + 1).firstOrNull { it.text.isNotEmpty() }?.text ?: ""
+    val nextText = remember(l, i) { l.drop(i + 1).firstOrNull { it.text.isNotEmpty() }?.text ?: "" }
     val sub = when (DeskLyric.lineMode) {
         0 -> ""
         1 -> cur?.tr ?: nextText
         else -> nextText
     }
-    val frac = when {
-        !DeskLyric.karaoke -> 1f
-        cur == null -> 0f
-        cur.words != null -> {
-            val ws = cur.words; val total = ws.sumOf { it.s.length }.coerceAtLeast(1)
-            var done = 0f
-            for (w in ws) { val f = ((now - w.t).toFloat() / w.d.coerceAtLeast(1)).coerceIn(0f, 1f); done += f * w.s.length; if (f < 1f) break }
-            done / total
-        }
-        else -> { val next = l.getOrNull(i + 1)?.t ?: (cur.t + 5000); ((now - cur.t).toFloat() / (next - cur.t).coerceAtLeast(300)).coerceIn(0f, 1f) }
-    }
     val showBar = hover && !DeskLyric.locked
     val showUnlock = DeskLyric.locked && unlockReady
     val showUnlockHint = DeskLyric.locked && !unlockReady && unlockProgress > 0.1f
-    val panel by androidx.compose.animation.core.animateFloatAsState(if (showBar || showUnlock) 1f else 0f, Motion.standard(), label = "pn")
+    val panel = androidx.compose.animation.core.animateFloatAsState(if (showBar || showUnlock) 1f else 0f, Motion.standard(), label = "pn")
+    val panelVisible by remember { derivedStateOf { panel.value > 0.01f } }
     val ink = Color(0xFF0E1015)
     val accent = DeskLyric.COLORS.getOrNull(DeskLyric.colorIdx) ?: p.p
     val tAlign = when (DeskLyric.align) { 1 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
     val hAlign = when (DeskLyric.align) { 1 -> Alignment.Start; 2 -> Alignment.End; else -> Alignment.CenterHorizontally }
-    val main = TextStyle(fontSize = DeskLyric.size.sp, fontWeight = FontWeight(if (DeskLyric.bold) 800 else 500), fontFamily = Typo.family, textAlign = tAlign)
+    val main = remember(DeskLyric.size, DeskLyric.bold, Typo.family, tAlign) {
+        TextStyle(fontSize = DeskLyric.size.sp, fontWeight = FontWeight(if (DeskLyric.bold) 800 else 500), fontFamily = Typo.family, textAlign = tAlign)
+    }
     // 和 App 一样的风格：悬停时出现底板和控制条；锁定后悬停满 3 秒弹出解锁按钮
     Box(Modifier.fillMaxSize().padding(6.dp)
         .drawBehind {
-            val bgA = maxOf(DeskLyric.bgAlpha, if (showBar) .92f * panel else .68f * panel)
+            val pv = panel.value
+            val bgA = maxOf(DeskLyric.bgAlpha, if (showBar) .92f * pv else .68f * pv)
             if (bgA > 0.005f) drawRect(p.page.copy(alpha = bgA))
-            if (panel > 0f && !Look.flat) drawRect(p.k.copy(alpha = panel), style = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx()))
+            if (pv > 0f && !Look.flat) drawRect(p.k.copy(alpha = pv), style = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx()))
         }) {
         Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 6.dp), horizontalAlignment = hAlign, verticalArrangement = Arrangement.Center) {
             // 控制条：正常悬停显示完整工具栏；锁定后悬停 3 秒显示解锁与回正，悬停计时期间显示柔和倒计时条
-            Row(Modifier.height(30.dp).align(Alignment.CenterHorizontally).graphicsLayer { alpha = if (showUnlockHint) .9f else panel }, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.height(30.dp).align(Alignment.CenterHorizontally).graphicsLayer { alpha = if (showUnlockHint) .9f else panel.value }, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 @Composable fun I(icon: String, on: Boolean = false, act: () -> Unit) = Box(Modifier.size(30.dp).press(.92f) { act() }.background(if (on) p.p else Color.Transparent).nbf(1.dp, p.k), contentAlignment = Alignment.Center) { NIcon(icon, 15.dp, if (on) Color.White else p.k) }
                 @Composable fun L(label: String, on: Boolean = false, act: () -> Unit) = Box(Modifier.height(30.dp).defaultMinSize(minWidth = 30.dp).press(.92f) { act() }.background(if (on) p.p else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) { T(label, 12, if (on) Color.White else p.k, 700, mono = true) }
                 when {
@@ -196,7 +201,7 @@ fun LazyListScope.deskLyricSettings(p: Pal) {
                             }
                         }
                     }
-                    panel > 0.01f && !DeskLyric.locked -> {
+                    panelVisible && !DeskLyric.locked -> {
                         I(NIcons.prev) { Engine.prev() }; I(if (st.playing) NIcons.pause else NIcons.play) { Engine.toggle() }; I(NIcons.next) { Engine.next() }
                         Spacer(Modifier.width(8.dp))
                         L("A−") { DeskLyric.size = (DeskLyric.size - 2).coerceAtLeast(18); DeskLyric.save() }
@@ -215,19 +220,36 @@ fun LazyListScope.deskLyricSettings(p: Pal) {
                     androidx.compose.animation.fadeOut(Motion.quick())
             }, label = "dl") { tx ->
                 var lay by remember { mutableStateOf<TextLayoutResult?>(null) }
-                val f = if (tx == text) frac else 1f
                 Box(contentAlignment = Alignment.Center) {
                     if (DeskLyric.stroke) BasicText(tx, style = main.copy(color = ink, drawStyle = androidx.compose.ui.graphics.drawscope.Stroke(DeskLyric.size * .28f, join = androidx.compose.ui.graphics.StrokeJoin.Round)), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     BasicText(tx, style = main.copy(color = Color.White), maxLines = 1, overflow = TextOverflow.Ellipsis, onTextLayout = { lay = it })
                     BasicText(tx, style = main.copy(color = accent), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.drawWithContent {
                         val lr = lay ?: return@drawWithContent
+                        val f = when {
+                            tx != text || !DeskLyric.karaoke -> 1f
+                            cur == null -> 0f
+                            cur.words != null -> {
+                                val nt = now.longValue
+                                val ws = cur.words; val total = ws.sumOf { it.s.length }.coerceAtLeast(1)
+                                var done = 0f
+                                for (w in ws) { val wf = ((nt - w.t).toFloat() / w.d.coerceAtLeast(1)).coerceIn(0f, 1f); done += wf * w.s.length; if (wf < 1f) break }
+                                done / total
+                            }
+                            else -> {
+                                val nt = now.longValue
+                                val next = l.getOrNull(i + 1)?.t ?: (cur.t + 5000)
+                                ((nt - cur.t).toFloat() / (next - cur.t).coerceAtLeast(300)).coerceIn(0f, 1f)
+                            }
+                        }
                         val left = lr.getLineLeft(0); val w = lr.getLineRight(0) - left
                         clipRect(right = left + w * f) { this@drawWithContent.drawContent() }
                     })
                 }
             }
             if (sub.isNotEmpty()) {
-                val st2 = main.copy(fontSize = (DeskLyric.size * .52f).sp, fontWeight = FontWeight(if (DeskLyric.bold) 600 else 400))
+                val st2 = remember(main, DeskLyric.size, DeskLyric.bold) {
+                    main.copy(fontSize = (DeskLyric.size * .52f).sp, fontWeight = FontWeight(if (DeskLyric.bold) 600 else 400))
+                }
                 Box(Modifier.padding(top = 2.dp).graphicsLayer { alpha = DeskLyric.textAlpha }, contentAlignment = Alignment.Center) {
                     if (DeskLyric.stroke) BasicText(sub, style = st2.copy(color = ink, drawStyle = androidx.compose.ui.graphics.drawscope.Stroke(DeskLyric.size * .16f, join = androidx.compose.ui.graphics.StrokeJoin.Round)), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     BasicText(sub, style = st2.copy(color = Color.White.copy(alpha = .9f)), maxLines = 1, overflow = TextOverflow.Ellipsis)

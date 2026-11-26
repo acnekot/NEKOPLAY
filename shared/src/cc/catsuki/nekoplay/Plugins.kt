@@ -24,7 +24,21 @@ object Plugins {
     var off by mutableStateOf(setOf<String>())
     /** 响应式变更版本号：导入/开关/重载/删除/启动完成均递增，确保所有读取 Plugins.main() / enabledSources 的页面立刻重组 */
     var rev by mutableIntStateOf(0); private set
-    fun bump() { rev++ }
+    /** 缓存热路径查询结果：避免曲目行/控制栏每帧 filter 分配临时 List */
+    var enabledSourceCount by mutableIntStateOf(0); private set
+    var hasScrubPlugin by mutableStateOf(false); private set
+    fun bump() {
+        val curOff = off; val curList = list.value
+        var src = 0; var scrub = false
+        for (s in curList) {
+            if (s.id in curOff) continue
+            if (s.isSource) src++
+            if (!scrub && s.isFeature && (s.featureSlot == "scrub" || s.id.equals("scrub", ignoreCase = true))) scrub = true
+        }
+        enabledSourceCount = src
+        hasScrubPlugin = scrub
+        rev++
+    }
 
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Default)
     private var idleJob: kotlinx.coroutines.Job? = null

@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /**
  * 播放页按钮布局：每个按钮放在哪个槽位、什么顺序，手机（也用于 PC 侧拉模式）和 PC 宽屏各一套。
@@ -108,11 +110,11 @@ class BtnCtx(val t: Track, val st: PlayState, val showTr: Boolean, val toggleTr:
         }
         "sleep" -> SleepBtn()
         "dl" -> {
-            val dls by Downloads.items.collectAsState(); val act by Downloads.active.collectAsState()
-            val has = dls.any { it.track.id == t.id }; val ing = t.id in act
+            val dlIds by Downloads.downloadedIds.collectAsState()
+            val prog by remember(t.id) { Downloads.active.map { it[t.id] }.distinctUntilChanged() }.collectAsState(Downloads.active.value[t.id])
+            val has = t.id in dlIds; val ing = prog != null
             Box(Modifier.size(44.dp).press(haptic = true) { if (has) nav.toast = "已经下载过了" else if (!ing) downloadSheet(nav, listOf(t)) }, contentAlignment = Alignment.Center) {
-                val prog = act[t.id]
-                if (ing && prog != null) T(if (prog < 0) "…" else "${(prog * 100f).toInt()}", 12, p.p, 700, mono = true) else NIcon(NIcons.download, 22.dp, if (has) p.p else p.k)
+                if (prog != null) T(if (prog!! < 0) "…" else "${(prog!! * 100f).toInt()}", 12, p.p, 700, mono = true) else NIcon(NIcons.download, 22.dp, if (has) p.p else p.k)
             }
         }
         "more" -> IconBtn(NIcons.more) { trackActions(nav, t) }

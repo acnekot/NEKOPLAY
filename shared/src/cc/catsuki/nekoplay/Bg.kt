@@ -167,9 +167,9 @@ class BgDraft {
     var active by remember { mutableStateOf(false) }
     var hold by remember { mutableStateOf(false) }        // 正在按住等待激活
     val lin = androidx.compose.animation.core.LinearEasing
-    val fill by androidx.compose.animation.core.animateFloatAsState(f, androidx.compose.animation.core.tween(150, easing = lin), label = "f")
-    val th by androidx.compose.animation.core.animateFloatAsState(if (active) 1f else if (hold) .8f else .6f, androidx.compose.animation.core.tween(150, easing = lin), label = "t")
-    val hh by androidx.compose.animation.core.animateFloatAsState(if (active) 6f else 4f, androidx.compose.animation.core.tween(150, easing = lin), label = "h")
+    val fill = androidx.compose.animation.core.animateFloatAsState(f, androidx.compose.animation.core.tween(150, easing = lin), label = "f")
+    val th = androidx.compose.animation.core.animateFloatAsState(if (active) 1f else if (hold) .8f else .6f, androidx.compose.animation.core.tween(150, easing = lin), label = "t")
+    val hh = androidx.compose.animation.core.animateFloatAsState(if (active) 6f else 4f, androidx.compose.animation.core.tween(150, easing = lin), label = "h")
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val cb by rememberUpdatedState(onChange); val done by rememberUpdatedState(onDone)
     Box(Modifier.fillMaxWidth().height(32.dp).pointerInput(range) {
@@ -205,10 +205,10 @@ class BgDraft {
             active = false; done()
         }
     }.drawBehind {
-        val y = size.height / 2; val h = hh.dp.toPx(); val t = 14.dp.toPx() * th
+        val y = size.height / 2; val h = hh.value.dp.toPx(); val t = 14.dp.toPx() * th.value; val fv = fill.value
         drawRect(p.l3, Offset(0f, y - h / 2), Size(size.width, h))
-        drawRect(p.p, Offset(0f, y - h / 2), Size(size.width * fill, h))
-        drawRect(p.p, Offset((size.width * fill - t / 2).coerceIn(0f, (size.width - t).coerceAtLeast(0f)), y - t / 2), Size(t, t))
+        drawRect(p.p, Offset(0f, y - h / 2), Size(size.width * fv, h))
+        drawRect(p.p, Offset((size.width * fv - t / 2).coerceIn(0f, (size.width - t).coerceAtLeast(0f)), y - t / 2), Size(t, t))
     })
 }
 

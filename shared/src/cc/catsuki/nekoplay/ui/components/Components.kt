@@ -74,19 +74,53 @@ import kotlinx.coroutines.launch
     return remember(cb, nav) { { text, what -> cb.setText(androidx.compose.ui.text.AnnotatedString(text)); nav.toast = "已复制$what" } }
 }
 
-@Composable fun Modifier.press(scale: Float = 1f, haptic: Boolean = false, onLong: (() -> Unit)? = null, onClick: () -> Unit): Modifier {
-    val src = remember { MutableInteractionSource() }
-    val down by src.collectIsPressedAsState()
-    val a = animateFloatAsState(if (down) .72f else 1f, if (AnimStyle.off) androidx.compose.animation.core.snap() else tween(if (down) 45 else Motion.standardMs, easing = AnimStyle.activeEasing), label = "a")
-    val effScale = if (scale != 1f) scale else MotionEffects.pressScale
-    val sc = if (effScale < 0.999f && !AnimStyle.off) animateFloatAsState(if (down) effScale else 1f,
-        if (AnimStyle.pluginProfile != null || AnimStyle.style != 0) tween(if (down) 45 else Motion.standardMs, easing = AnimStyle.activeEasing)
-        else spring(AnimStyle.springDamping, Anim.stiff(if (down) Spring.StiffnessHigh else AnimStyle.springStiffness)), label = "s") else null
+@Composable fun Modifier.press(
+    scale: Float = 1f,
+    haptic: Boolean = false,
+    onLong: (() -> Unit)? = null,
+    interactionSource: MutableInteractionSource? = null,
+    onClick: () -> Unit,
+): Modifier {
+    val src = interactionSource ?: remember { MutableInteractionSource() }
     val h = LocalHapticFeedback.current
-    return this.graphicsLayer { alpha = a.value; if (sc != null) { scaleX = sc.value; scaleY = sc.value } }.combinedClickable(src, null,
+    val clickMod = combinedClickable(src, null,
         onLongClick = onLong?.let { { h.performHapticFeedback(HapticFeedbackType.LongPress); it() } }) {
         if (haptic) h.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick()
     }
+    if (AnimStyle.off) return this.then(clickMod)
+    val effScale = if (scale != 1f) scale else MotionEffects.pressScale
+    val prog = remember(src) { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(src) {
+        var animJob: kotlinx.coroutines.Job? = null
+        src.interactions.collect { ev ->
+            when (ev) {
+                is androidx.compose.foundation.interaction.PressInteraction.Press -> {
+                    animJob?.cancel()
+                    animJob = launch { prog.animateTo(1f, tween(45, easing = AnimStyle.activeEasing)) }
+                }
+                is androidx.compose.foundation.interaction.PressInteraction.Release,
+                is androidx.compose.foundation.interaction.PressInteraction.Cancel -> {
+                    animJob?.cancel()
+                    animJob = launch {
+                        val spec: androidx.compose.animation.core.AnimationSpec<Float> = if (effScale < 0.999f && AnimStyle.pluginProfile == null && AnimStyle.style == 0)
+                            spring(AnimStyle.springDamping, Anim.stiff(AnimStyle.springStiffness))
+                        else tween(Motion.standardMs, easing = AnimStyle.activeEasing)
+                        prog.animateTo(0f, spec)
+                    }
+                }
+            }
+        }
+    }
+    return this.graphicsLayer {
+        val v = prog.value
+        if (v > 0.001f) {
+            alpha = 1f - 0.28f * v
+            if (effScale < 0.999f) {
+                val sc = 1f - (1f - effScale) * v
+                scaleX = sc; scaleY = sc
+            }
+        }
+    }.then(clickMod)
 }
 
 // ---------------- 图标：直接用原型的 SVG 路径 ----------------
@@ -144,7 +178,7 @@ private fun vector(spec: String): ImageVector = iconCache.getOrPut(spec) {
     b.build()
 }
 @Composable fun NIcon(spec: String, size: Dp = 24.dp, color: Color = c.k) =
-    Image(rememberVectorPainter(vector(spec)), null, Modifier.size(size), colorFilter = ColorFilter.tint(color))
+    Image(rememberVectorPainter(vector(spec)), null, Modifier.size(size), colorFilter = remember(color) { ColorFilter.tint(color) })
 
 // ---------------- 组件 ----------------
 @Composable fun Tag(text: String) =
@@ -186,22 +220,27 @@ val LocalCompactAction = compositionLocalOf { false }
 @Composable fun NSwitch(on: Boolean, onChange: (Boolean) -> Unit) {
     val curOn by rememberUpdatedState(on)
     val curChange by rememberUpdatedState(onChange)
-    val x by animateDpAsState(if (on) 23.dp else 3.dp, Motion.standard(), label = "sw")
-    val bg by androidx.compose.animation.animateColorAsState(if (on) c.p else Color.Transparent, Motion.quick(), label = "swb")
+    val frac = animateFloatAsState(if (on) 1f else 0f, Motion.standard(), label = "sw")
+    val bg = androidx.compose.animation.animateColorAsState(if (on) c.p else Color.Transparent, Motion.quick(), label = "swb")
+    val p = c
     Box(Modifier.size(52.dp, 44.dp).pointerInput(Unit) { detectTapGestures { curChange(!curOn) } }, contentAlignment = Alignment.Center) {
-        Box(Modifier.size(44.dp, 24.dp).background(bg).nbf(1.dp, c.k)) {
-            Box(Modifier.offset(x = x, y = 3.dp).size(16.dp).background(if (on) Color.White else c.k))
+        Box(Modifier.size(44.dp, 24.dp).drawBehind { drawRect(bg.value) }.nbf(1.dp, p.k)) {
+            Box(Modifier.graphicsLayer {
+                translationX = (3f + 20f * frac.value).dp.toPx()
+                translationY = 3.dp.toPx()
+            }.size(16.dp).background(if (on) Color.White else p.k))
         }
     }
 }
 
 @Composable fun Cover(url: String?, size: Dp, title: String = "", border: Boolean = true, decodeSize: Dp = size) {
-    val px = with(LocalDensity.current) { decodeSize.roundToPx() }
+    val px = with(LocalDensity.current) { decodeSize.roundToPx() }.coerceAtLeast(1)
+    val targetPx = when { px <= 160 -> 160; px <= 256 -> 256; px <= 512 -> 512; else -> 768 }
     val ctx = coil3.compose.LocalPlatformContext.current
     Box(Modifier.size(size).background(c.ph).then(if (border) Modifier.nb(1.dp, c.k) else Modifier), contentAlignment = Alignment.Center) {
         if (url == null) T(title.take(1).uppercase().ifEmpty { "♪" }, size.value * .42f, c.s, 800)
         else {
-            val req = remember(url, px) { coil3.request.ImageRequest.Builder(ctx).data(img(url, px)).build() }
+            val req = remember(url, targetPx) { coil3.request.ImageRequest.Builder(ctx).data(img(url, targetPx)).size(targetPx).build() }
             AsyncImage(req, null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
         }
     }
@@ -216,7 +255,7 @@ val LocalCompactAction = compositionLocalOf { false }
 
 /** 来源小标签：开着不止一个音源时，在歌手前面标出这首歌来自哪里 */
 @Composable fun SourceTag(t: Track) {
-    if (Plugins.enabledSources.size < 2) return
+    if (Plugins.enabledSourceCount < 2) return
     val name = when { t.id.startsWith("dav:") -> "WebDAV"; t.local -> "本地"; else -> Plugins.sourceName(t.id) ?: return }
     Box(Modifier.padding(end = 6.dp).border(1.dp, c.l2).padding(horizontal = 4.dp)) { T(name, 9, c.s, 700, lh = 1.4f) }
 }

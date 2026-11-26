@@ -95,7 +95,10 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
         LaunchedEffect(Unit) { drag.snapTo(0f) }
         val st by Engine.state.collectAsState()
         val t = st.current
-        val lt by animateFloatAsState(if (nav.lyrics) 1f else 0f, spF, label = "ly")
+        val ltState = animateFloatAsState(if (nav.lyrics) 1f else 0f, spF, label = "ly")
+        val isLyricsTitle by remember { derivedStateOf { ltState.value > .5f } }
+        val showBigTitle by remember { derivedStateOf { ltState.value < .45f } }
+        val showSmallTitle by remember { derivedStateOf { ltState.value > .75f } }
         LaunchedEffect(t?.id) { t?.let { runCatching { LyricCache.get(it.id) } } }
         var showTr by remember { mutableStateOf(true) }
         val p = c
@@ -114,10 +117,10 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                 }.drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp) }
                     // 矮屏不显示 NOW PLAYING / LYRICS 标题，省出高度给封面
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { if (!Screen.short) T(if (lt > .5f && !wideP) "LYRICS" else if (st.fm) "PERSONAL FM" else "NOW PLAYING", 12, p.k.copy(alpha = .5f), 700, mono = true, ls = .14f) }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { if (!Screen.short) T(if (isLyricsTitle && !wideP) "LYRICS" else if (st.fm) "PERSONAL FM" else "NOW PLAYING", 12, p.k.copy(alpha = .5f), 700, mono = true, ls = .14f) }
                     // 顶栏右侧槽位（默认放「译」，只在歌词页显示）
                     if (t != null) { val x = BtnCtx(t, st, showTr) { showTr = !showTr }
-                        PlayerLayout.keys(false, "top").forEach { k -> Box(if (k == "tr") Modifier.graphicsLayer { alpha = lt } else Modifier) { PBtn(k, x) } } }
+                        PlayerLayout.keys(false, "top").forEach { k -> Box(if (k == "tr") Modifier.graphicsLayer { alpha = ltState.value } else Modifier) { PBtn(k, x) } } }
                     else Spacer(Modifier.width(44.dp))
                 }
                 if (t == null) { Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { T("NO TRACK", 12, p.s, mono = true, ls = .08f) }; return@Column }
@@ -134,20 +137,22 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     val sh = Screen.short
                     val coverNow = (free - (if (sh) 106 else 150) * dp).coerceIn(120 * dp, (w - (if (sh) 24 else 56) * dp).coerceAtLeast(120 * dp))
                     val nowTop = ((free - coverNow - 84 * dp) / 2).coerceIn(8 * dp, 40 * dp)
-                    val cs = lerp(coverNow, 48 * dp, lt)
-                    val cl = lerp((w - coverNow) / 2, 18 * dp, lt)
-                    val ct = lerp(nowTop, 8 * dp, lt)
                     val coverDp = with(d) { coverNow.toDp() }
                     // 歌词列
                     // 歌词一直挂着（封面页时透明、不接收点击）：切到歌词页时已经排好版、停在当前句，不会先闪一下再跳
                     Box(Modifier.fillMaxWidth().height(with(d) { (free - 68 * dp).coerceAtLeast(0f).toDp() }).offset(y = 68.dp)
-                        .graphicsLayer { alpha = ((lt - .7f) / .3f).coerceIn(0f, 1f).let { it * it } }
+                        .graphicsLayer { alpha = ((ltState.value - .7f) / .3f).coerceIn(0f, 1f).let { it * it } }
                         .then(if (nav.lyrics) Modifier else Modifier.pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial).changes.forEach { it.consume() } } })) {
                         Lyrics(t, showTr, active = nav.lyrics) { nav.lyrics = false }
                     }
-                    // 封面：始终按大尺寸解码，只做位移和缩放
+                    // 封面：始终按大尺寸解码，切换封面/歌词全程仅在 graphicsLayer 做位移与缩放，0 重组
                     Box(Modifier.graphicsLayer {
-                        transformOrigin = TransformOrigin(0f, 0f); translationX = cl; translationY = ct; scaleX = cs / coverNow; scaleY = cs / coverNow
+                        val lt = ltState.value
+                        val cs = lerp(coverNow, 48 * dp, lt)
+                        transformOrigin = TransformOrigin(0f, 0f)
+                        translationX = lerp((w - coverNow) / 2, 18 * dp, lt)
+                        translationY = lerp(nowTop, 8 * dp, lt)
+                        scaleX = cs / coverNow; scaleY = cs / coverNow
                     }.pointerInput(nav.lyrics) {
                         // 封面视图下往下拖封面 = 点 ⌄ 收起；歌词模式不拦，留给歌词滚动
                         if (!nav.lyrics) detectVerticalDragGestures(onDragEnd = {
@@ -160,7 +165,8 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                     }
                     // 标题：两套各在自己的位置淡入淡出
                     // 信息块：和封面左边对齐，宽度等于封面；爱心在歌名同一行最右，对齐封面右边缘
-                    if (lt < .45f) Column(Modifier.width(coverDp).graphicsLayer {
+                    if (showBigTitle) Column(Modifier.width(coverDp).graphicsLayer {
+                        val lt = ltState.value
                         translationX = (w - coverNow) / 2; translationY = nowTop + coverNow + 18 * dp - 12 * dp * lt; alpha = (1 - lt / .45f).coerceIn(0f, 1f)
                     }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -174,7 +180,11 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                           else (ainfo?.let { if (it.kbps == 0 && st.kbps > 0) it.copy(kbps = st.kbps) else it }?.line() ?: "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}") + "${if (st.cached) " · 缓存" else ""} ▾",
                             11, p.s, mono = true, ls = .06f, modifier = Modifier.padding(top = 6.dp).press { qualitySheet(nav) })
                     }
-                    if (lt > .75f) Column(Modifier.width(with(d) { (w - cl - cs - 30 * dp).coerceAtLeast(40 * dp).toDp() }).graphicsLayer {
+                    if (showSmallTitle) Column(Modifier.width(with(d) { (w - 96 * dp).coerceAtLeast(40 * dp).toDp() }).graphicsLayer {
+                        val lt = ltState.value
+                        val cs = lerp(coverNow, 48 * dp, lt)
+                        val cl = lerp((w - coverNow) / 2, 18 * dp, lt)
+                        val ct = lerp(nowTop, 8 * dp, lt)
                         translationX = cl + cs + 12 * dp; translationY = ct + (cs - 38 * dp) / 2; alpha = ((lt - .75f) / .25f).coerceIn(0f, 1f)
                     }) { T(t.title, 16, w = 800, lh = 1.25f, lines = 2, modifier = Modifier.press(onLong = { copy(t.title, "歌名") }) {}); T(t.artist, 13, p.s, lh = 1.3f, modifier = Modifier.press(onLong = { copy(t.artist, "歌手") }) { openArtists(nav, t) }) }
                     // 控制组（两页位置完全一致）
@@ -190,9 +200,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
 
 @Composable internal fun Controls(t: Track, st: PlayState, row: (@Composable RowScope.() -> Unit)? = null) {
     val nav = LocalNav.current
-    val liked by Store.likedIds.collectAsState()
     var scrub by remember { mutableStateOf<Float?>(null) }
-    val on = t.id in liked
     Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).navigationBarsPadding()) {
         ScrubBar(t.durationMs) { scrub = it }
         Spacer(Modifier.height(2.dp)); TimeRow(t.durationMs, scrub)
@@ -292,7 +300,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             if (sideKeys.isNotEmpty()) {
                 var near by remember { mutableStateOf(false) }
                 val show = near || !UiPref.autoHideSide
-                val a by animateFloatAsState(if (show) 1f else 0f, tween(if (show) 160 else 420, delayMillis = if (show) 0 else 900), label = "side")
+                val a = animateFloatAsState(if (show) 1f else 0f, tween(if (show) 160 else 420, delayMillis = if (show) 0 else 900), label = "side")
                 Box(Modifier.width(76.dp).pointerInput(Unit) {
                     awaitPointerEventScope {
                         while (true) {
@@ -300,7 +308,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                             when (e.type) { androidx.compose.ui.input.pointer.PointerEventType.Enter, androidx.compose.ui.input.pointer.PointerEventType.Move -> near = true; androidx.compose.ui.input.pointer.PointerEventType.Exit -> near = false }
                         }
                     }
-                }.padding(start = 8.dp, top = 80.dp, bottom = 4.dp, end = 24.dp).graphicsLayer { alpha = a }) {
+                }.padding(start = 8.dp, top = 80.dp, bottom = 4.dp, end = 24.dp).graphicsLayer { alpha = a.value }) {
                     Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) { SlotCol(true, "side", bx, 4.dp) }
                 }
             }

@@ -8,6 +8,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -16,7 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -298,12 +298,12 @@ object ListStagger {
     }
 }
 
-/** 外置动效插件驱动的列表逐项瀑布入场（未安装动效插件时直接返回原 Modifier，零额外开销） */
-fun Modifier.cascadeEnter(): Modifier = composed {
-    if (AnimStyle.off || AnimStyle.pluginProfile == null) return@composed this
+/** 外置动效插件驱动的列表逐项瀑布入场（未安装动效插件时直接返回原 Modifier，零 subcomposition 与零分配开销） */
+@Composable fun Modifier.cascadeEnter(): Modifier {
+    if (AnimStyle.off || AnimStyle.pluginProfile == null) return this
     val slideDp = MotionEffects.listSlideDp; val stagger = MotionEffects.listStaggerMs
-    if (stagger <= 0 && slideDp < 1f) return@composed this
+    if (stagger <= 0 && slideDp < 1f) return this
     val prog = remember { Animatable(0f) }
     LaunchedEffect(Unit) { val d = ListStagger.nextDelayMs(); if (d > 0L) delay(d); prog.animateTo(1f, Motion.page()) }
-    this.graphicsLayer { val p = prog.value; alpha = p.coerceIn(0f, 1f); translationX = (1f - p) * slideDp.dp.toPx() }
+    return this.graphicsLayer { val p = prog.value; alpha = p.coerceIn(0f, 1f); translationX = (1f - p) * slideDp.dp.toPx() }
 }

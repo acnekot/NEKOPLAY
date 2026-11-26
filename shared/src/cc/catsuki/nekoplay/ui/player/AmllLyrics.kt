@@ -1,10 +1,10 @@
 package cc.catsuki.nekoplay
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.exponentialDecay
@@ -42,22 +42,24 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
- * AMLL（Apple Music-like Lyrics）风格 Jetpack Compose 歌词渲染器：
- * - 阶梯交错弹簧滚动（50ms 逐行级联弹簧，手动拖动/切窗时自动瞬移不抽动）
- * - 渐进景深模糊（按与当前句距离 0 / 0.9 / 1.8 / 2.8 / 4.0 dp 阶梯模糊，手动浏览时全清）
+ * 景深逐字歌词渲染器：
+ * - 阶梯交错弹簧滚动（逐行级联弹簧，离屏行直接对齐不派生多余协程）
+ * - 渐进景深模糊（按与当前句距离阶梯模糊，手动浏览时全清）
  * - 上下边缘柔和渐变羽化遮罩（BlendMode.DstIn）
- * - 逐字柔和渐变扫光 + 微微上浮动画（AMLL float 0.05em + glow）
- * - 呼吸感三点间奏动画
+ * - 逐字柔和渐变扫光 + 微微上浮动画（单字隔离作用域，每帧仅更新当前正在唱的那 1 个字）
+ * - 呼吸感三点间奏动画（非激活行 0 后台动画）
  */
 @Composable internal fun AmllLyricsFlow(l: List<LyricLine>, cur: Int, showTr: Boolean, offset: Long, onBlank: (() -> Unit)? = null) {
-    val p = c
     val copy = rememberCopy()
     val tops = remember(l) { FloatArray(l.size) { -1f } }
     var measuredCount by remember(l) { mutableIntStateOf(0) }
@@ -65,8 +67,9 @@ import kotlinx.coroutines.launch
     val offs = remember(l) { List(l.size) { Animatable(0f) } }
     var settled by remember(l) { mutableStateOf(false) }
     var lastCur by remember(l) { mutableIntStateOf(-1) }
-    var ready by remember(l) { mutableStateOf(false) }
-    val gap = with(LocalDensity.current) { LyricPref.gap.dp.toPx() }
+    val readyState = remember(l) { mutableStateOf(false) }
+    val gapDp = LyricPref.gap.dp
+    val gap = with(LocalDensity.current) { gapDp.toPx() }
     var vh by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current.density
     val centered = LyricPref.align == 1
@@ -84,10 +87,10 @@ import kotlinx.coroutines.launch
         val first = (cur - 2).coerceAtLeast(0)
         val jump = !settled || cur == lastCur
         settled = true; lastCur = cur
-        if (jump) { l.indices.forEach { offs[it].snapTo(target) }; ready = true; return@LaunchedEffect }
+        if (jump) { l.indices.forEach { offs[it].snapTo(target) }; readyState.value = true; return@LaunchedEffect }
         val stag = LyricPref.staggerMs.coerceAtLeast(10).toLong()
-        l.indices.forEach { i ->
-            if (i < first || i > cur + 10) launch { offs[i].snapTo(target) }
+        for (i in l.indices) {
+            if (i < first || i > cur + 10) { if (offs[i].value != target) offs[i].snapTo(target) }
             else launch {
                 delay(((i - first) * stag / Anim.f).toLong())
                 offs[i].animateTo(target, spring(0.82f, Anim.stiff(125f)))
@@ -115,6 +118,14 @@ import kotlinx.coroutines.launch
     val drag = rememberDraggableState { dy -> scope.launch { manual.snapTo(manual.value + dy) } }
     val fadeMask = remember {
         Brush.verticalGradient(0f to Color.Transparent, 0.09f to Color.Black, 0.82f to Color.Black, 1f to Color.Transparent)
+    }
+    val onSeekLine = remember(l, offset) {
+        { tMs: Long ->
+            Engine.seek((tMs - offset).coerceAtLeast(0))
+            backJob?.cancel(); browsing = false
+            scope.launch { manual.animateTo(0f, spring(0.88f, Anim.stiff(Spring.StiffnessMediumLow))) }
+            Unit
+        }
     }
 
     Box(Modifier.fillMaxSize().clipToBounds().onSizeChanged { vh = it.height.toFloat() }
@@ -145,156 +156,220 @@ import kotlinx.coroutines.launch
             onDragStopped = { v -> scope.launch { manual.animateDecay(v, exponentialDecay(.6f)) }; scheduleBack() })) {
         Column(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).padding(start = 24.dp, end = 28.dp, top = 16.dp)) {
             l.forEachIndexed { i, line ->
-                val dist = kotlin.math.abs(i - cur)
-                val active = i == cur && !browsing
-                val targetAlpha = when {
-                    browsing -> if (dist == 0) 1f else .76f
-                    dist == 0 -> 1f
-                    dist == 1 -> .56f
-                    dist == 2 -> .36f
-                    dist == 3 -> .24f
-                    else -> .16f
-                }
-                val targetScale = when {
-                    browsing -> 1f
-                    dist == 0 -> LyricPref.activeScale.coerceIn(1f, 1.12f)
-                    dist == 1 -> .96f
-                    dist == 2 -> .93f
-                    else -> .91f
-                }
-                // 仅对可见邻近行（dist 1..4）应用离散静态景深模糊，避免 60+ 离屏行逐帧重建高斯模糊着色器造成掉帧
-                val blurDp = when {
-                    !UiPref.lyricBlur || !Plat.impl.liveBlur || browsing || dist == 0 || dist > 4 -> 0.dp
-                    dist == 1 -> 0.9.dp
-                    dist == 2 -> 1.8.dp
-                    dist == 3 -> 2.6.dp
-                    else -> 3.4.dp
-                }
-                val alpha by animateFloatAsState(targetAlpha, spring(1f, Anim.stiff(Spring.StiffnessLow)), label = "aa")
-                val scale by animateFloatAsState(targetScale, spring(0.84f, Anim.stiff(Spring.StiffnessLow)), label = "as")
-
-                Box(Modifier.fillMaxWidth()
-                    .onPlaced {
-                        val y = it.positionInParent().y
+                val distBand = kotlin.math.abs(i - cur).coerceAtMost(5)
+                AmllLineItem(
+                    line = line,
+                    nextTime = l.getOrNull(i + 1)?.t ?: (line.t + 5000),
+                    distBand = distBand,
+                    browsing = browsing,
+                    centered = centered,
+                    showTr = showTr,
+                    offset = offset,
+                    gapDp = gapDp,
+                    off = offs[i],
+                    manual = manual,
+                    readyState = readyState,
+                    onPlacedY = { y ->
                         val first = tops[i] < 0f
                         tops[i] = y
                         if (first) {
                             measuredCount++
                             if (measuredCount >= l.size) readyMeasured = true
                         }
-                    }
-                    .graphicsLayer {
-                        translationY = offs[i].value + manual.value
-                        this.alpha = if (ready) alpha else 0f
-                    }
-                    .then(if (blurDp > 0.1.dp) Modifier.blur(blurDp) else Modifier)
-                    .padding(bottom = with(LocalDensity.current) { gap.toDp() }),
-                    contentAlignment = if (centered) Alignment.Center else Alignment.CenterStart) {
-                    Box(Modifier
-                        .graphicsLayer {
-                            scaleX = scale; scaleY = scale
-                            transformOrigin = TransformOrigin(if (centered) .5f else 0f, .5f)
-                        }
-                        .press(onLong = { if (line.text.isNotEmpty()) copy(if (showTr && line.tr != null) line.text + "\n" + line.tr else line.text, "歌词") }) {
-                            Engine.seek((line.t - offset).coerceAtLeast(0))
-                            backJob?.cancel(); browsing = false
-                            scope.launch { manual.animateTo(0f, spring(0.88f, Anim.stiff(Spring.StiffnessMediumLow))) }
-                        }) {
-                        if (line.text.isEmpty()) {
-                            AmllInterludeDots(active, line.t, l.getOrNull(i + 1)?.t ?: (line.t + 5000), offset)
-                        } else Column(horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
-                            if (UiPref.karaoke && active && line.words != null) {
-                                AmllWordLine(line, offset, centered)
-                            } else {
-                                val st = TextStyle(
-                                    fontSize = LyricPref.size.sp,
-                                    fontWeight = FontWeight(800),
-                                    fontFamily = Typo.family,
-                                    lineHeight = (LyricPref.size * 1.28f).sp,
-                                    color = p.k,
-                                    shadow = if (active) Shadow(p.k.copy(alpha = .28f), Offset.Zero, 14f) else null,
-                                )
-                                BasicText(line.text, style = st, maxLines = 6)
-                            }
-                            if (showTr && line.tr != null) {
-                                T(line.tr, (LyricPref.size * .56f).coerceIn(12f, 18f), p.s, 600, lines = 4, lh = 1.45f, modifier = Modifier.padding(top = 6.dp))
-                            }
-                        }
-                    }
-                }
+                    },
+                    onCopy = copy,
+                    onSeek = onSeekLine,
+                )
             }
             Spacer(Modifier.height(420.dp))
         }
     }
 }
 
-/** 逐字柔和扫光 + 轻微上浮（单层 TextStyle Brush 渐变，避免嵌套 Offscreen/DstIn 在安卓上裁切上半部分） */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable private fun AmllWordLine(line: LyricLine, offset: Long, centered: Boolean) {
+/** 独立可跳过行作用域：按距离分桶跳过远端行重组，透明度和缩放仅在 graphicsLayer 绘制阶段读取 */
+@Composable private fun AmllLineItem(
+    line: LyricLine,
+    nextTime: Long,
+    distBand: Int,
+    browsing: Boolean,
+    centered: Boolean,
+    showTr: Boolean,
+    offset: Long,
+    gapDp: Dp,
+    off: Animatable<Float, AnimationVector1D>,
+    manual: Animatable<Float, AnimationVector1D>,
+    readyState: State<Boolean>,
+    onPlacedY: (Float) -> Unit,
+    onCopy: (String, String) -> Unit,
+    onSeek: (Long) -> Unit,
+) {
     val p = c
-    val words = line.words ?: return
-    val playing = Engine.state.collectAsState().value.playing && LocalLyricsActive.current
-    var now by remember(line.t) { mutableLongStateOf(Engine.position.value + offset) }
-    LaunchedEffect(line.t, playing, offset) {
-        now = Engine.position.value + offset
-        if (!playing) return@LaunchedEffect
-        var base = now
-        var start = withFrameMillis { it }
-        while (true) {
-            withFrameMillis { f ->
-                val engineNow = Engine.position.value + offset
-                val est = base + (f - start)
-                if (kotlin.math.abs(engineNow - est) > 120L) { base = engineNow; start = f; now = engineNow }
-                else now = est
-            }
-            if (UiPref.lowMem) delay(32)
-        }
+    val active = distBand == 0 && !browsing
+    val targetAlpha = when {
+        browsing -> if (distBand == 0) 1f else .76f
+        distBand == 0 -> 1f
+        distBand == 1 -> .56f
+        distBand == 2 -> .36f
+        distBand == 3 -> .24f
+        else -> .16f
     }
-    val baseSt = TextStyle(fontSize = LyricPref.size.sp, fontWeight = FontWeight(800), fontFamily = Typo.family, lineHeight = (LyricPref.size * 1.38f).sp)
-    val liftPx = with(LocalDensity.current) { (LyricPref.size * 0.065f).dp.toPx() }
-    val dim = p.k.copy(alpha = 0.30f)
-    FlowRow(horizontalArrangement = if (centered) Arrangement.Center else Arrangement.Start) {
-        words.forEach { w ->
-            val dur = w.d.coerceAtLeast(120L).toFloat()
-            val prog = ((now - w.t).toFloat() / dur).coerceIn(0f, 1f)
-            val lift = -liftPx * FastOutSlowInEasing.transform(prog)
-            val glow = if (prog > 0.08f) Shadow(p.k.copy(alpha = 0.24f * prog), Offset.Zero, 10f * prog) else null
-            val st = when {
-                prog <= 0.001f -> baseSt.copy(color = dim)
-                prog >= 0.999f -> baseSt.copy(color = p.k, shadow = glow)
-                else -> {
-                    val s1 = (prog * 1.35f - 0.35f).coerceIn(0f, 1f)
-                    val s2 = (prog * 1.35f).coerceIn(s1, 1f)
-                    baseSt.copy(
-                        brush = Brush.horizontalGradient(0f to p.k, s1 to p.k, s2 to dim, 1f to dim),
-                        shadow = glow,
-                    )
-                }
+    val targetScale = when {
+        browsing -> 1f
+        distBand == 0 -> LyricPref.activeScale.coerceIn(1f, 1.12f)
+        distBand == 1 -> .96f
+        distBand == 2 -> .93f
+        else -> .91f
+    }
+    val blurDp = when {
+        !UiPref.lyricBlur || !Plat.impl.liveBlur || browsing || distBand == 0 || distBand > 4 -> 0.dp
+        distBand == 1 -> 0.9.dp
+        distBand == 2 -> 1.8.dp
+        distBand == 3 -> 2.6.dp
+        else -> 3.4.dp
+    }
+    val alphaAnim = animateFloatAsState(targetAlpha, spring(1f, Anim.stiff(Spring.StiffnessLow)), label = "aa")
+    val scaleAnim = animateFloatAsState(targetScale, spring(0.84f, Anim.stiff(Spring.StiffnessLow)), label = "as")
+
+    Box(Modifier.fillMaxWidth()
+        .onPlaced { onPlacedY(it.positionInParent().y) }
+        .graphicsLayer {
+            translationY = off.value + manual.value
+            alpha = if (readyState.value) alphaAnim.value else 0f
+        }
+        .then(if (blurDp > 0.1.dp) Modifier.blur(blurDp) else Modifier)
+        .padding(bottom = gapDp),
+        contentAlignment = if (centered) Alignment.Center else Alignment.CenterStart) {
+        Box(Modifier
+            .graphicsLayer {
+                val sc = scaleAnim.value
+                scaleX = sc; scaleY = sc
+                transformOrigin = TransformOrigin(if (centered) .5f else 0f, .5f)
             }
-            Box(Modifier.graphicsLayer { translationY = lift }) {
-                BasicText(w.s, style = st, maxLines = 1)
+            .press(onLong = { if (line.text.isNotEmpty()) onCopy(if (showTr && line.tr != null) line.text + "\n" + line.tr else line.text, "歌词") }) { onSeek(line.t) }) {
+            if (line.text.isEmpty()) {
+                AmllInterludeDots(active, line.t, nextTime, offset)
+            } else Column(horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
+                if (UiPref.karaoke && active && line.words != null) {
+                    AmllWordLine(line, offset, centered)
+                } else {
+                    val st = remember(LyricPref.size, Typo.family, p.k, active) {
+                        TextStyle(
+                            fontSize = LyricPref.size.sp,
+                            fontWeight = FontWeight(800),
+                            fontFamily = Typo.family,
+                            lineHeight = (LyricPref.size * 1.28f).sp,
+                            color = p.k,
+                            shadow = if (active) Shadow(p.k.copy(alpha = .28f), Offset.Zero, 14f) else null,
+                        )
+                    }
+                    BasicText(line.text, style = st, maxLines = 6)
+                }
+                if (showTr && line.tr != null) {
+                    T(line.tr, (LyricPref.size * .56f).coerceIn(12f, 18f), p.s, 600, lines = 4, lh = 1.45f, modifier = Modifier.padding(top = 6.dp))
+                }
             }
         }
     }
 }
 
-/** AMLL 呼吸三点间奏 */
+/** 逐字柔和扫光 + 轻微上浮：逐字隔离作用域，每帧仅更新正在唱的那 1 个字，整行 0 重复布局 */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable private fun AmllWordLine(line: LyricLine, offset: Long, centered: Boolean) {
+    val p = c
+    val words = line.words ?: return
+    val playing by remember { Engine.state.map { it.playing }.distinctUntilChanged() }.collectAsState(Engine.state.value.playing)
+    val active = playing && LocalLyricsActive.current
+    val nowState = remember(line.t) { mutableLongStateOf(Engine.position.value + offset) }
+    LaunchedEffect(line.t, active, offset) {
+        nowState.longValue = Engine.position.value + offset
+        if (!active) return@LaunchedEffect
+        var base = nowState.longValue
+        var start = withFrameMillis { it }
+        while (true) {
+            withFrameMillis { f ->
+                val engineNow = Engine.position.value + offset
+                val est = base + (f - start)
+                if (kotlin.math.abs(engineNow - est) > 120L) { base = engineNow; start = f; nowState.longValue = engineNow }
+                else nowState.longValue = est
+            }
+            if (UiPref.lowMem) delay(32)
+        }
+    }
+    val liftPx = with(LocalDensity.current) { (LyricPref.size * 0.065f).dp.toPx() }
+    val dim = remember(p.k) { p.k.copy(alpha = 0.30f) }
+    val baseSt = remember(LyricPref.size, Typo.family) {
+        TextStyle(fontSize = LyricPref.size.sp, fontWeight = FontWeight(800), fontFamily = Typo.family, lineHeight = (LyricPref.size * 1.38f).sp)
+    }
+    val dimSt = remember(baseSt, dim) { baseSt.copy(color = dim) }
+    val litSt = remember(baseSt, p.k) { baseSt.copy(color = p.k, shadow = Shadow(p.k.copy(alpha = 0.24f), Offset.Zero, 10f)) }
+    FlowRow(horizontalArrangement = if (centered) Arrangement.Center else Arrangement.Start) {
+        words.forEach { w ->
+            AmllWordToken(w, nowState, baseSt, dimSt, litSt, p.k, dim, liftPx)
+        }
+    }
+}
+
+@Composable private fun AmllWordToken(
+    w: Word,
+    nowState: LongState,
+    baseSt: TextStyle,
+    dimSt: TextStyle,
+    litSt: TextStyle,
+    litColor: Color,
+    dimColor: Color,
+    liftPx: Float,
+) {
+    val dur = w.d.coerceAtLeast(120L)
+    val phase by remember(w) {
+        derivedStateOf {
+            val t = nowState.longValue
+            when {
+                t <= w.t -> 0
+                t >= w.t + dur -> 2
+                else -> 1
+            }
+        }
+    }
+    when (phase) {
+        0 -> BasicText(w.s, style = dimSt, maxLines = 1)
+        2 -> Box(Modifier.graphicsLayer { translationY = -liftPx }) { BasicText(w.s, style = litSt, maxLines = 1) }
+        else -> {
+            val prog = ((nowState.longValue - w.t).toFloat() / dur.toFloat()).coerceIn(0f, 1f)
+            val lift = -liftPx * FastOutSlowInEasing.transform(prog)
+            val glow = if (prog > 0.08f) Shadow(litColor.copy(alpha = 0.24f * prog), Offset.Zero, 10f * prog) else null
+            val s1 = (prog * 1.35f - 0.35f).coerceIn(0f, 1f)
+            val s2 = (prog * 1.35f).coerceIn(s1, 1f)
+            val st = baseSt.copy(brush = Brush.horizontalGradient(0f to litColor, s1 to litColor, s2 to dimColor, 1f to dimColor), shadow = glow)
+            Box(Modifier.graphicsLayer { translationY = lift }) { BasicText(w.s, style = st, maxLines = 1) }
+        }
+    }
+}
+
+/** 呼吸三点间奏：非激活行不创建无限动画与进度监听，彻底消除离屏空转 */
 @Composable private fun AmllInterludeDots(active: Boolean, start: Long, next: Long, offset: Long) {
     val p = c
-    val prog = if (active) {
-        val raw by Engine.position.collectAsState()
-        ((raw + offset - start).toFloat() / (next - start).coerceAtLeast(300)).coerceIn(0f, 1f)
-    } else 0f
-    val pulse by rememberInfiniteTransition(label = "amllDot").animateFloat(
+    if (!active) {
+        Row(Modifier.height(28.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            repeat(3) { Box(Modifier.size(10.dp).graphicsLayer { scaleX = 0.78f; scaleY = 0.78f; alpha = 0.24f }.background(p.k, CircleShape)) }
+        }
+        return
+    }
+    val span = (next - start).coerceAtLeast(300L).toFloat()
+    val prog = remember(start, next, offset) { mutableFloatStateOf(((Engine.position.value + offset - start).toFloat() / span).coerceIn(0f, 1f)) }
+    LaunchedEffect(start, next, offset) {
+        Engine.position.collect { pos -> prog.floatValue = ((pos + offset - start).toFloat() / span).coerceIn(0f, 1f) }
+    }
+    val pulse = rememberInfiniteTransition(label = "amllDot").animateFloat(
         initialValue = 0.88f, targetValue = 1.12f,
         animationSpec = infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "p",
     )
     Row(Modifier.height(28.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         repeat(3) { k ->
-            val seg = ((prog * 3f) - k).coerceIn(0f, 1f)
-            val s = if (active) (0.82f + 0.28f * seg) * (if (seg in 0.01f..0.99f) pulse else 1f) else 0.78f
-            val a = if (active) 0.28f + 0.72f * seg else 0.24f
-            Box(Modifier.size(10.dp).graphicsLayer { scaleX = s; scaleY = s; alpha = a }.background(p.k, CircleShape))
+            Box(Modifier.size(10.dp).graphicsLayer {
+                val seg = ((prog.floatValue * 3f) - k).coerceIn(0f, 1f)
+                val s = (0.82f + 0.28f * seg) * (if (seg in 0.01f..0.99f) pulse.value else 1f)
+                scaleX = s; scaleY = s; alpha = 0.28f + 0.72f * seg
+            }.background(p.k, CircleShape))
         }
     }
 }

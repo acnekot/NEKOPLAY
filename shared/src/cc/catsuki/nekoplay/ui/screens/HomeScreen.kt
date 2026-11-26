@@ -134,7 +134,7 @@ import java.util.Calendar
                         if (mix.isEmpty()) T("LOADING", 12, c.s, mono = true, ls = .06f, modifier = Modifier.padding(vertical = 22.dp))
                     }
                 }
-                itemsIndexed(mix, key = { _, t -> "d" + t.id }) { i, t -> TrackRow(t, st.current?.id == t.id, null, onLong = { trackActions(nav, t) }) { Engine.playList(mix, i) } }
+                itemsIndexed(mix, key = { _, t -> "d" + t.id }, contentType = { _, _ -> "track" }) { i, t -> TrackRow(t, st.current?.id == t.id, null, onLong = { trackActions(nav, t) }) { Engine.playList(mix, i) } }
                 if (daily.size > mix.size) item { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { LinkBtn("查看全部 ${daily.size} 首") { nav.push(Page.Detail("daily", "daily", "每日推荐", daily.firstOrNull()?.cover)) } } }
                 }
                 "fm" -> {
@@ -191,7 +191,7 @@ import java.util.Calendar
                     item { Column(Modifier.padding(top = 24.dp, bottom = 12.dp)) { TagRow("FOR YOU", 12.dp) { LinkBtn("全部") { nav.push(Page.Playlists("rec", "", "推荐歌单")) } } } }
                     item {
                         LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                            items(recPl.take(12), key = { "rp" + it.id }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, "${two(p.count)} 首") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+                            items(recPl.take(12), key = { "rp" + it.id }, contentType = { "card" }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, "${two(p.count)} 首") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
                         }
                     }
                 }
@@ -213,7 +213,7 @@ import java.util.Calendar
                         }
                         item { CardItem({ RecentCover(rec.firstOrNull()?.cover, 132.dp) }, "最近播放", listMeta(rec)) { nav.push(Page.Detail("recent", "recent", "最近播放")) } }
                         val others = homePls.filter { !it.liked }.take(24)
-                        items(others, key = { it.id }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, "${two(p.count)} 首") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+                        items(others, key = { it.id }, contentType = { "card" }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, "${two(p.count)} 首") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
                     }
                 }
                 }

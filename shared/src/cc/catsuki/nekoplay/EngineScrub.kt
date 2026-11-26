@@ -3,8 +3,10 @@ package cc.catsuki.nekoplay
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -14,7 +16,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -175,19 +176,20 @@ object ScrubController {
  * - 未安装或关闭 `@feature scrub` 功能插件时，完全退化为普通点击按钮 `Modifier.press(...)`，主软件不包含长按加速行为；
  * - 启用 `@feature scrub` 插件后，短按切歌、长按按插件配置触发实时变速快进/快退。
  */
-fun Modifier.holdScrub(
+@Composable fun Modifier.holdScrub(
     dir: Int,
     enabled: Boolean = true,
     haptic: Boolean = false,
     scale: Float = 1f,
     onClick: () -> Unit,
-): Modifier = composed {
-    val rev = Plugins.rev
-    val pluginOn = remember(rev) { Plugins.hasFeature("scrub") }
-    LaunchedEffect(rev, pluginOn) {
-        if (pluginOn) ScrubController.syncFromPlugin() else ScrubController.stop()
+): Modifier {
+    val pluginOn = Plugins.hasScrubPlugin
+    if (!pluginOn) {
+        if (ScrubController.dir != 0) SideEffect { ScrubController.stop() }
+        return this.press(scale, haptic, onClick = onClick)
     }
-    if (!pluginOn) return@composed this.press(scale, haptic, onClick = onClick)
+    val rev = Plugins.rev
+    LaunchedEffect(rev) { ScrubController.syncFromPlugin() }
 
     val h = LocalHapticFeedback.current
     val cs = rememberCoroutineScope()
@@ -196,7 +198,7 @@ fun Modifier.holdScrub(
     DisposableEffect(dir) {
         onDispose { if (ScrubController.dir == dir) ScrubController.stop() }
     }
-    pointerInput(dir) {
+    return pointerInput(dir) {
         awaitEachGesture {
             awaitFirstDown(requireUnconsumed = false)
             var scrubbing = false

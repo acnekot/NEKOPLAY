@@ -71,7 +71,7 @@ import androidx.compose.runtime.withFrameMillis
                 Box(Modifier.fillMaxWidth().height(1.dp).background(if (Look.flat) Color.Transparent else p.l2))
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(Modifier.fillMaxSize(), ls, contentPadding = PaddingValues(start = 18.dp, end = 6.dp, bottom = 12.dp)) {
-                    itemsIndexed(st.queue, key = { i, t -> "$i${t.id}" }) { i, t ->
+                    itemsIndexed(st.queue, key = { i, t -> "$i${t.id}" }, contentType = { _, _ -> "queue" }) { i, t ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.weight(1f)) { TrackRow(t, i == st.index, st.format.uppercase().takeIf { i == st.index && it.isNotEmpty() }) { Engine.playAt(i) } }
                             Box(Modifier.size(44.dp).press { Engine.removeAt(i) }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp, p.s) }
@@ -160,7 +160,7 @@ import androidx.compose.runtime.withFrameMillis
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(if (Look.flat) Color.Transparent else p.l2))
         LazyColumn(Modifier.fillMaxWidth().weight(1f), ls, contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 16.dp)) {
-            itemsIndexed(list, key = { _, x -> x.id }) { _, x ->
+            itemsIndexed(list, key = { _, x -> x.id }, contentType = { _, _ -> "comment" }) { _, x ->
                 val replyOf: (Comment) -> Unit = { r -> if (me == null) nav.toast = "登录后才能回复" else { replyTo = r; fr.requestFocus() } }
                 val userOf: (Comment) -> Unit = { r -> fm.clearFocus(); nav.comments = null; nav.player = false; nav.push(Page.User(r.uid, r.user)) }
                 CommentRow(x, t.id, onReply = { replyOf(x) }, onUserOf = userOf, onReplyOf = replyOf) { userOf(x) }
@@ -229,7 +229,8 @@ import androidx.compose.runtime.withFrameMillis
             }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                T(timeAgo(x.time), 11, p.s, mono = true, modifier = Modifier.weight(1f))
+                val ago = remember(x.id, x.time) { timeAgo(x.time) }
+                T(ago, 11, p.s, mono = true, modifier = Modifier.weight(1f))
                 T("回复", 12, p.s, 600, modifier = Modifier.press(onClick = onReply).padding(vertical = 4.dp, horizontal = 2.dp))
             }
             if (!nested && x.replies > 0) FloorReplies(x, songId, onUserOf, onReplyOf)

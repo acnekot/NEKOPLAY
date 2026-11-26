@@ -181,9 +181,9 @@ import java.util.Calendar
             }
         }
         if (made.isNotEmpty()) item { Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("CREATED", 12.dp) { T("${two(made.size)} 个", 13, c.s, mono = true) } } }
-        items(made, key = { it.id }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name) }, p.name, "${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+        items(made, key = { it.id }, contentType = { "pl" }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name) }, p.name, "${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
         if (faved.isNotEmpty()) item { Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("COLLECTED", 12.dp) { T("${two(faved.size)} 个", 13, c.s, mono = true) } } }
-        items(faved, key = { it.id }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name) }, p.name, "歌单 · ${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+        items(faved, key = { it.id }, contentType = { "pl" }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name) }, p.name, "歌单 · ${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
         // 没有任何插件：本体只剩本地功能
         if (main == null) item {
             Column(Modifier.padding(vertical = 24.dp)) {
@@ -200,7 +200,6 @@ import java.util.Calendar
 @Composable fun DetailPage(p: Page.Detail) {
     val nav = LocalNav.current
     val st by Engine.state.collectAsState()
-    val liked by Store.likedIds.collectAsState()
     var err by remember { mutableStateOf<String?>(null) }
     val ver by Store.plVersion.collectAsState()
     val pls by Store.playlists.collectAsState()
@@ -268,11 +267,12 @@ import java.util.Calendar
                 else if (list.isEmpty()) T("NO TRACKS", 13, c.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 28.dp))
             }
         }
-        itemsIndexed(list, key = { i, t -> "$i-${t.id}" }) { i, t ->
+        itemsIndexed(list, key = { i, t -> "$i-${t.id}" }, contentType = { _, _ -> "track" }) { i, t ->
             TrackRow(t, st.current?.id == t.id, onLong = { trackActions(nav, t, if (mine) p.id else null) }) { Engine.playList(list, i) }
         }
     }
-    LocateBtn(dls, list.indexOfFirst { it.id == st.current?.id }.let { if (it < 0) -1 else it + 1 })
+    val targetIdx = remember(list, st.current?.id) { list.indexOfFirst { it.id == st.current?.id }.let { if (it < 0) -1 else it + 1 } }
+    LocateBtn(dls, targetIdx)
     }
 }
 

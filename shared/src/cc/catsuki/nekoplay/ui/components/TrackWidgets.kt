@@ -1,9 +1,8 @@
 package cc.catsuki.nekoplay
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,8 +11,8 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.HoverInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.*
@@ -26,6 +25,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -33,23 +33,43 @@ import kotlinx.coroutines.launch
 @Composable fun TrackRow(t: Track, current: Boolean, label: String? = null, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
     val p = c
     val fg = if (current) p.p else p.k
-    val hSrc = remember { MutableInteractionSource() }
-    val hovered by hSrc.collectIsHoveredAsState()
-    val curAnim = animateFloatAsState(if (current) 1f else 0f, Motion.standard(), label = "trc")
-    val hovAnim = animateFloatAsState(if (hovered && !current && MotionEffects.hoverTint) 1f else 0f, Motion.quick(), label = "trh")
-    val hovShift = if (MotionEffects.hoverShiftDp > 0.1f && !AnimStyle.off) animateFloatAsState(if (hovered) MotionEffects.hoverShiftDp * 0.55f else 0f, Motion.standard(), label = "trs") else null
-    Row(Modifier.fillMaxWidth().height(64.dp).cascadeEnter().then(if (hovShift != null) Modifier.graphicsLayer { translationX = hovShift.value.dp.toPx() } else Modifier).hoverable(hSrc).press(onLong = onLong, onClick = onClick).drawBehind {
-        val ext = 10.dp.toPx()
-        val ca = curAnim.value
-        val ha = hovAnim.value
-        if (ha > 0.01f) drawRect(p.k.copy(alpha = .045f * ha), Offset(-ext, 0f), Size(size.width + ext * 2, size.height))
-        if (ca > 0.01f) {
-            drawRect(p.hl.copy(alpha = p.hl.alpha * ca), Offset(-ext, 0f), Size(size.width + ext * 2, size.height))
-            val barH = size.height * ca
-            drawRect(p.p.copy(alpha = ca), Offset(-ext, (size.height - barH) / 2f), Size(3.dp.toPx(), barH))
+    val curAnim = remember { Animatable(if (current) 1f else 0f) }
+    LaunchedEffect(current) {
+        val target = if (current) 1f else 0f
+        if (curAnim.value != target) curAnim.animateTo(target, Motion.standard())
+    }
+    val desktopHover = Plat.isDesktop && !AnimStyle.off && (MotionEffects.hoverTint || MotionEffects.hoverShiftDp > 0.1f)
+    val src = remember { MutableInteractionSource() }
+    val hovAnim = if (desktopHover) remember(src) { Animatable(0f) } else null
+    if (desktopHover && hovAnim != null) {
+        LaunchedEffect(src) {
+            var animJob: kotlinx.coroutines.Job? = null
+            src.interactions.collect { ev ->
+                when (ev) {
+                    is HoverInteraction.Enter -> { animJob?.cancel(); animJob = launch { hovAnim.animateTo(1f, Motion.quick()) } }
+                    is HoverInteraction.Exit -> { animJob?.cancel(); animJob = launch { hovAnim.animateTo(0f, Motion.standard()) } }
+                }
+            }
         }
-        if (!Look.flat) drawRect(p.l1, Offset(if (current) -ext else 0f, size.height - 1.dp.toPx()), Size(size.width + if (current) ext * 2 else 0f, 1.dp.toPx()))
-    }, verticalAlignment = Alignment.CenterVertically) {
+    }
+    val shiftDp = if (desktopHover && MotionEffects.hoverShiftDp > 0.1f) MotionEffects.hoverShiftDp * 0.55f else 0f
+    val showTint = desktopHover && MotionEffects.hoverTint
+    Row(Modifier.fillMaxWidth().height(64.dp).cascadeEnter()
+        .then(if (hovAnim != null && shiftDp > 0f) Modifier.graphicsLayer { val h = hovAnim.value; if (h > 0.001f) translationX = (h * shiftDp).dp.toPx() } else Modifier)
+        .then(if (desktopHover) Modifier.hoverable(src) else Modifier)
+        .press(onLong = onLong, interactionSource = src, onClick = onClick)
+        .drawBehind {
+            val ext = 10.dp.toPx()
+            val ca = curAnim.value
+            val ha = if (showTint && !current && hovAnim != null) hovAnim.value else 0f
+            if (ha > 0.01f) drawRect(p.k.copy(alpha = .045f * ha), Offset(-ext, 0f), Size(size.width + ext * 2, size.height))
+            if (ca > 0.01f) {
+                drawRect(p.hl.copy(alpha = p.hl.alpha * ca), Offset(-ext, 0f), Size(size.width + ext * 2, size.height))
+                val barH = size.height * ca
+                drawRect(p.p.copy(alpha = ca), Offset(-ext, (size.height - barH) / 2f), Size(3.dp.toPx(), barH))
+            }
+            if (!Look.flat) drawRect(p.l1, Offset(if (current) -ext else 0f, size.height - 1.dp.toPx()), Size(size.width + if (current) ext * 2 else 0f, 1.dp.toPx()))
+        }, verticalAlignment = Alignment.CenterVertically) {
         Cover(t.cover, 44.dp, t.title)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -71,27 +91,32 @@ import kotlinx.coroutines.launch
 }
 
 @Composable private fun TrackDownloadLabel(id: String, label: String?) {
-    val lab = if (label != null) label else {
-        val act by Downloads.active.collectAsState()
-        val dls by Downloads.items.collectAsState()
-        act[id]?.let { if (it < 0) "等待下载" else "%.0f%%".format(it * 100) } ?: if (dls.any { it.track.id == id }) "已下载" else null
-    }
+    val lab = label ?: remember(id) { Downloads.labelFlow(id) }.collectAsState(Downloads.labelNow(id)).value
     if (lab != null) T(lab, 11, c.s, mono = true, ls = .06f)
 }
 
-/** 进度条：热区 16，线 4（拖动时 6），拖动时出现方形滑块 */
+/** 进度条：热区 16，线 4（拖动时 6），拖动时出现方形滑块；全程纯绘制层驱动，播放中 0 重组 */
 @Composable fun ScrubBar(durMs: Long, hit: Dp = 16.dp, interactive: Boolean = true, onScrub: (Float?) -> Unit = {}) {
-    val pos by Engine.position.collectAsState()
-    val buf by Engine.buffered.collectAsState()
-    val dur = durMs.coerceAtLeast(1)
-    var drag by remember(dur) { mutableStateOf<Float?>(null) }
+    val dur = durMs.coerceAtLeast(1L)
+    val scope = rememberCoroutineScope()
+    val dragState = remember(dur) { mutableStateOf<Float?>(null) }
+    val fill = remember(dur) { Animatable((Engine.position.value.toFloat() / dur).coerceIn(0f, 1f)) }
+    val bufFrac = remember(dur) { mutableFloatStateOf((Engine.buffered.value.toFloat() / dur).coerceIn(0f, 1f)) }
+    val dragAnim = remember { Animatable(0f) }
     val curScrub by rememberUpdatedState(onScrub)
-    val frac = drag ?: (pos.toFloat() / dur).coerceIn(0f, 1f)
-    val fill = animateFloatAsState(frac, tween(150, easing = LinearEasing), label = "fill")
-    val thumbAt = frac
-    val h = animateDpAsState(if (drag != null) 6.dp else 4.dp, tween(150, easing = LinearEasing), label = "h")
-    val th = animateFloatAsState(if (drag != null) 1f else 0f, tween(150, easing = LinearEasing), label = "t")
-    val ts = animateFloatAsState(if (drag != null) 1f else .4f, tween(150, easing = LinearEasing), label = "ts")
+    LaunchedEffect(dur) {
+        Engine.position.collectLatest { pos ->
+            if (dragState.value != null) return@collectLatest
+            val target = (pos.toFloat() / dur).coerceIn(0f, 1f)
+            if (AnimStyle.off || kotlin.math.abs(target - fill.value) > 0.08f) fill.snapTo(target)
+            else fill.animateTo(target, tween(if (Engine.fastPos > 0) 70 else 240, easing = LinearEasing))
+        }
+    }
+    if (interactive && UiPref.showBuffer) {
+        LaunchedEffect(dur) {
+            Engine.buffered.collect { b -> bufFrac.floatValue = (b.toFloat() / dur).coerceIn(0f, 1f) }
+        }
+    }
     val p = c
     Box(Modifier.fillMaxWidth().height(hit).then(if (!interactive) Modifier else Modifier.pointerInput(dur) {
         awaitPointerEventScope {
@@ -99,17 +124,32 @@ import kotlinx.coroutines.launch
                 val e = awaitPointerEvent()
                 val ch = e.changes.firstOrNull() ?: continue
                 val f = (ch.position.x / size.width).coerceIn(0f, 1f)
-                if (ch.pressed) { drag = f; curScrub(f); ch.consume() }
-                else if (drag != null) { Engine.seek((drag!! * dur).toLong()); drag = null; curScrub(null) }
+                if (ch.pressed) {
+                    val first = dragState.value == null
+                    dragState.value = f; curScrub(f); ch.consume()
+                    scope.launch { fill.snapTo(f) }
+                    if (first) scope.launch { dragAnim.animateTo(1f, tween(130, easing = LinearEasing)) }
+                } else if (dragState.value != null) {
+                    val d = dragState.value!!
+                    dragState.value = null; curScrub(null)
+                    Engine.seek((d * dur).toLong())
+                    scope.launch { dragAnim.animateTo(0f, tween(150, easing = LinearEasing)) }
+                }
             }
         }
     }).drawBehind {
-        val y = size.height / 2; val hp = h.value.toPx()
-        drawRect(p.l3, Offset(0f, y - hp / 2), Size(size.width, hp))
-        if (UiPref.showBuffer && interactive) drawRect(p.k.copy(alpha = .22f), Offset(0f, y - hp / 2), Size(size.width * (buf.toFloat() / dur).coerceIn(0f, 1f), hp))
-        drawRect(p.p, Offset(0f, y - hp / 2), Size(size.width * fill.value, hp))
-        val thv = th.value
-        if (thv > 0f) { val s = 12.dp.toPx() * ts.value; drawRect(p.p.copy(alpha = thv), Offset(size.width * thumbAt - s / 2, y - s / 2), Size(s, s)) }
+        val y = size.height / 2f
+        val da = dragAnim.value
+        val hp = (4f + 2f * da).dp.toPx()
+        val fv = fill.value
+        drawRect(p.l3, Offset(0f, y - hp / 2f), Size(size.width, hp))
+        if (UiPref.showBuffer && interactive) drawRect(p.k.copy(alpha = .22f), Offset(0f, y - hp / 2f), Size(size.width * bufFrac.floatValue, hp))
+        drawRect(p.p, Offset(0f, y - hp / 2f), Size(size.width * fv, hp))
+        if (da > 0.005f) {
+            val s = 12.dp.toPx() * (0.4f + 0.6f * da)
+            val thumbAt = dragState.value ?: fv
+            drawRect(p.p.copy(alpha = da), Offset(size.width * thumbAt - s / 2f, y - s / 2f), Size(s, s))
+        }
     })
 }
 
