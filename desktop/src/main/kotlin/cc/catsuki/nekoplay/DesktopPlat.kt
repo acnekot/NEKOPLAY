@@ -383,7 +383,17 @@ private class MpvAudio : Audio {
         // 抛异常由 Engine 显示提示，不会自动跳下一首（避免整个队列连环报错）
         if (lib == null || h == null) throw Exception("播放内核 libmpv 加载失败" + if (lib != null) "（mpv_create 失败）" else if (loadErrors.isNotEmpty()) "（可能被安全软件误删，请在保护历史中还原）：" + loadErrors.joinToString("；") else "（程序目录里没有找到 libmpv，可能被安全软件误删）")
         if (url == null) throw Exception("桌面版暂无本地缓存")
+        val ll = lib; val hh = h
         ended = false; opened = true; failed = false; playing = false; resetState = true; pos = startMs; openedAt = System.currentTimeMillis()
+        synchronized(rateLock) {
+            if (lastSpeed != 1f || lastPitchLinked == true) {
+                runCatching {
+                    ll.mpv_set_property_string(hh, "audio-pitch-correction", "yes")
+                    ll.mpv_set_property_string(hh, "speed", "1.000")
+                }
+            }
+            lastSpeed = 1f; lastPitchLinked = false
+        }
         applyStreamHeaders(url)
         lib.mpv_set_property_string(h, "pause", if (autoplay) "no" else "yes")
         val src = if (url.startsWith("file:")) File(java.net.URI(url)).absolutePath else url
@@ -411,11 +421,27 @@ private class MpvAudio : Audio {
     override var volume: Float = 1f
         set(v) { field = v; h?.let { lib!!.mpv_set_property_string(it, "volume", (v * 100).toInt().toString()) } }
 
-    /** 实时变速变调：pitchLinked=true 时关闭音高补偿，声音随转速自然升调，还原实体 CD/磁带快进听感 */
+    private val rateLock = Any()
+    private var lastPitchLinked: Boolean? = null
+    private var lastSpeed = 1f
+
+    /** 实时变速变调：仅在 pitchLinked 变化时切换 audio-pitch-correction，避免高频重建 libmpv 音频滤镜链导致闪退 */
     override fun setRate(speed: Float, pitchLinked: Boolean) {
         val hh = h ?: return
-        lib!!.mpv_set_property_string(hh, "audio-pitch-correction", if (pitchLinked) "no" else "yes")
-        lib.mpv_set_property_string(hh, "speed", "%.3f".format(java.util.Locale.US, speed.coerceIn(0.25f, 6f)))
+        val ll = lib ?: return
+        val clamped = if (speed.isFinite()) speed.coerceIn(0.25f, 4f) else 1f
+        synchronized(rateLock) {
+            runCatching {
+                if (lastPitchLinked != pitchLinked) {
+                    ll.mpv_set_property_string(hh, "audio-pitch-correction", if (pitchLinked) "no" else "yes")
+                    lastPitchLinked = pitchLinked
+                }
+                if (kotlin.math.abs(clamped - lastSpeed) >= 0.02f || clamped == 1f) {
+                    ll.mpv_set_property_string(hh, "speed", "%.3f".format(java.util.Locale.US, clamped))
+                    lastSpeed = clamped
+                }
+            }
+        }
     }
 
     /** 效果器：拼成 ffmpeg 滤镜链交给 mpv（10 个 equalizer + bass + extrastereo + volume） */

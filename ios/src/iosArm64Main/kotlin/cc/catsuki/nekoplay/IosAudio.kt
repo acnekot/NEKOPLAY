@@ -137,7 +137,7 @@ class IosAudio(cacheRoot: File) : Audio {
         val item = itemFor(url, cacheKey)
         player.removeAllItems()
         next = null; nextMeta = null; nextKey = null
-        cur = item; curMeta = meta; reportedError = null
+        cur = item; curMeta = meta; reportedError = null; lastPitchLinked = null
         if (item == null) { listener?.onError("没有可播放的地址"); return }
         player.insertItem(item, null)
         if (startMs > 0) item.seekToTime(CMTimeMakeWithSeconds(startMs / 1000.0, 1000), CMTimeMake(0, 1), CMTimeMake(0, 1), null)
@@ -180,10 +180,15 @@ class IosAudio(cacheRoot: File) : Audio {
         val codec = when (ext) { "flac" -> "flac"; "mp3" -> "mp3"; "m4a", "aac", "mp4" -> "aac"; else -> return null }
         return AudioInfo(codec, 0, 0, 0, 0)
     }
+    private var lastPitchLinked: Boolean? = null
+
     override fun setRate(speed: Float, pitchLinked: Boolean) {
-        val s = speed.coerceIn(0.25f, 4f)
+        val s = if (speed.isFinite()) speed.coerceIn(0.25f, 4f) else 1f
         NSOperationQueue.mainQueue.addOperationWithBlock {
-            cur?.audioTimePitchAlgorithm = if (pitchLinked) AVAudioTimePitchAlgorithmVarispeed else AVAudioTimePitchAlgorithmSpectral
+            if (lastPitchLinked != pitchLinked) {
+                cur?.audioTimePitchAlgorithm = if (pitchLinked) AVAudioTimePitchAlgorithmVarispeed else AVAudioTimePitchAlgorithmSpectral
+                lastPitchLinked = pitchLinked
+            }
             if (player.rate > 0f) player.rate = s
         }
     }

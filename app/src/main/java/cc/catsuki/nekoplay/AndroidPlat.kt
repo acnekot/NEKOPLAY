@@ -370,6 +370,7 @@ class ExoAudio(private val c: Context) : Audio {
         // 下载好的本地文件：直接读文件，不再往播放缓存里写一份
         if (url?.startsWith("file:") == true || url?.startsWith("content:") == true) exo.setMediaSource(androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(c)).createMediaSource(item), startMs)
         else exo.setMediaItem(item, startMs)
+        if (lastRateSpeed != 1f || lastRatePitch) { lastRateSpeed = 1f; lastRatePitch = false; runCatching { exo.playbackParameters = androidx.media3.common.PlaybackParameters.DEFAULT } }
         exo.prepare(); exo.playWhenReady = autoplay
     }
     private fun item(url: String?, cacheKey: String, meta: Track): MediaItem {
@@ -422,9 +423,17 @@ class ExoAudio(private val c: Context) : Audio {
         return AudioInfo(codec, f.sampleRate.coerceAtLeast(0), bits, f.channelCount.coerceAtLeast(0), kbps)
     }
 
+    private var lastRateSpeed = 1f
+    private var lastRatePitch = false
+
     override fun setRate(speed: Float, pitchLinked: Boolean) {
-        val s = speed.coerceIn(0.25f, 6f)
-        android.os.Handler(android.os.Looper.getMainLooper()).post { exo.playbackParameters = androidx.media3.common.PlaybackParameters(s, if (pitchLinked) s.coerceAtMost(3.2f) else 1f) }
+        val s = if (speed.isFinite()) speed.coerceIn(0.25f, 4f) else 1f
+        val p = if (pitchLinked) s.coerceAtMost(3.2f) else 1f
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            if (kotlin.math.abs(s - lastRateSpeed) < 0.02f && pitchLinked == lastRatePitch && s != 1f) return@post
+            lastRateSpeed = s; lastRatePitch = pitchLinked
+            runCatching { exo.playbackParameters = androidx.media3.common.PlaybackParameters(s, p) }
+        }
     }
 
     /**

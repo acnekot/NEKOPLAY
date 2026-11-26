@@ -213,6 +213,7 @@ object Engine {
 
     private fun load(i: Int, autoplay: Boolean, startMs: Long = 0) {
         val t = state.value.queue.getOrNull(i) ?: return
+        ScrubController.stop()
         reportPrev()
         reportId = t.id
         if (autoplay && Ncm.loggedIn && !t.local) scope.launch { Ncm.scrobbleStart(t.id) }
