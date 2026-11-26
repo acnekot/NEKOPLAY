@@ -37,6 +37,7 @@ internal fun confirmPluginNotice(nav: Nav, proceed: () -> Unit) {
 }
 
 /** 设置 → 插件：分为「音源插件」与「功能插件」两类管理 */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable fun PluginsPage() {
     val nav = LocalNav.current
     val p = c
@@ -93,11 +94,11 @@ internal fun confirmPluginNotice(nav: Nav, proceed: () -> Unit) {
                             Box(Modifier.background(if (s.isFeature) p.k else p.p).padding(horizontal = 5.dp, vertical = 1.dp)) {
                                 T(badge, 9, if (s.isFeature) p.tagFg else androidx.compose.ui.graphics.Color.White, 800)
                             }
-                            Spacer(Modifier.width(7.dp)); T(s.name, 16, if (on) p.k else p.s, 800)
+                            Spacer(Modifier.width(7.dp)); T(s.name, 16, if (on) p.k else p.s, 800, modifier = Modifier.weight(1f, fill = false))
                             Spacer(Modifier.width(8.dp)); T("v" + s.version, 11, p.s, mono = true)
                         }
                         val sub = listOfNotNull(s.meta["author"]?.let { "${tr("作者")} $it" }, s.meta["desc"]).joinToString(" · ")
-                        if (sub.isNotEmpty()) T(sub, 12, p.s, lines = 2, lh = 1.4f)
+                        if (sub.isNotEmpty()) T(sub, 12, p.s, lines = 3, lh = 1.4f)
                     }
                     NSwitch(on) { v -> Plugins.set(s.id, v) }
                 }
@@ -110,26 +111,23 @@ internal fun confirmPluginNotice(nav: Nav, proceed: () -> Unit) {
                 }
                 if (s.permissions.isNotEmpty()) {
                     val permText = "${tr("权限")}：" + s.permissions.joinToString(" · ") + if (!s.canNetwork) tr("（仅本地，无联网）") else ""
-                    T(permText, 10, p.s, mono = true, lines = 1, modifier = Modifier.padding(top = 3.dp))
+                    T(permText, 10, p.s, mono = true, lines = 2, modifier = Modifier.padding(top = 3.dp))
                 }
-                Row(Modifier.padding(top = 6.dp)) {
+                FlowRow(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     val acc by PluginStore.accounts.collectAsState()
                     if (on && s.has("loginQr")) {
                         if (acc[s.id] == null) LinkBtn("登录", 13) { nav.push(Page.PluginLogin(s.id)) }
                         else LinkBtn("退出 ${acc[s.id]}", 13) { confirmLogout(nav, s.name) { scope.launch { runCatching { s.call("logout") }; PluginStore.refresh() } } }
-                        Spacer(Modifier.width(14.dp))
                     }
-                    if (on && s.has("render")) { LinkBtn("打开页面", 13) { nav.push(Page.PluginPage(s.id)) }; Spacer(Modifier.width(14.dp)) }
+                    if (on && s.has("render")) LinkBtn("打开页面", 13) { nav.push(Page.PluginPage(s.id)) }
                     if (on && s.isFeature && s.has("action")) {
                         LinkBtn("执行", 13) { scope.launch { runCatching { Plugins.runFeatureAction(s.id, Engine.state.value.current) }.onSuccess { r ->
                             val op = r?.open
                             if (op == "coverflow") nav.push(Page.CoverFlow) else if (op?.startsWith("plugin:") == true) nav.push(Page.PluginPage(op.removePrefix("plugin:")))
                             r?.message?.let { nav.toast = it }
                         }.onFailure { nav.toast = "执行失败：${it.message}" } } }
-                        Spacer(Modifier.width(14.dp))
                     }
                     LinkBtn("重新加载", 13) { scope.launch { s.close().join(); if (s.start()) { Plugins.bump(); PluginStore.refresh().join(); Store.refreshAll(); nav.toast = "已重新加载" } else nav.toast = "加载失败：${s.error}" } }
-                    Spacer(Modifier.width(14.dp))
                     LinkBtn("删除", 13, p.bad) {
                         nav.sheet = SheetSpec("删除插件「${s.name}」？", "删除后它提供的搜索、歌单等功能都会消失；以后可以重新导入", listOf(SheetItem("删除", danger = true) { Plugins.delete(s.id); nav.toast = "已删除" }))
                     }

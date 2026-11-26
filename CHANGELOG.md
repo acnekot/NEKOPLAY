@@ -5,6 +5,11 @@
 
 ## [未发布]
 
+### 修复与优化
+- **插件页面与插件列表操作项自动换行**：
+  - 声明式插件页宿主 `PluginPageScreen` 为无 `grow` 子项的 `row` 容器默认启用 `FlowRow` 自动换行（并新增显式 `flow` 节点与 `wrap` 开关），同时放宽按钮与多行说明的换行限制，彻底修复手机窄屏下 `geom_motion`、`origin_motion`、`osu_motion`、`scrub`、`vibe_board` 等插件选项按钮超出屏幕显示不全的问题
+  - 插件管理页（`PluginUi` / `PluginSubsUi`）操作按钮栏改为 `FlowRow` 自动换行，插件名称与权限说明支持完整自适应显示不挤掉版本号与删除按钮；同步优化 `geom_motion.js`（v1.0.2）窄屏演示台封面尺寸适配
+
 ## [0.6.8-nightly.20261126.7] - 2026-11-26
 
 预发布构建（全五端：Android / Windows / macOS / Linux / iOS）：新增独立**点线面几何动效（`geom_motion.js`）**插件与实机演示台，并将**播放历史**升级为按天划分、彻底移除 100 条上限。

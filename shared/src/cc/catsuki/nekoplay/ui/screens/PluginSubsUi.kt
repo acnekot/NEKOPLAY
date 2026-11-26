@@ -90,7 +90,7 @@ internal fun androidx.compose.foundation.lazy.LazyListScope.pluginSubsSection(na
                                     Box(Modifier.background(if (i.isFeature) p.k else p.p).padding(horizontal = 5.dp, vertical = 1.dp)) {
                                         T(badge, 9, if (i.isFeature) p.tagFg else androidx.compose.ui.graphics.Color.White, 800)
                                     }
-                                    Spacer(Modifier.width(7.dp)); T(i.name, 14, w = 700); Spacer(Modifier.width(8.dp)); T("v" + i.version, 11, p.s, mono = true)
+                                    Spacer(Modifier.width(7.dp)); T(i.name, 14, w = 700, modifier = Modifier.weight(1f, fill = false)); Spacer(Modifier.width(8.dp)); T("v" + i.version, 11, p.s, mono = true)
                                 }
                                 val line = listOfNotNull(i.author.takeIf { it.isNotEmpty() }?.let { "${tr("作者")} $it" }, i.desc.takeIf { it.isNotEmpty() }).joinToString(" · ")
                                 if (line.isNotEmpty()) T(line, 12, p.s, lines = 2, lh = 1.4f)

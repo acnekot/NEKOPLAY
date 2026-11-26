@@ -80,6 +80,7 @@ import org.json.JSONObject
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable private fun PluginNodeView(node: JSONObject, dispatch: (String, JSONObject?) -> Unit) {
     val p = c
     val type = node.optString("type", "column").lowercase()
@@ -93,8 +94,29 @@ import org.json.JSONObject
         "column" -> Column(Modifier.fillMaxWidth().then(clickMod).padding(pad), verticalArrangement = Arrangement.spacedBy(gap)) {
             for (i in 0 until children.length()) children.optJSONObject(i)?.let { PluginNodeView(it, dispatch) }
         }
-        "row" -> Row(Modifier.fillMaxWidth().then(clickMod).padding(pad), horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
-            for (i in 0 until children.length()) children.optJSONObject(i)?.let { Box(if (it.optBoolean("grow")) Modifier.weight(1f) else Modifier) { PluginNodeView(it, dispatch) } }
+        "flow" -> FlowRow(
+            Modifier.fillMaxWidth().then(clickMod).padding(pad),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalArrangement = Arrangement.spacedBy(gap),
+        ) {
+            for (i in 0 until children.length()) children.optJSONObject(i)?.let { PluginNodeView(it, dispatch) }
+        }
+        "row" -> {
+            val hasGrow = (0 until children.length()).any { children.optJSONObject(it)?.optBoolean("grow") == true }
+            val wrap = if (node.has("wrap")) node.optBoolean("wrap") else !hasGrow
+            if (wrap) {
+                FlowRow(
+                    Modifier.fillMaxWidth().then(clickMod).padding(pad),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                    verticalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    for (i in 0 until children.length()) children.optJSONObject(i)?.let { PluginNodeView(it, dispatch) }
+                }
+            } else {
+                Row(Modifier.fillMaxWidth().then(clickMod).padding(pad), horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
+                    for (i in 0 until children.length()) children.optJSONObject(i)?.let { Box(if (it.optBoolean("grow")) Modifier.weight(1f) else Modifier) { PluginNodeView(it, dispatch) } }
+                }
+            }
         }
         "card" -> Column(Modifier.fillMaxWidth().cascadeEnter().background(p.sheet.copy(alpha = 0.85f)).nbf(1.dp, p.l2).then(clickMod).padding(if (pad.value > 0) pad else 14.dp), verticalArrangement = Arrangement.spacedBy(gap)) {
             for (i in 0 until children.length()) children.optJSONObject(i)?.let { PluginNodeView(it, dispatch) }
@@ -105,15 +127,16 @@ import org.json.JSONObject
             node.optInt("size", 14).coerceIn(10, 36),
             when (node.optString("tone")) { "primary" -> p.p; "sub" -> p.s; "bad" -> p.bad; else -> p.k },
             node.optInt("weight", 500).coerceIn(400, 900),
-            lines = node.optInt("lines", 4).coerceIn(1, 20),
+            lines = node.optInt("lines", 10).coerceIn(1, 30),
             mono = node.optBoolean("mono", false),
+            lh = 1.45f,
         )
         "button" -> {
             val primary = node.optBoolean("primary", false)
             Box(Modifier.press { act?.let { dispatch(it, payload) } }
                 .then(if (primary) Modifier.background(p.p) else Modifier.nbf(1.dp, p.k))
                 .padding(horizontal = 14.dp, vertical = 8.dp)) {
-                T(node.optString("text", "按钮"), 12, if (primary) Color.White else p.k, 700)
+                T(node.optString("text", "按钮"), 12, if (primary) Color.White else p.k, 700, lines = 2, lh = 1.3f)
             }
         }
         "cover" -> {

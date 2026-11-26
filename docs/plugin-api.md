@@ -81,8 +81,8 @@ NEKOPLAY 本体完全中立，不内置任何在线音源与重型特色扩展�
 
 ### 3. 声明式页面（`render(ctx)` / `onAction(action, payload)`）
 - 宿主传入 `ctx`：`{ hostVersion, platform, lang, wide, landscape, playing, track?, playlistCount, recentCount }`
-- 支持 9 种原生 Compose 节点（跨五端一致渲染）：
-  - 容器：`column` / `row` / `card`（支持 `pad`, `gap`, `action`, `payload`, `grow`, `children`）
+- 支持 10 种原生 Compose 节点（跨五端一致渲染）：
+  - 容器：`column` / `row` / `flow` / `card`（支持 `pad`, `gap`, `wrap`, `action`, `payload`, `grow`, `children`；`row` 在不含 `grow` 子项时默认自动换行，避免窄屏选项被裁切，亦可通过 `wrap: false` 强制单行）
   - 展示：`tag`（`text`）、`text`（`text`, `size`, `tone: "primary"|"sub"|"bad"`, `weight`, `lines`, `mono`）、`cover`（`url`, `size`, `title`, `revealKey?`, `geomPreview?`）、`divider`、`spacer`（`size`）
   - 交互：`button`（`text`, `primary`, `action`, `payload`）
 - `onAction(action, payload)` 返回 `{ toast?, open?, refresh? }`（`refresh` 默认 `true`，触发重新渲染并刷新 `config()`/`profile()`）。
