@@ -39,7 +39,7 @@ private var recCache: List<Playlist>? = null
             "continue" -> {
                 val cur = st.current ?: daily.firstOrNull() ?: rec.firstOrNull()
                 Tag("CONTINUE"); Spacer(Modifier.height(10.dp))
-                Box(Modifier.press { if (st.current != null) { nav.lyrics = false; nav.player = true } }) { Cover(cur?.cover, 64.dp, cur?.title ?: "") }
+                Box(Modifier.press { if (st.current != null) { SharedHero.capture("now:${st.current!!.id}", st.current!!.cover, st.current!!.title); nav.lyrics = false; nav.player = true } }) { Cover(cur?.cover, 64.dp, cur?.title ?: "", modifier = Modifier.heroAnchor(st.current?.let { "now:${it.id}" }, cur?.cover, cur?.title ?: "")) }
                 Spacer(Modifier.height(8.dp))
                 T(cur?.title ?: "还没有曲目", 15, w = 800, lines = 2, lh = 1.2f); T(cur?.artist ?: "", 12, p.s)
                 Spacer(Modifier.weight(1f).heightIn(min = 8.dp))
@@ -86,8 +86,8 @@ private var recCache: List<Playlist>? = null
                 val l by produceState(recCache) { if (value == null) runCatching { value = Ncm.recPlaylists().also { recCache = it } } }
                 Tag("FOR YOU"); Spacer(Modifier.height(10.dp))
                 val pl = l?.firstOrNull()
-                Column(Modifier.press { if (pl != null) nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }) {
-                    Cover(pl?.cover, 64.dp, pl?.name ?: ""); Spacer(Modifier.height(8.dp))
+                Column(Modifier.press { if (pl != null) { SharedHero.capture("pl:${pl.id}", pl.cover, pl.name); nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) } }) {
+                    Cover(pl?.cover, 64.dp, pl?.name ?: "", modifier = Modifier.heroAnchor(pl?.let { "pl:${it.id}" }, pl?.cover, pl?.name ?: "")); Spacer(Modifier.height(8.dp))
                     T(pl?.name ?: "LOADING", 14, w = 700, lines = 3, lh = 1.25f)
                 }
                 Spacer(Modifier.weight(1f).heightIn(min = 8.dp))

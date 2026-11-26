@@ -122,13 +122,32 @@ import java.util.Calendar
         item { ThemeStudioSection() }
         if (Plat.isDesktop) item { SwitchRow("自适应大小", "按窗口宽度自动微调界面比例（以 1280 宽为基准），拖大窗口更饱满、缩窄更紧凑", UiPref.autoScale) { UiPref.autoScale = it; UiPref.save() } }
         item {
-            // 拖动时只改数字，松手才应用（边拖边缩放会让滑条跑出手指下面）
+            // 两阶段零开销实时缩放：拖动时通过 UiScalePreview 做纯 GPU 120fps 实时预览（0 重组），松手瞬间无缝落位原生 Density
             var draft by remember { mutableIntStateOf(UiPref.scale) }
-            SetLine("界面缩放", "整个界面连同文字一起放大或缩小；小屏手机调小能看到更多内容") {
+            LaunchedEffect(UiPref.scale) { if (UiScalePreview.liveUserScale == null) draft = UiPref.scale }
+            DisposableEffect(Unit) { onDispose { UiScalePreview.liveUserScale = null } }
+            SetLine("界面缩放", "拖动实时预览界面缩放，松手无感切回原生清晰渲染；小屏手机调小能看到更多内容") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) { NSlider(draft.toFloat(), 60f..150f, onDone = { UiPref.scale = draft; UiPref.save() }) { draft = (it / 5f).roundToInt() * 5 } }
+                    Box(Modifier.weight(1f)) {
+                        NSlider(
+                            draft.toFloat(),
+                            60f..150f,
+                            stableDrag = true,
+                            onDone = {
+                                UiPref.scale = draft
+                                UiPref.save()
+                                UiScalePreview.liveUserScale = null
+                            },
+                        ) { raw ->
+                            val snapped = raw.roundToInt().let { if (it in 98..102) 100 else it }.coerceIn(60, 150)
+                            if (snapped != draft) {
+                                draft = snapped
+                                UiScalePreview.liveUserScale = snapped / 100f
+                            }
+                        }
+                    }
                     Spacer(Modifier.width(10.dp)); T("$draft%", 14, p.p, 700, mono = true)
-                    if (draft != 100) { Spacer(Modifier.width(8.dp)); T(tr("重置"), 13, p.s, modifier = Modifier.press { draft = 100; UiPref.scale = 100; UiPref.save() }) }
+                    if (draft != 100) { Spacer(Modifier.width(8.dp)); T(tr("重置"), 13, p.s, modifier = Modifier.press { draft = 100; UiScalePreview.liveUserScale = null; UiPref.scale = 100; UiPref.save() }) }
                 }
             }
         }

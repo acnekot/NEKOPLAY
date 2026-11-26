@@ -172,7 +172,7 @@ private fun TrayMenu(appIcon: androidx.compose.ui.graphics.painter.Painter, at: 
                         val hover by src.collectIsHoveredAsState()
                         Box(Modifier.fillMaxWidth().height(36.dp).background(if (hover) p.k else Color.Transparent)
                             .hoverable(src).press { close(); act() }.padding(horizontal = 14.dp), contentAlignment = Alignment.CenterStart) {
-                            T(label, 14, if (hover) p.tagFg else if (label == "退出") p.bad else p.k)
+                            T(tr(label), 14, if (hover) p.tagFg else if (label == "退出") p.bad else p.k)
                         }
                     }
                 }

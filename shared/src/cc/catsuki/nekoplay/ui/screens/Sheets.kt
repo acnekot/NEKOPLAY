@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.focus.focusRequester
 import coil3.compose.AsyncImage
@@ -139,25 +140,35 @@ data class InputSpec(val title: String, val hint: String, val onDone: (String) -
 
 @Composable fun InputDialog() {
     val nav = LocalNav.current
-    val spec = nav.input ?: return
+    var last by remember { mutableStateOf<InputSpec?>(null) }
+    nav.input?.let { last = it }
+    val show = nav.input != null
     val p = c
-    var text by remember(spec) { mutableStateOf("") }
-    val fr = remember { androidx.compose.ui.focus.FocusRequester() }
-    LaunchedEffect(spec) { fr.requestFocus() }
-    fun done() { val v = text.trim(); if (v.isEmpty()) return; nav.input = null; spec.onDone(v) }
-    Box(Modifier.fillMaxSize().background(Color(0x80000000)).pointerInput(Unit) { detectTapGestures { nav.input = null } }.imePadding(), contentAlignment = Alignment.Center) {
-        Column(Modifier.padding(horizontal = 28.dp).fillMaxWidth().background(p.sheet).nb(1.dp, p.k).topLine().pointerInput(Unit) { detectTapGestures { } }.padding(18.dp)) {
-            T(tr(spec.title), 17, w = 800); Spacer(Modifier.height(14.dp))
-            Box(Modifier.fillMaxWidth().nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 12.dp)) {
-                if (text.isEmpty()) T(trKnown(spec.hint), 15, p.s)
-                androidx.compose.foundation.text.BasicTextField(text, { text = it }, Modifier.fillMaxWidth().focusRequester(fr), singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(color = p.k, fontSize = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp), fontFamily = Typo.family),
-                    cursorBrush = androidx.compose.ui.graphics.SolidColor(p.p),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { done() }))
+    AnimatedVisibility(show, enter = fadeIn(Motion.standard()), exit = fadeOut(Motion.quick())) {
+        Box(Modifier.fillMaxSize().background(Color(0x80000000)).pointerInput(Unit) { detectTapGestures { nav.input = null } })
+    }
+    AnimatedVisibility(show, Modifier.fillMaxSize(),
+        enter = fadeIn(Motion.standard()) + scaleIn(Motion.hero(), initialScale = if (MotionEffects.pageScale) .92f else 1f),
+        exit = fadeOut(Motion.quick()) + scaleOut(Motion.quick(), targetScale = if (MotionEffects.pageScale) .96f else 1f)) {
+        val spec = last ?: return@AnimatedVisibility
+        var text by remember(spec) { mutableStateOf("") }
+        val fr = remember { androidx.compose.ui.focus.FocusRequester() }
+        LaunchedEffect(spec) { fr.requestFocus() }
+        fun done() { val v = text.trim(); if (v.isEmpty()) return; nav.input = null; spec.onDone(v) }
+        Box(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.Center) {
+            Column(Modifier.padding(horizontal = 28.dp).widthIn(max = 420.dp).fillMaxWidth().background(p.sheet).nb(1.dp, p.k).topLine().pointerInput(Unit) { detectTapGestures { } }.padding(18.dp)) {
+                T(tr(spec.title), 17, w = 800); Spacer(Modifier.height(14.dp))
+                Box(Modifier.fillMaxWidth().nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 12.dp)) {
+                    if (text.isEmpty()) T(trKnown(spec.hint), 15, p.s)
+                    androidx.compose.foundation.text.BasicTextField(text, { text = it }, Modifier.fillMaxWidth().focusRequester(fr), singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = p.k, fontSize = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp), fontFamily = Typo.family),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(p.p),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { done() }))
+                }
+                Spacer(Modifier.height(16.dp))
+                Row { Box(Modifier.weight(1f)) { OutlineBtn("取消", 44.dp) { nav.input = null } }; Spacer(Modifier.width(10.dp)); Box(Modifier.weight(1f).press(.96f) { done() }.height(44.dp).background(p.p), contentAlignment = Alignment.Center) { T(tr("确定"), 15, Color.White, 700) } }
             }
-            Spacer(Modifier.height(16.dp))
-            Row { Box(Modifier.weight(1f)) { OutlineBtn("取消", 44.dp) { nav.input = null } }; Spacer(Modifier.width(10.dp)); Box(Modifier.weight(1f).press(.96f) { done() }.height(44.dp).background(p.p), contentAlignment = Alignment.Center) { T(tr("确定"), 15, Color.White, 700) } }
         }
     }
 }
@@ -200,9 +211,10 @@ fun openArtists(nav: Nav, t: Track) {
     }
     else AnimatedVisibility(nav.sheet != null, Modifier.fillMaxSize(), enter = slideInVertically(sp) { it }, exit = slideOutVertically(sp) { it }) {
         val s = last ?: return@AnimatedVisibility
-        BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-            // 最多占半屏：标题和「取消」固定，中间的选项可以滚动
-            Column(Modifier.fillMaxWidth().heightIn(max = maxHeight * .5f).background(p.sheet).topLine().pointerInput(Unit) { detectTapGestures { } }.navigationBarsPadding().padding(bottom = 8.dp)) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            // 最多占半屏（用轻量 layout 限制高度，去掉 BoxWithConstraints）
+            Column(Modifier.fillMaxWidth().layout { m, cs -> val p = m.measure(cs.copy(maxHeight = (cs.maxHeight / 2).coerceAtLeast(1))); layout(p.width, p.height) { p.place(0, 0) } }
+                .background(p.sheet).topLine().pointerInput(Unit) { detectTapGestures { } }.navigationBarsPadding().padding(bottom = 8.dp)) {
                 Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 10.dp)) {
                     T(trKnown(s.title), 17, w = 800); if (s.sub != null) T(trKnown(s.sub), 13, p.s)
                 }
@@ -250,9 +262,11 @@ fun qualitySheet(nav: Nav) {
     LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         itemsIndexed(items) { i, l ->
             val on = i == sel
-            val bg by androidx.compose.animation.animateColorAsState(if (on) p.k else Color.Transparent, Motion.standard(), label = "chb")
-            val fg by androidx.compose.animation.animateColorAsState(if (on) p.tagFg else p.k, Motion.standard(), label = "chf")
-            Box(Modifier.press { if (!on) onSel(i) }.background(bg).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(trKnown(l), 13, fg, 700) }
+            val bg = androidx.compose.animation.animateColorAsState(if (on) p.k else Color.Transparent, Motion.standard(), label = "chb")
+            val selA = androidx.compose.animation.core.animateFloatAsState(if (on) 1f else 0f, Motion.standard(), label = "chs")
+            Box(Modifier.press { if (!on) onSel(i) }.drawBehind { drawRect(bg.value) }.nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) {
+                Box(Modifier.graphicsLayer { val sc = 1f + .05f * selA.value; scaleX = sc; scaleY = sc }) { T(trKnown(l), 13, if (on) p.tagFg else p.k, 700) }
+            }
         }
     }
 }
@@ -263,26 +277,32 @@ fun qualitySheet(nav: Nav) {
     return e
 }
 
-// ======================= 歌单广场 =======================
-
 @Composable fun FollowBtn(initial: Boolean, off: String, on: String, ready: Boolean = true, act: suspend (Boolean) -> Unit) {
     val nav = LocalNav.current
     var v by remember(initial) { mutableStateOf(initial) }
     val p = c
-    val bg by androidx.compose.animation.animateColorAsState(if (v) Color.Transparent else p.k, Motion.standard(), label = "fb")
-    val fg by androidx.compose.animation.animateColorAsState(if (v) p.k else p.tagFg, Motion.standard(), label = "ff")
+    val bg = androidx.compose.animation.animateColorAsState(if (v) Color.Transparent else p.k, Motion.standard(), label = "fb")
+    val fg = if (v) p.k else p.tagFg
     Box(Modifier.press(.96f, true) {
         if (!ready) return@press
         val n = !v; v = n
         Store.run { try { act(n); nav.toast = if (n) "已$off" else "已取消$off" } catch (e: Exception) { v = !n; nav.toast = "操作失败：${e.message}" } }
-    }.height(48.dp).background(bg).nbf(1.dp, p.k).padding(horizontal = 14.dp).animateContentSize(Motion.standard()), contentAlignment = Alignment.Center) {
+    }.height(48.dp).drawBehind { drawRect(bg.value) }.nbf(1.dp, p.k).padding(horizontal = 14.dp).animateContentSize(Motion.standard()), contentAlignment = Alignment.Center) {
         androidx.compose.animation.AnimatedContent(v, transitionSpec = { fadeIn(Motion.standard()) togetherWith fadeOut(Motion.quick()) }, label = "ft") { x ->
             T(if (x) on else "+ $off", 15, fg, 700)
         }
     }
 }
 
-// ======================= 启动更新弹窗（带动效） =======================
+// ======================= 启动更新弹窗（带动效；全程纯绘制/graphicsLayer 0 重组） =======================
+@Composable private fun UpdatePulseDot(active: Boolean) {
+    val pulse = if (active && !AnimStyle.off) {
+        androidx.compose.animation.core.rememberInfiniteTransition(label = "updPulse").animateFloat(
+            0.35f, 1f, androidx.compose.animation.core.infiniteRepeatable(tween(950, easing = androidx.compose.animation.core.FastOutSlowInEasing), androidx.compose.animation.core.RepeatMode.Reverse), label = "dot"
+        )
+    } else null
+    Box(Modifier.size(6.dp).graphicsLayer { alpha = pulse?.value ?: 1f }.background(Color.White, androidx.compose.foundation.shape.CircleShape))
+}
 
 @Composable fun UpdateDialog(wide: Boolean) {
     val nav = LocalNav.current
@@ -291,27 +311,14 @@ fun qualitySheet(nav: Nav) {
     var last by remember { mutableStateOf<Updater.Info?>(null) }
     Updater.dialog?.let { last = it }
     val show = Updater.dialog != null
-    // 顶部强调条扫过 + 内容阶梯渐入（受 AnimStyle.off 与速度档位统一控制）
     val sweep = remember { androidx.compose.animation.core.Animatable(0f) }
     val step = remember { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(show) {
         if (show) {
             if (AnimStyle.off) { sweep.snapTo(1f); step.snapTo(1f) }
-            else {
-                sweep.snapTo(0f); step.snapTo(0f)
-                launch { sweep.animateTo(1f, Motion.page()) }
-                launch { step.animateTo(1f, Motion.standard()) }
-            }
+            else { sweep.snapTo(0f); step.snapTo(0f); launch { sweep.animateTo(1f, Motion.page()) }; launch { step.animateTo(1f, Motion.standard()) } }
         }
     }
-    val pulse = if (show && !AnimStyle.off) {
-        val inf = androidx.compose.animation.core.rememberInfiniteTransition(label = "updPulse")
-        inf.animateFloat(0.35f, 1f, androidx.compose.animation.core.infiniteRepeatable(
-            tween(950, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-            androidx.compose.animation.core.RepeatMode.Reverse,
-        ), label = "dot").value
-    } else 1f
-
     AnimatedVisibility(show, enter = fadeIn(Motion.standard()), exit = fadeOut(Motion.quick())) {
         Box(Modifier.fillMaxSize().background(Color(if (wide) 0x5C000000 else 0x80000000))
             .pointerInput(Unit) { detectTapGestures { Updater.dialog = null } })
@@ -320,50 +327,33 @@ fun qualitySheet(nav: Nav) {
         enter = fadeIn(Motion.standard()) + scaleIn(Motion.hero(), initialScale = .88f) + slideInVertically(Motion.hero()) { it / 8 },
         exit = fadeOut(Motion.quick()) + scaleOut(Motion.quick(), targetScale = .94f) + slideOutVertically(Motion.quick()) { it / 12 }) {
         val info = last ?: return@AnimatedVisibility
-        val s1 = (step.value * 1.4f).coerceIn(0f, 1f)
-        val s2 = ((step.value - 0.18f) * 1.4f).coerceIn(0f, 1f)
-        val s3 = ((step.value - 0.34f) * 1.55f).coerceIn(0f, 1f)
         Box(Modifier.fillMaxSize().padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
-            Column(Modifier.widthIn(max = if (wide) 440.dp else 380.dp).fillMaxWidth()
-                .background(p.sheet).nb(1.dp, p.k)
-                .pointerInput(Unit) { detectTapGestures { } }) {
-                // 顶部扫描强调条
-                Box(Modifier.fillMaxWidth().height(3.dp).background(p.l2)) {
-                    Box(Modifier.fillMaxWidth(sweep.value).fillMaxHeight().background(p.p))
-                }
+            Column(Modifier.widthIn(max = if (wide) 440.dp else 380.dp).fillMaxWidth().background(p.sheet).nb(1.dp, p.k).pointerInput(Unit) { detectTapGestures { } }) {
+                Box(Modifier.fillMaxWidth().height(3.dp).drawBehind {
+                    drawRect(p.l2)
+                    drawRect(p.p, size = androidx.compose.ui.geometry.Size(size.width * sweep.value, size.height))
+                })
                 Column(Modifier.padding(20.dp)) {
-                    // 头部：徽章 + 版本号对比 + 关闭按钮
-                    Row(Modifier.fillMaxWidth().graphicsLayer { alpha = s1; translationY = (1f - s1) * 10f }, verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().graphicsLayer { val s1 = (step.value * 1.4f).coerceIn(0f, 1f); alpha = s1; translationY = (1f - s1) * 10f }, verticalAlignment = Alignment.CenterVertically) {
                         Row(Modifier.background(p.p).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(6.dp).background(Color.White.copy(alpha = pulse), androidx.compose.foundation.shape.CircleShape))
-                            Spacer(Modifier.width(6.dp))
+                            UpdatePulseDot(show); Spacer(Modifier.width(6.dp))
                             T(if (Updater.nightly) "BETA" else "UPDATE", 11, Color.White, 800, mono = true, ls = .06f)
                         }
-                        Spacer(Modifier.width(10.dp))
-                        T(tr("发现新版本"), 18, p.k, 800, modifier = Modifier.weight(1f))
-                        Box(Modifier.size(32.dp).press { Updater.dialog = null }, contentAlignment = Alignment.Center) {
-                            NIcon(NIcons.close, 16.dp, p.s)
-                        }
+                        Spacer(Modifier.width(10.dp)); T(tr("发现新版本"), 18, p.k, 800, modifier = Modifier.weight(1f))
+                        Box(Modifier.size(32.dp).press { Updater.dialog = null }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 16.dp, p.s) }
                     }
-                    Row(Modifier.padding(top = 10.dp).graphicsLayer { alpha = s1; translationY = (1f - s1) * 10f }, verticalAlignment = Alignment.CenterVertically) {
-                        T("v$APP_VERSION", 13, p.s, 600, mono = true)
-                        T("  →  ", 13, p.s, 700, mono = true)
-                        T(info.title, 14, p.p, 800, mono = true)
+                    Row(Modifier.padding(top = 10.dp).graphicsLayer { val s1 = (step.value * 1.4f).coerceIn(0f, 1f); alpha = s1; translationY = (1f - s1) * 10f }, verticalAlignment = Alignment.CenterVertically) {
+                        T("v$APP_VERSION", 13, p.s, 600, mono = true); T("  →  ", 13, p.s, 700, mono = true); T(info.title, 14, p.p, 800, mono = true)
                     }
-                    // 更新说明区（可滚动）
                     Box(Modifier.padding(top = 14.dp).fillMaxWidth().heightIn(min = 64.dp, max = 210.dp)
-                        .graphicsLayer { alpha = s2; translationY = (1f - s2) * 12f }
+                        .graphicsLayer { val s2 = ((step.value - 0.18f) * 1.4f).coerceIn(0f, 1f); alpha = s2; translationY = (1f - s2) * 12f }
                         .background(p.page).border(1.dp, p.l2).verticalScroll(rememberScrollState()).padding(12.dp)) {
                         T(info.notes.ifBlank { tr("包含新功能与稳定性修复，建议更新体验。") }, 13, p.k, lines = 40, lh = 1.55f)
                     }
-                    if (Updater.nightly) {
-                        T(tr("当前为预发布测试通道，直接下载对应平台安装包覆盖安装即可。"), 11, p.s, modifier = Modifier.padding(top = 6.dp).graphicsLayer { alpha = s2 })
-                    }
-                    // 操作按钮区
-                    Column(Modifier.padding(top = 16.dp).graphicsLayer { alpha = s3; translationY = (1f - s3) * 12f }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (Updater.nightly) T(tr("当前为预发布测试通道，直接下载对应平台安装包覆盖安装即可。"), 11, p.s, modifier = Modifier.padding(top = 6.dp).graphicsLayer { alpha = ((step.value - 0.18f) * 1.4f).coerceIn(0f, 1f) })
+                    Column(Modifier.padding(top = 16.dp).graphicsLayer { val s3 = ((step.value - 0.34f) * 1.55f).coerceIn(0f, 1f); alpha = s3; translationY = (1f - s3) * 12f }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         PrimaryBar("立即下载更新", NIcons.download, Modifier.fillMaxWidth()) {
-                            val target = info.url ?: info.page
-                            Updater.dialog = null
+                            val target = info.url ?: info.page; Updater.dialog = null
                             runCatching { uri.openUri(target) }.onFailure { nav.toast = "打不开浏览器" }
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

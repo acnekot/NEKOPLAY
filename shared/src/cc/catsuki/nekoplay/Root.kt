@@ -169,16 +169,25 @@ object Boot {
         val dens = LocalDensity.current
         var showSplash by remember { mutableStateOf(LaunchSplashState.shouldPlay()) }
         val splashReveal = remember { Animatable(if (showSplash) 0f else 1f) }
-        // 用普通 Box + onSizeChanged 代替顶层 BoxWithConstraints（SubcomposeLayout），
-        // 拖动缩放窗口时只要没跨过 900dp 宽窄阈值，整个 Root 树 0 重组、0 Subcompose，原生丝滑
-        Box(Modifier.fillMaxSize().backdrop().onSizeChanged { sz ->
-            val wDp = sz.width / dens.density
-            val hDp = sz.height / dens.density
-            val w = wDp >= 900f; val sh = hDp < 720f; val nr = wDp < 360f; val ls = !Plat.isDesktop && wDp > hDp && hDp < 560f
+        var rootPx by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+        fun updateBreakpoints(sz: androidx.compose.ui.unit.IntSize, d: Float) {
+            if (sz.width <= 0 || sz.height <= 0 || UiScalePreview.freezeBreakpoint) return
+            val wDp = sz.width / d
+            val hDp = sz.height / d
+            // 900dp 宽窄屏切换迟滞区间（868dp / 900dp）：拖窗掠过临界线时不再反复销毁重建布局树
+            val w = if (Screen.wide) wDp >= 868f else wDp >= 900f
+            val sh = hDp < 720f; val nr = wDp < 360f; val ls = !Plat.isDesktop && wDp > hDp && hDp < 560f
             if (Screen.wide != w) Screen.wide = w
             if (Screen.short != sh) Screen.short = sh
             if (Screen.narrow != nr) Screen.narrow = nr
             if (Screen.landscape != ls) Screen.landscape = ls
+        }
+        LaunchedEffect(dens.density, UiScalePreview.freezeBreakpoint) { updateBreakpoints(rootPx, dens.density) }
+        // 用普通 Box + onSizeChanged + liveScaleContainer 代替顶层 BoxWithConstraints：
+        // 拖动缩放滑块或窗口时全程纯 GPU 实时响应、0 Subcompose、0 整树重组
+        Box(Modifier.fillMaxSize().backdrop().liveScaleContainer().onSizeChanged { sz ->
+            rootPx = sz
+            updateBreakpoints(sz, dens.density)
         }) {
             val wide = Screen.wide
             Box(Modifier.fillMaxSize().then(if (showSplash) Modifier.graphicsLayer {
@@ -201,20 +210,26 @@ object Boot {
                 if (chrome == null) androidx.compose.animation.AnimatedVisibility(!hideTop,
                     enter = androidx.compose.animation.expandVertically(Motion.hero()),
                     exit = androidx.compose.animation.shrinkVertically(Motion.hero())) { TopBar() }
-                BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
-                    val w = constraints.maxWidth.toFloat()
+                var subW by remember { mutableFloatStateOf(1f) }
+                Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().onSizeChanged { subW = it.width.toFloat().coerceAtLeast(1f) }) {
                     val sub = remember { Animatable(0f) }
                     val inSub = nav.stack.isNotEmpty()
                     LaunchedEffect(inSub) { sub.animateTo(if (inSub) 1f else 0f, spF) }
-                    // 首页 / 曲库：子页面推入时往左退 28% 并变暗（视差），遮罩仅在 drawBehind 读 sub.value，推入全程 0 重组
-                    Column(Modifier.fillMaxSize().graphicsLayer { translationX = -w * .28f * sub.value }) {
+                    // 首页 / 曲库：子页面推入时往左退 28% 并轻微景深微缩 + 变暗，全程纯 graphicsLayer/drawBehind 0 重组
+                    Column(Modifier.fillMaxSize().graphicsLayer {
+                        val sv = sub.value
+                        if (sv > 0.001f) {
+                            translationX = -size.width * .28f * sv
+                            if (MotionEffects.pageScale) { val sc = 1f - .025f * sv; scaleX = sc; scaleY = sc }
+                        }
+                    }) {
                         Box(Modifier.weight(1f).fillMaxWidth()) { Tabs() }
                         if (hasTrack) MiniBar()
                         BottomNav()
                     }
                     val showSubScrim by remember { derivedStateOf { sub.value > 0.001f } }
-                    if (showSubScrim) Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black.copy(alpha = .16f * sub.value)) })
-                    SubLayer(sub, w)
+                    if (showSubScrim) Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black.copy(alpha = .18f * sub.value)) })
+                    SubLayer(sub, subW)
                     PlayerOverlay()
                 }
             }
@@ -222,6 +237,7 @@ object Boot {
             }
             }
             }
+            SharedHeroHost()
             if (nav.menu) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { nav.menu = false } })
             AnimatedVisibility(nav.menu, Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = if (chrome != null) 54.dp else 59.dp, end = 12.dp),
                 enter = fadeIn(Motion.standard()) + scaleIn(Motion.standard(), initialScale = if (MotionEffects.pageScale) .92f else 1f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)),

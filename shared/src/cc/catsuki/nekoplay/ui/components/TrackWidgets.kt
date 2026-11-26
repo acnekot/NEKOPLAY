@@ -70,10 +70,20 @@ import kotlinx.coroutines.launch
             }
             if (!Look.flat) drawRect(p.l1, Offset(if (current) -ext else 0f, size.height - 1.dp.toPx()), Size(size.width + if (current) ext * 2 else 0f, 1.dp.toPx()))
         }, verticalAlignment = Alignment.CenterVertically) {
-        Cover(t.cover, 44.dp, t.title)
+        Box(Modifier.graphicsLayer {
+            val s = 1f + .09f * curAnim.value
+            scaleX = s; scaleY = s
+        }) { Cover(t.cover, 44.dp, t.title) }
         Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).graphicsLayer {
+            val ca = curAnim.value
+            if (ca > 0.001f) translationX = 3.dp.toPx() * ca
+        }) {
+            Row(Modifier.graphicsLayer {
+                val s = 1f + .05f * curAnim.value
+                scaleX = s; scaleY = s
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+            }, verticalAlignment = Alignment.CenterVertically) {
                 T(t.title, 16, fg, if (current) 700 else 600, lh = 1.4f, modifier = Modifier.weight(1f, fill = false))
                 if (t.vip) { Spacer(Modifier.width(6.dp)); VipTag() }
             }

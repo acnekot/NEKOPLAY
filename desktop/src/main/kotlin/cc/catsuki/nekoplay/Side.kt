@@ -78,25 +78,33 @@ object SideMode {
         var lastW = SidePref.width
         // 刚进入时鼠标多半还在窗口外（点菜单的位置），先停 2 秒再开始自动收起
         val grace = System.currentTimeMillis() + 2000
+        var lastNs = System.nanoTime()
         while (isActive) {
             val m = MouseInfo.getPointerInfo()?.location
             val b = window.bounds; val u = SideMode.area
             val inside = m != null && Rectangle(b.x - 6, b.y - 6, b.width + 12, b.height + 12).contains(m)
             val atEdge = m != null && m.y in u.y..(u.y + u.height) && (if (side < 0) m.x <= u.x + 1 else m.x >= u.x + u.width - 2)
             val now = System.currentTimeMillis()
+            val tNs = System.nanoTime()
+            val dtSec = ((tNs - lastNs) / 1_000_000_000.0).coerceIn(0.001, 0.05)
+            lastNs = tNs
             if (inside || atEdge) { outSince = 0; if (!show) SideMode.log("show m=$m b=$b"); show = true }
             else if (show) { if (outSince == 0L) outSince = now; if (now - outSince > 450 && now > grace) { show = false; SideMode.log("hide m=$m b=$b") } }
             val target = if (show) 1f else 0f
             val moving = f != target
             if (moving) {
-                // 缓动：每帧走剩下距离的三分之一，最后一点直接到位
-                f += (target - f) * .32f
-                if (kotlin.math.abs(target - f) < .01f) f = target
-                val e = f * f * (3 - 2 * f)
+                if (AnimStyle.off) f = target
+                else {
+                    // 按真实时间步长做指数阻尼（遵循 Anim.f 速率档位），跨系统保持一致顺滑手感
+                    val alpha = (1.0 - kotlin.math.exp(-22.0 * Anim.f * dtSec)).toFloat()
+                    f += (target - f) * alpha
+                    if (kotlin.math.abs(target - f) < .004f) f = target
+                }
+                val e = f * f * (3f - 2f * f)
                 SideMode.place(window, e)
             } else if (SidePref.width != lastW) SideMode.place(window, f)
             lastW = SidePref.width
-            delay(if (moving) 12 else 40)
+            delay(if (moving) 8 else 40)
         }
     }
 }

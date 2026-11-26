@@ -56,10 +56,12 @@ import androidx.compose.runtime.withFrameMillis
     val st by Engine.state.collectAsState()
     val t = st.current ?: return
     val p = c
-    Box(Modifier.fillMaxWidth().height(60.dp)) {
+    var barW by remember { mutableFloatStateOf(1f) }
+    val dens = LocalDensity.current
+    Box(Modifier.fillMaxWidth().height(60.dp).onSizeChanged { barW = it.width.toFloat().coerceAtLeast(1f) }) {
         Row(Modifier.fillMaxSize().background(barBg()).drawBehind { if (!Look.flat) drawRect(p.l2, size = Size(size.width, 1.dp.toPx())) }
-            .press { nav.lyrics = false; nav.player = true }.padding(start = 14.dp, end = 6.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Cover(t.cover, 40.dp, t.title)
+            .press { SharedHero.capture("now:${t.id}", t.cover, t.title); nav.lyrics = false; nav.player = true }.padding(start = 14.dp, end = 6.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Cover(t.cover, 40.dp, t.title, modifier = Modifier.heroAnchor("now:${t.id}", t.cover, t.title))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) { T(t.title, 15, w = 700, lh = 1.3f); T(t.artist, 12, p.s, lh = 1.3f) }
             Box(Modifier.size(40.dp, 48.dp).holdScrub(-1, enabled = !st.fm, haptic = true) { if (st.fm) { Engine.fmTrash(); nav.toast = "不再推荐这首" } else Engine.prev() }, contentAlignment = Alignment.Center) { NIcon(if (st.fm) NIcons.trash else NIcons.prev, 19.dp, if (ScrubController.dir < 0) p.p else p.k) }
@@ -68,14 +70,13 @@ import androidx.compose.runtime.withFrameMillis
         }
         var scrub by remember { mutableStateOf<Float?>(null) }
         Box(Modifier.offset(y = (-7).dp)) { ScrubBar(t.durationMs) { scrub = it } }
-        // 拖动时，时间气泡跟着手指
+        // 拖动时，时间气泡跟着手指（去掉 BoxWithConstraints，直接用已测宽度定位）
         scrub?.let { f ->
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val w = maxWidth
-                val x = (w * f - 26.dp).coerceIn(4.dp, (w - 56.dp).coerceAtLeast(4.dp))
-                Box(Modifier.offset(x = x, y = (-38).dp).size(52.dp, 26.dp).background(p.k), contentAlignment = Alignment.Center) {
-                    T(fmt((f * t.durationMs).toLong()), 12, p.tagFg, mono = true)
-                }
+            val bubbleW = with(dens) { 52.dp.toPx() }
+            val pad = with(dens) { 4.dp.toPx() }
+            val xPx = (barW * f - bubbleW / 2f).coerceIn(pad, (barW - bubbleW - pad).coerceAtLeast(pad))
+            Box(Modifier.graphicsLayer { translationX = xPx; translationY = -38.dp.toPx() }.size(52.dp, 26.dp).background(p.k), contentAlignment = Alignment.Center) {
+                T(fmt((f * t.durationMs).toLong()), 12, p.tagFg, mono = true)
             }
         }
     }
@@ -89,6 +90,13 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     val drag = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val copy = rememberCopy()
+    var wasOpen by remember { mutableStateOf(nav.player) }
+    LaunchedEffect(nav.player) {
+        if (wasOpen && !nav.player && drag.value < 24f) {
+            Engine.state.value.current?.let { SharedHero.flyBack("now:${it.id}") }
+        }
+        wasOpen = nav.player
+    }
     AnimatedVisibility(nav.player,
         enter = if (MotionEffects.pageScale && !AnimStyle.off) slideInVertically(Motion.page()) { it / 4 } + fadeIn(Motion.page()) + scaleIn(Motion.page(), initialScale = .96f) else slideInVertically(sp) { it },
         exit = if (MotionEffects.pageScale && !AnimStyle.off) slideOutVertically(Motion.standard()) { it / 4 } + fadeOut(Motion.quick()) + scaleOut(Motion.standard(), targetScale = .97f) else slideOutVertically(sp) { it }) {
@@ -102,18 +110,41 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
         LaunchedEffect(t?.id) { t?.let { runCatching { LyricCache.get(it.id) } } }
         var showTr by remember { mutableStateOf(true) }
         val p = c
-        // 播放页整块吃掉点击：空白处（比如没有歌词时）不会点穿到后面的歌单
-        BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer { translationY = drag.value }.background(p.page).pointerInput(Unit) { detectTapGestures { } }) {
+        var rootH by remember { mutableFloatStateOf(1f) }
+        val wideP = Screen.wide
+        // 播放页整块吃掉点击：外层改用普通 Box + onSizeChanged；下拉时联动微缩与速度甩关，空间过渡连贯
+        Box(Modifier.fillMaxSize().onSizeChanged { rootH = it.height.toFloat().coerceAtLeast(1f) }.drawBehind {
+            val dv = drag.value
+            if (dv > 0.5f) {
+                val remain = (1f - dv / (rootH * 0.7f)).coerceIn(0f, 1f)
+                drawRect(Color.Black.copy(alpha = 0.22f * remain))
+            }
+        }) {
+        Box(Modifier.fillMaxSize().graphicsLayer {
+            val dv = drag.value
+            translationY = dv
+            if (dv > 0.5f && MotionEffects.pageScale) {
+                val sc = 1f - 0.04f * (dv / rootH).coerceIn(0f, 1f)
+                scaleX = sc; scaleY = sc
+            }
+        }.background(p.page).pointerInput(Unit) { detectTapGestures { } }) {
             BgLayer()
-            val h = constraints.maxHeight.toFloat()
-            val wideP = maxWidth >= 900.dp
             // 矮屏时顶栏收起了，播放页自己躲开状态栏
             Column(Modifier.fillMaxSize().then(if (Screen.short && !wideP) Modifier.statusBarsPadding() else Modifier)) {
-                // 顶栏：按住下拉可以跟手收起
+                // 顶栏：按住下拉可跟手收起，快速向下甩动直接收起
                 if (!wideP) Row(Modifier.fillMaxWidth().height(if (Screen.short) 40.dp else 48.dp).pointerInput(Unit) {
-                    detectVerticalDragGestures(onDragEnd = {
-                        scope.launch { if (drag.value > h * .18f) nav.player = false else drag.animateTo(0f, Motion.hero()) }
-                    }) { _, dy -> scope.launch { drag.snapTo((drag.value + dy).coerceAtLeast(0f)) } }
+                    val vt = androidx.compose.ui.input.pointer.util.VelocityTracker()
+                    detectVerticalDragGestures(
+                        onDragStart = { vt.resetTracking() },
+                        onDragEnd = {
+                            val vy = vt.calculateVelocity().y
+                            scope.launch { if (drag.value > rootH * .18f || vy > 950f) nav.player = false else drag.animateTo(0f, Motion.hero()) }
+                        },
+                        onDragCancel = { scope.launch { drag.animateTo(0f, Motion.hero()) } },
+                    ) { ch, dy ->
+                        vt.addPosition(ch.uptimeMillis, ch.position)
+                        scope.launch { drag.snapTo((drag.value + dy).coerceAtLeast(0f)) }
+                    }
                 }.drawBehind { if (!Look.flat) drawRect(p.l2, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp) }
                     // 矮屏不显示 NOW PLAYING / LYRICS 标题，省出高度给封面
@@ -145,7 +176,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                         .then(if (nav.lyrics) Modifier else Modifier.pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial).changes.forEach { it.consume() } } })) {
                         Lyrics(t, showTr, active = nav.lyrics) { nav.lyrics = false }
                     }
-                    // 封面：始终按大尺寸解码，切换封面/歌词全程仅在 graphicsLayer 做位移与缩放，0 重组
+                    // 封面：始终按大尺寸解码，切换封面/歌词全程仅在 graphicsLayer 做位移与缩放，0 重组；接入 heroAnchor 支持开合直飞
                     Box(Modifier.graphicsLayer {
                         val lt = ltState.value
                         val cs = lerp(coverNow, 48 * dp, lt)
@@ -153,13 +184,22 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                         translationX = lerp((w - coverNow) / 2, 18 * dp, lt)
                         translationY = lerp(nowTop, 8 * dp, lt)
                         scaleX = cs / coverNow; scaleY = cs / coverNow
-                    }.pointerInput(nav.lyrics) {
-                        // 封面视图下往下拖封面 = 点 ⌄ 收起；歌词模式不拦，留给歌词滚动
-                        if (!nav.lyrics) detectVerticalDragGestures(onDragEnd = {
-                            scope.launch { if (drag.value > h * .18f) nav.player = false else drag.animateTo(0f, Motion.hero()) }
-                        }, onDragCancel = {
-                            scope.launch { drag.animateTo(0f, Motion.hero()) }
-                        }) { ch, dy -> ch.consume(); scope.launch { drag.snapTo((drag.value + dy).coerceAtLeast(0f)) } }
+                    }.heroAnchor("now:${t.id}", t.cover, t.title).pointerInput(nav.lyrics) {
+                        // 封面视图下往下拖封面或快速向下甩动 = 收起播放页；歌词模式不拦，留给歌词滚动
+                        if (!nav.lyrics) {
+                            val vt = androidx.compose.ui.input.pointer.util.VelocityTracker()
+                            detectVerticalDragGestures(
+                                onDragStart = { vt.resetTracking() },
+                                onDragEnd = {
+                                    val vy = vt.calculateVelocity().y
+                                    scope.launch { if (drag.value > rootH * .18f || vy > 950f) nav.player = false else drag.animateTo(0f, Motion.hero()) }
+                                },
+                                onDragCancel = { scope.launch { drag.animateTo(0f, Motion.hero()) } },
+                            ) { ch, dy ->
+                                ch.consume(); vt.addPosition(ch.uptimeMillis, ch.position)
+                                scope.launch { drag.snapTo((drag.value + dy).coerceAtLeast(0f)) }
+                            }
+                        }
                     }.then(Modifier.clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { nav.lyrics = !nav.lyrics })) {
                         androidx.compose.animation.Crossfade(t.cover, animationSpec = tween(Motion.crossfadeMs), label = "pCover") { url -> Cover(url, coverDp, t.title) }
                     }
@@ -195,6 +235,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                 }
             }
         }
+        }
     }
 }
 
@@ -227,14 +268,14 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     }
 }
 
-/** 缓冲超过 0.4 秒才显示加载点 */
+/** 缓冲超过 0.4 秒才显示加载点（仅在 graphicsLayer 读动画值，0 重组） */
 @Composable private fun LoadingDots() {
     var show by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { kotlinx.coroutines.delay(400); show = true }
     if (!show) NIcon(NIcons.play, 22.dp, Color.White)
     else {
-        val a by androidx.compose.animation.core.rememberInfiniteTransition(label = "ld").animateFloat(.3f, 1f, androidx.compose.animation.core.infiniteRepeatable(tween(500), androidx.compose.animation.core.RepeatMode.Reverse), label = "a")
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { repeat(3) { Box(Modifier.size(5.dp).graphicsLayer { alpha = if (it == 1) 1.3f - a else a }.background(Color.White)) } }
+        val a = androidx.compose.animation.core.rememberInfiniteTransition(label = "ld").animateFloat(.3f, 1f, androidx.compose.animation.core.infiniteRepeatable(tween(500), androidx.compose.animation.core.RepeatMode.Reverse), label = "a")
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { repeat(3) { Box(Modifier.size(5.dp).graphicsLayer { val v = a.value; alpha = if (it == 1) 1.3f - v else v }.background(Color.White)) } }
     }
 }
 
@@ -246,36 +287,30 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     val nav = LocalNav.current
     val p = c
     val bx = BtnCtx(t, st, showTr, toggleTr)
-    // 歌词顶端和封面顶端对齐：记下封面在播放页里的纵向位置
-    var coverY by remember { mutableStateOf(-1f) }
-    var rightY by remember { mutableStateOf(0f) }
+    // 歌词顶端和封面顶端对齐：仅在坐标变化超过 1px 时更新，避免拖窗高频回写触发多余重组
+    var coverY by remember { mutableFloatStateOf(-1f) }
+    var rightY by remember { mutableFloatStateOf(0f) }
     val dens = LocalDensity.current
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-    // 队列栏展开 / 收起是动画：左栏宽度按「动画结束后」的目标来算，再平滑过渡。
-    // 之前按每一帧的实际宽度算，加上左栏比例瞬间切换，封面会先变大再变小（抽一下）
+    // 仅在队列栏开关时跑弹簧插值；拖窗缩放时 queueAnim 恒定在 0 或 1，封面与左栏 1:1 实时贴合零追尾滞后
     val queueOpen = nav.side == 2
-    // 左栏按内容宽度：刚好包住「收起按钮 + 封面 + 按钮竖栏」，再留一段间距，剩下的全给歌词。
-    // 封面大小由高度和设置里的百分比决定；宽度最多用到一半，保证歌词至少占一半
-    val sideW0 = if (PlayerLayout.keys(true, "side").isEmpty()) 0.dp else 52.dp
+    val queueAnim = animateFloatAsState(if (queueOpen) 1f else 0f, if (AnimStyle.off) androidx.compose.animation.core.snap() else spring(1f, Anim.stiff(Spring.StiffnessMediumLow)), label = "qOpen")
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val sideKeys = PlayerLayout.keys(true, "side")
+    val sideW0 = if (sideKeys.isEmpty()) 0.dp else 52.dp
     val chrome = 44.dp + 56.dp + sideW0 + 16.dp
-    val avail = maxWidth - if (queueOpen) 363.dp else 0.dp
-    val coverT = minOf(minOf(maxHeight - 290.dp, 560.dp) * (UiPref.coverPct / 100f), avail * .5f - chrome).coerceAtLeast(200.dp)
-    val leftTarget = coverT + chrome + 56.dp
-    val rightTarget = maxWidth - (if (queueOpen) 363.dp else 0.dp) - leftTarget
-    val leftW by animateDpAsState(leftTarget, spring(1f, Anim.stiff(Spring.StiffnessMediumLow)), label = "leftW")
-    val totalH = maxHeight
+    val hLimit = minOf(maxHeight - 290.dp, 560.dp) * (UiPref.coverPct / 100f)
+    val coverClosed = minOf(hLimit, maxWidth * .5f - chrome).coerceAtLeast(200.dp)
+    val coverOpened = minOf(hLimit, (maxWidth - 363.dp) * .5f - chrome).coerceAtLeast(200.dp)
+    val q = queueAnim.value
+    val cover = coverClosed + (coverOpened - coverClosed) * q
+    val leftW = cover + chrome + 56.dp
+    val rightTarget = (maxWidth - (if (queueOpen) 363.dp else 0.dp) - (if (queueOpen) coverOpened else coverClosed) - chrome - 56.dp).coerceAtLeast(160.dp)
     Row(Modifier.fillMaxSize()) {
         Box(Modifier.width(leftW).fillMaxHeight().clipToBounds(), contentAlignment = Alignment.CenterStart) {
-            // 封面宽度 = 进度条宽度（控制区左右各留 22 的内边距，所以外框比封面宽 44）
-            // 左边留 48 给收起按钮，右边是按钮竖栏（类似 Hydrogen）；封面大小在设置里按百分比调
-            val sideKeys = PlayerLayout.keys(true, "side")
-            val sideW = if (sideKeys.isEmpty()) 0.dp else 52.dp
-            // 百分比只按高度缩：开了队列 / 评论、左栏变窄时，封面先用满宽度，不会再被缩一遍变得很小
-            val cover by animateDpAsState(coverT, spring(1f, Anim.stiff(Spring.StiffnessMediumLow)), label = "cover")
             Row(Modifier.padding(start = 56.dp), verticalAlignment = Alignment.Bottom) {
             Column(Modifier.width(cover + 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                // 解码尺寸固定：封面大小在动画时每帧都变，按实际尺寸解码会每帧重新加载图片、闪一下
-                Box(Modifier.onGloballyPositioned { coverY = it.positionInRoot().y }) {
+                // 解码尺寸固定 560dp；接入 heroAnchor 支持从底部播放条直飞大封面
+                Box(Modifier.onPlaced { val ny = it.positionInRoot().y; if (kotlin.math.abs(ny - coverY) > 1f) coverY = ny }.heroAnchor("now:${t.id}", t.cover, t.title)) {
                     androidx.compose.animation.Crossfade(t.cover, animationSpec = tween(Motion.crossfadeMs), label = "wCover") { url -> Cover(url, cover, t.title, decodeSize = 560.dp) }
                 }
                 Spacer(Modifier.height(22.dp))
@@ -317,7 +352,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             Box(Modifier.align(Alignment.TopStart).padding(8.dp).size(44.dp).press { nav.player = false }, contentAlignment = Alignment.Center) { NIcon(NIcons.chevronDown, 20.dp, p.s) }
         }
         // 右栏：歌词；打开评论时换成评论（从右边滑进来）
-        Box(Modifier.weight(1f).fillMaxHeight().clipToBounds().onGloballyPositioned { rightY = it.positionInRoot().y }) {
+        Box(Modifier.weight(1f).fillMaxHeight().clipToBounds().onPlaced { val ny = it.positionInRoot().y; if (kotlin.math.abs(ny - rightY) > 1f) rightY = ny }) {
             AnimatedContent(nav.comments, Modifier.fillMaxSize(), transitionSpec = {
                 if (targetState != null) (slideInHorizontally(Motion.page()) { it / 3 } + fadeIn(Motion.standard())) togetherWith fadeOut(Motion.quick())
                 else fadeIn(Motion.standard()) togetherWith (slideOutHorizontally(Motion.standard()) { it / 3 } + fadeOut(Motion.quick()))

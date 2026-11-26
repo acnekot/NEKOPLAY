@@ -26,6 +26,8 @@ import cc.catsuki.nekoplay.Tag
 import cc.catsuki.nekoplay.c
 import cc.catsuki.nekoplay.nbf
 import cc.catsuki.nekoplay.press
+import cc.catsuki.nekoplay.tr
+import cc.catsuki.nekoplay.trKnown
 
 /** 设置 → 功能管理：支持「关联集群」一键总控与「单功能」精细开关，并同步展示外置功能/动效插件 */
 @Composable fun FeaturesPage() {
@@ -43,9 +45,9 @@ import cc.catsuki.nekoplay.press
     LazyColumn(Modifier.widthIn(max = 860.dp).fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 36.dp)) {
         item {
             Column(Modifier.padding(bottom = 14.dp)) {
-                T("内置模块 $builtinOn/${Features.list.size} 已开启 · 外置功能插件 $extOn/${extFeatures.size} 已开启", 13, p.p, 700, mono = true)
+                T(trKnown("内置模块 $builtinOn/${Features.list.size} · 外置功能 $extOn/${extFeatures.size}"), 13, p.p, 700, mono = true)
                 Spacer(Modifier.height(4.dp))
-                T("关闭的功能会立即隐藏入口并停用后台能力，核心播放不受影响；可按集群一键开关，也可独立微调单个功能。", 12, p.s, lh = 1.45f, lines = 3)
+                T(tr("关闭的功能会立即隐藏入口并停用后台能力，核心播放不受影响；可按集群一键开关，也可独立微调单个功能。"), 12, p.s, lh = 1.45f, lines = 3)
                 Spacer(Modifier.height(12.dp))
                 ChipRow(listOf("关联集群", "全部单功能"), viewMode) { viewMode = it }
             }

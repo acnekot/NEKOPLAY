@@ -21,6 +21,7 @@ import cc.catsuki.nekoplay.T
 import cc.catsuki.nekoplay.Tag
 import cc.catsuki.nekoplay.TrackRow
 import cc.catsuki.nekoplay.c
+import cc.catsuki.nekoplay.tr
 import cc.catsuki.nekoplay.two
 
 @Composable fun StatsPage() {
@@ -41,8 +42,8 @@ import cc.catsuki.nekoplay.two
         item {
             Column {
                 Tag("STATS"); Spacer(Modifier.height(4.dp))
-                T("听歌统计", Fs.HERO, w = 800, lh = 1.3f)
-                T("只统计这台设备上的播放", 13, p.s)
+                T(tr("听歌统计"), Fs.HERO, w = 800, lh = 1.3f)
+                T(tr("只统计这台设备上的播放"), 13, p.s)
                 Spacer(Modifier.height(14.dp))
                 ChipRow(listOf("今天", "7 天", "30 天", "全部"), range) { range = it }
                 Spacer(Modifier.height(14.dp))

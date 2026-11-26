@@ -47,17 +47,18 @@ import androidx.compose.foundation.lazy.rememberLazyListState
             Column {
                 Tag("ARTIST"); Spacer(Modifier.height(12.dp))
                 Row(Modifier.height(112.dp)) {
-                    Cover(a?.pic, 112.dp, pg.name)
+                    Cover(a?.pic, 112.dp, pg.name, modifier = Modifier.heroAnchor("art:${pg.id}", a?.pic, pg.name))
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         T(pg.name, 24, w = 800, lines = 2, lh = 1.25f)
                         Spacer(Modifier.height(4.dp))
                         T(if (a == null) "LOADING" else "${two(a.songs)} 首 · ${two(a.albums)} 张专辑", 12, p.s, mono = true, ls = .04f)
-                        Spacer(Modifier.weight(1f)); T("${Plugins.sourceName(pg.id) ?: "在线音源"} · 歌手", 13, p.s)
+                        Spacer(Modifier.weight(1f)); T("${Plugins.sourceName(pg.id) ?: tr("在线音源")} · ${tr("歌手")}", 13, p.s)
                     }
                 }
-                if (!a?.brief.isNullOrBlank()) Box(Modifier.padding(top = 14.dp).press { expand = !expand }) {
-                    T(a!!.brief, 13, p.s, lines = if (expand) 40 else 3, lh = 1.6f)
+                val brief = a?.brief
+                if (!brief.isNullOrBlank()) Box(Modifier.padding(top = 14.dp).press { expand = !expand }) {
+                    T(brief, 13, p.s, lines = if (expand) 40 else 3, lh = 1.6f)
                 }
                 Spacer(Modifier.height(16.dp))
                 ActionRow {
@@ -77,8 +78,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
         if (albums.isNotEmpty()) item {
             LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 items(albums, key = { it.id }) { al ->
-                    Column(Modifier.width(120.dp).press { nav.push(Page.Album(al.id, al.name, al.pic)) }) {
-                        Cover(al.pic, 120.dp, al.name); Spacer(Modifier.height(8.dp))
+                    Column(Modifier.width(120.dp).press { SharedHero.capture("alb:${al.id}", al.pic, al.name); nav.push(Page.Album(al.id, al.name, al.pic)) }) {
+                        Cover(al.pic, 120.dp, al.name, modifier = Modifier.heroAnchor("alb:${al.id}", al.pic, al.name)); Spacer(Modifier.height(8.dp))
                         T(al.name, 15, w = 700, lh = 1.35f); T(listOf(al.year, if (al.size > 0) "${al.size} 首" else "").filter { it.isNotEmpty() }.joinToString(" · "), 13, p.s)
                     }
                 }
@@ -120,7 +121,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
             Column {
                 Tag("ALBUM"); Spacer(Modifier.height(12.dp))
                 Row(Modifier.height(112.dp)) {
-                    Cover(al?.pic ?: pg.cover, 112.dp, pg.name)
+                    Cover(al?.pic ?: pg.cover, 112.dp, pg.name, modifier = Modifier.heroAnchor("alb:${pg.id}", al?.pic ?: pg.cover, pg.name))
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         T(pg.name, 24, w = 800, lines = 2, lh = 1.25f)
@@ -164,7 +165,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
     var err by remember(pg.uid) { mutableStateOf<String?>(null) }
     val u by produceState<User?>(null, pg.uid, canUser) {
         if (!canUser) {
-            value = User(pg.uid, if (isMe) me.name else pg.name, if (isMe) me.avatar.ifEmpty { null } else null, null, "${src?.name ?: "当前音源"}未提供详细主页信息", 0, 0, 0, 0, false)
+            value = User(pg.uid, if (isMe) me.name else pg.name, if (isMe) me.avatar.ifEmpty { null } else null, null, "${src.name}未提供详细主页信息", 0, 0, 0, 0, false)
             return@produceState
         }
         try { value = Ncm.user(pg.uid) } catch (e: Exception) { err = e.message }
@@ -274,8 +275,8 @@ private fun Modifier.drawBehindLines(col: Color, left: Boolean, top: Boolean) = 
         }
         items(list.size, key = { list[it].id }) { i ->
             val al = list[i]
-            Column(Modifier.press { nav.push(Page.Album(al.id, al.name, al.pic)) }) {
-                BoxWithConstraints(Modifier.fillMaxWidth()) { Cover(al.pic, maxWidth, al.name) }
+            Column(Modifier.press { SharedHero.capture("alb:${al.id}", al.pic, al.name); nav.push(Page.Album(al.id, al.name, al.pic)) }) {
+                CoverFill(al.pic, al.name, modifier = Modifier.heroAnchor("alb:${al.id}", al.pic, al.name))
                 Spacer(Modifier.height(8.dp))
                 T(al.name, 15, w = 700, lh = 1.35f, lines = 2); T(listOf(al.year, if (al.size > 0) "${al.size} 首" else "").filter { it.isNotEmpty() }.joinToString(" · "), 13, p.s)
             }

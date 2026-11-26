@@ -195,4 +195,59 @@ class CoreStateTest {
             I18n.set(prev)
         }
     }
+
+    @Test fun uiScalePreviewComputesExactGpuRatioAndFreezesOnlyDuringUserDrag() {
+        UiScalePreview.clear()
+        UiScalePreview.committedUserScale = 1.0f
+        UiScalePreview.committedAutoScale = 1.0f
+        assertEquals(1.0f, UiScalePreview.gpuRatio(), 0.0001f)
+        assertFalse(UiScalePreview.freezeBreakpoint)
+
+        // 拖动界面缩放滑块：实时按比例缩放且冻结宽窄屏断点
+        UiScalePreview.liveUserScale = 1.25f
+        assertTrue(UiScalePreview.freezeBreakpoint)
+        assertEquals(1.25f, UiScalePreview.gpuRatio(), 0.0001f)
+
+        // 松手原子提交后恢复 1:1
+        UiScalePreview.committedUserScale = 1.25f
+        UiScalePreview.liveUserScale = null
+        assertFalse(UiScalePreview.freezeBreakpoint)
+        assertEquals(1.0f, UiScalePreview.gpuRatio(), 0.0001f)
+
+        // 桌面 autoScale 拖窗期间实时跟随且不冻结断点
+        UiScalePreview.liveAutoScale = 1.12f
+        assertFalse(UiScalePreview.freezeBreakpoint)
+        assertEquals(1.12f, UiScalePreview.gpuRatio(), 0.0001f)
+        UiScalePreview.clear()
+        UiScalePreview.committedUserScale = 1.0f
+        UiScalePreview.committedAutoScale = 1.0f
+    }
+
+    @Test fun pluginHostExposesActiveLanguage() = runBlocking {
+        TestEnv.init()
+        val prev = I18n.code
+        val langPlug = """
+            // @id _test_host_lang
+            // @name Lang Probe
+            // @type feature
+            // @permissions storage
+            // @version 1.0.0
+            // @api 2
+            nk.registerFeature({
+              action() { return { message: nk.host.lang }; }
+            });
+        """.trimIndent()
+        val s = Plugins.import(langPlug)
+        try {
+            I18n.set(I18n.EN)
+            val r1 = s.call("action") as org.json.JSONObject
+            assertEquals(I18n.EN, r1.getString("message"))
+            I18n.set(I18n.JA)
+            val r2 = s.call("action") as org.json.JSONObject
+            assertEquals(I18n.JA, r2.getString("message"))
+        } finally {
+            I18n.set(prev)
+            Plugins.delete(s.id)
+        }
+    }
 }

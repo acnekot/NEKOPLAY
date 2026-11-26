@@ -27,9 +27,16 @@ Copyright (c) 2024-2026 acnekot. All Rights Reserved.
    - 本软件所引用或随安装包附带的第三方开源库与字体组件，其版权归各自原作者所有，
      并继续遵循其各自的开源许可证（详见 README.md「第三方组件」章节）。
 
-4. 免责声明
+4. 插件生态与第三方脚本条款
+   - 本软件本体为完全中立的本地媒体播放器，不内置、不存储、不分发任何在线音乐内容或服务接口。
+   - 官方示例插件与扩展功能插件独立维护于外部仓库（acnekot/NEKOPLAY_PLUGINS），采用独立的
+     MIT 开源许可证，与本软件本体许可协议相互独立、互不影响。
+   - 用户自行导入、安装或订阅的任何插件脚本均在本地沙箱环境运行，仅代表用户自主选择；本软件
+     不对任何第三方插件的可用性、合法性或数据行为作出担保，亦不支持任何绕过版权保护或付费限制的行为。
+
+5. 免责声明
    - 本软件按「现状」（AS IS）提供，作者不对软件的适用性、完整性或无错误性作任何明示或暗示的担保。
-   - 因使用或无法使用本软件所产生的任何直接或间接损失，作者不承担责任。
+   - 因使用或无法使用本软件及第三方插件所产生的任何直接或间接损失，作者不承担责任。
 
 ================================================================================
 English Terms
@@ -58,7 +65,19 @@ license.
    - Third-party open-source libraries and fonts included or referenced by this
      software remain subject to their respective licenses (see README.md).
 
-4. Disclaimer
+4. Plugin Ecosystem & Third-Party Scripts
+   - NEKOPLAY is a neutral local media player and does not bundle, host, or
+     distribute online music content or service integrations.
+   - Official example and extension plugins are maintained separately in
+     acnekot/NEKOPLAY_PLUGINS under the MIT License, completely independent of
+     this software license.
+   - Any plugin script or subscription imported by the user runs locally at the
+     user's own discretion and responsibility. The author makes no warranty as
+     to third-party plugins and does not endorse circumventing DRM or service
+     restrictions.
+
+5. Disclaimer
    - This software is provided "AS IS", without warranty of any kind, express or
      implied. In no event shall the author be liable for any claim, damages, or
-     other liability arising from the use of this software.
+     other liability arising from the use of this software or any third-party
+     plugins.

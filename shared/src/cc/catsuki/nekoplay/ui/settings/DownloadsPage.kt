@@ -35,6 +35,8 @@ import cc.catsuki.nekoplay.TrackRow
 import cc.catsuki.nekoplay.bottomLine
 import cc.catsuki.nekoplay.c
 import cc.catsuki.nekoplay.press
+import cc.catsuki.nekoplay.tr
+import cc.catsuki.nekoplay.trKnown
 import cc.catsuki.nekoplay.trackActions
 import cc.catsuki.nekoplay.two
 
@@ -66,8 +68,8 @@ fun downloadSheet(nav: Nav, list: List<Track>) {
         item {
             Column {
                 Tag("DOWNLOADS"); Spacer(Modifier.height(4.dp))
-                T("本地下载", Fs.HERO, w = 800, lh = 1.3f)
-                T("${two(items.size)} 首 · ${(total / 1048576.0 + 0.5).toLong()} MB", 12, p.s, mono = true, ls = .04f)
+                T(tr("本地下载"), Fs.HERO, w = 800, lh = 1.3f)
+                T("${trKnown("${two(items.size)} 首")} · ${(total / 1048576.0 + 0.5).toLong()} MB", 12, p.s, mono = true, ls = .04f)
                 T(Downloads.dir.absolutePath + "  ✎", 12, p.s, lines = 2, modifier = Modifier.press { dirSheet(nav) })
                 Spacer(Modifier.height(14.dp))
                 if (list.isNotEmpty()) ActionRow {
@@ -75,7 +77,7 @@ fun downloadSheet(nav: Nav, list: List<Track>) {
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(list, 0, shuffle = true) }
                 }
                 Spacer(Modifier.height(12.dp)); Rule()
-                if (items.isEmpty() && jobs.isEmpty() && failed.isEmpty()) T("还没有下载的歌：长按歌曲选「下载」，或在歌单页点下载按钮", 13, p.s, lines = 3, modifier = Modifier.padding(vertical = 28.dp))
+                if (items.isEmpty() && jobs.isEmpty() && failed.isEmpty()) T(tr("还没有下载的歌：长按歌曲选「下载」，或在歌单页点下载按钮"), 13, p.s, lines = 3, modifier = Modifier.padding(vertical = 28.dp))
             }
         }
         if (jobs.isNotEmpty()) {

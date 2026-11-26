@@ -22,6 +22,20 @@ private val CAP_NAMES = linkedMapOf(
     "manifest" to "功能声明", "profile" to "动效引擎", "config" to "热更新配置", "render" to "独立页面", "onTrackChange" to "切歌监听", "onPlayState" to "播控监听", "transformLyric" to "歌词处理", "action" to "快捷动作",
 )
 
+/** 首次导入插件或订阅前的安全与责任确认提示（确认后持久化不再重复弹窗） */
+internal fun confirmPluginNotice(nav: Nav, proceed: () -> Unit) {
+    val prefs = Plat.prefs("ui")
+    if (prefs.getBoolean("plugin_notice_ack", false)) { proceed(); return }
+    nav.sheet = SheetSpec(
+        "插件使用与安全提示",
+        "NEKOPLAY 本体为中立本地播放器，插件脚本在本地沙箱运行。请仅导入可信来源的脚本，并自行遵守对应服务条款；官方插件仓库采用独立 MIT 协议。",
+        listOf(SheetItem("我已知晓并继续") {
+            prefs.edit().putBoolean("plugin_notice_ack", true).apply()
+            proceed()
+        }),
+    )
+}
+
 /** 设置 → 插件：分为「音源插件」与「功能插件」两类管理 */
 @Composable fun PluginsPage() {
     val nav = LocalNav.current
@@ -38,24 +52,24 @@ private val CAP_NAMES = linkedMapOf(
         item {
             Column {
                 Tag("PLUGINS"); Spacer(Modifier.height(4.dp))
-                T("插件", Fs.HERO, w = 800, lh = 1.3f)
-                T("插件分为「音源插件」（提供曲库、搜索、播放与歌词）和「功能插件」（监听播放状态、歌词后处理与扩展动作），本体不内置任何在线音源", 13, p.s, lines = 4, lh = 1.5f)
+                T(tr("插件"), Fs.HERO, w = 800, lh = 1.3f)
+                T(tr("插件分为「音源插件」（提供曲库、搜索、播放与歌词）和「功能插件」（监听播放状态、歌词后处理与扩展动作），本体不内置任何在线音源"), 13, p.s, lines = 4, lh = 1.5f)
                 Spacer(Modifier.height(12.dp))
-                ChipRow(listOf("全部 (${list.size})", "音源插件 (${list.count { it.isSource }})", "功能插件 (${list.count { it.isFeature }})"), tab) { tab = it }
+                ChipRow(listOf("${tr("全部")} (${list.size})", "${tr("音源插件")} (${list.count { it.isSource }})", "${tr("功能插件")} (${list.count { it.isFeature }})"), tab) { tab = it }
                 Spacer(Modifier.height(14.dp))
                 ActionRow {
-                    if (picker != null) PrimaryBar(if (busy) "导入中…" else "从文件导入", NIcons.plus, Modifier.weight(1f)) { if (!busy) picker() }
+                    if (picker != null) PrimaryBar(if (busy) "导入中…" else "从文件导入", NIcons.plus, Modifier.weight(1f)) { if (!busy) confirmPluginNotice(nav) { picker() } }
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f).height(44.dp).nbf(1.dp, p.k).padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
-                        if (url.isEmpty()) T("插件地址 https://…/xxx.js", 13, p.s, mono = true)
+                        if (url.isEmpty()) T(tr("插件地址 https://…/xxx.js"), 13, p.s, mono = true)
                         BasicTextField(url, { url = it }, Modifier.fillMaxWidth(), singleLine = true, textStyle = TextStyle(color = p.k, fontSize = 13.sp, fontFamily = Mono), cursorBrush = SolidColor(p.p))
                     }
                     Spacer(Modifier.width(8.dp))
                     OutlineBtn("从网址导入", pad = 14.dp) {
                         if (busy || !url.trim().startsWith("http")) return@OutlineBtn
-                        busy = true; scope.launch { done(runCatching { Plugins.importUrl(url) }.onSuccess { url = "" }) }
+                        confirmPluginNotice(nav) { busy = true; scope.launch { done(runCatching { Plugins.importUrl(url) }.onSuccess { url = "" }) } }
                     }
                 }
                 Spacer(Modifier.height(18.dp)); Rule()
@@ -64,9 +78,9 @@ private val CAP_NAMES = linkedMapOf(
         pluginSubsSection(nav, tab)
         item {
             Column {
-                val head = when (tab) { 1 -> "SOURCE PLUGINS · 音源插件"; 2 -> "FEATURE PLUGINS · 功能插件"; else -> "INSTALLED · 已安装" }
-                Column(Modifier.padding(top = 26.dp, bottom = 4.dp)) { TagRow(head, 12.dp) { T("${two(shown.size)} 个", 13, p.s, mono = true) } }
-                if (shown.isEmpty()) T(if (tab == 2) "还没有功能插件。可在脚本开头声明 // @type feature 导入扩展功能插件" else "还没有插件。没有音源插件时只能播放本地音乐和 WebDAV 里的歌", 13, p.s, lines = 3, modifier = Modifier.padding(vertical = 14.dp))
+                val head = when (tab) { 1 -> "SOURCE PLUGINS · ${tr("音源插件")}"; 2 -> "FEATURE PLUGINS · ${tr("功能插件")}"; else -> "INSTALLED · ${tr("已安装")}" }
+                Column(Modifier.padding(top = 26.dp, bottom = 4.dp)) { TagRow(head, 12.dp) { T(trKnown("${two(shown.size)} 个"), 13, p.s, mono = true) } }
+                if (shown.isEmpty()) T(tr(if (tab == 2) "还没有功能插件。可在脚本开头声明 // @type feature 导入扩展功能插件" else "还没有插件。没有音源插件时只能播放本地音乐和 WebDAV 里的歌"), 13, p.s, lines = 3, modifier = Modifier.padding(vertical = 14.dp))
             }
         }
         items(shown, key = { it.id }) { s ->
@@ -75,27 +89,27 @@ private val CAP_NAMES = linkedMapOf(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            val badge = when (s.kind) { PluginKind.MOTION -> "动效"; PluginKind.PAGE -> "页面"; PluginKind.FEATURE -> "功能"; PluginKind.SOURCE -> "音源" }
+                            val badge = tr(when (s.kind) { PluginKind.MOTION -> "动效"; PluginKind.PAGE -> "页面"; PluginKind.FEATURE -> "功能"; PluginKind.SOURCE -> "音源" })
                             Box(Modifier.background(if (s.isFeature) p.k else p.p).padding(horizontal = 5.dp, vertical = 1.dp)) {
                                 T(badge, 9, if (s.isFeature) p.tagFg else androidx.compose.ui.graphics.Color.White, 800)
                             }
                             Spacer(Modifier.width(7.dp)); T(s.name, 16, if (on) p.k else p.s, 800)
                             Spacer(Modifier.width(8.dp)); T("v" + s.version, 11, p.s, mono = true)
                         }
-                        val sub = listOfNotNull(s.meta["author"]?.let { "作者 $it" }, s.meta["desc"]).joinToString(" · ")
+                        val sub = listOfNotNull(s.meta["author"]?.let { "${tr("作者")} $it" }, s.meta["desc"]).joinToString(" · ")
                         if (sub.isNotEmpty()) T(sub, 12, p.s, lines = 2, lh = 1.4f)
                     }
                     NSwitch(on) { v -> Plugins.set(s.id, v) }
                 }
                 Spacer(Modifier.height(6.dp))
-                val caps = CAP_NAMES.filterKeys { s.has(it) }.values
+                val caps = CAP_NAMES.filterKeys { s.has(it) }.values.map { tr(it) }
                 when {
-                    s.error != null -> T("出错：${s.error}", 12, p.bad, lines = 3)
-                    caps.isEmpty() -> T("还没加载（用到时自动加载）", 11, p.s, mono = true)
+                    s.error != null -> T("${tr("出错")}：${s.error}", 12, p.bad, lines = 3)
+                    caps.isEmpty() -> T(tr("还没加载（用到时自动加载）"), 11, p.s, mono = true)
                     else -> T(caps.joinToString(" · "), 11, p.s, mono = true, lines = 2)
                 }
                 if (s.permissions.isNotEmpty()) {
-                    val permText = "权限：" + s.permissions.joinToString(" · ") + if (!s.canNetwork) "（仅本地，无联网）" else ""
+                    val permText = "${tr("权限")}：" + s.permissions.joinToString(" · ") + if (!s.canNetwork) tr("（仅本地，无联网）") else ""
                     T(permText, 10, p.s, mono = true, lines = 1, modifier = Modifier.padding(top = 3.dp))
                 }
                 Row(Modifier.padding(top = 6.dp)) {

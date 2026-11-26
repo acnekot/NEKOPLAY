@@ -21,6 +21,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -160,19 +163,26 @@ class BgDraft {
  * 设置里的滑条：手指要按住约 0.3 秒才开始拖（防止滑动页面时误触），鼠标按下立刻生效；
  * 激活时轻震一下、线变粗、方块放大，进度用 150ms 匀速追上手指（和播放进度条一样的拖尾）。
  */
-@Composable fun NSlider(value: Float, range: ClosedFloatingPointRange<Float>, onDone: () -> Unit = {}, onChange: (Float) -> Unit) {
+@Composable fun NSlider(
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onDone: () -> Unit = {},
+    stableDrag: Boolean = false,
+    onChange: (Float) -> Unit,
+) {
     val p = c
     val span = range.endInclusive - range.start
     val f = ((value - range.start) / span).coerceIn(0f, 1f)
     var active by remember { mutableStateOf(false) }
     var hold by remember { mutableStateOf(false) }        // 正在按住等待激活
+    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val lin = androidx.compose.animation.core.LinearEasing
-    val fill = androidx.compose.animation.core.animateFloatAsState(f, androidx.compose.animation.core.tween(150, easing = lin), label = "f")
+    val fill = androidx.compose.animation.core.animateFloatAsState(f, androidx.compose.animation.core.tween(if (stableDrag && active) 0 else 150, easing = lin), label = "f")
     val th = androidx.compose.animation.core.animateFloatAsState(if (active) 1f else if (hold) .8f else .6f, androidx.compose.animation.core.tween(150, easing = lin), label = "t")
     val hh = androidx.compose.animation.core.animateFloatAsState(if (active) 6f else 4f, androidx.compose.animation.core.tween(150, easing = lin), label = "h")
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val cb by rememberUpdatedState(onChange); val done by rememberUpdatedState(onDone)
-    Box(Modifier.fillMaxWidth().height(32.dp).pointerInput(range) {
+    Box(Modifier.fillMaxWidth().height(32.dp).then(if (stableDrag) Modifier.onPlaced { coords = it } else Modifier).pointerInput(range, stableDrag) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             val mouse = down.type == androidx.compose.ui.input.pointer.PointerType.Mouse
@@ -195,17 +205,26 @@ class BgDraft {
             }
             if (!ok) return@awaitEachGesture
             active = true
-            cb(range.start + (down.position.x / size.width).coerceIn(0f, 1f) * span); down.consume()
+            // 实时缩放滑块启用 stableDrag：按下瞬间锁定物理轨道起点与宽度，拖动手势期间不受整屏缩放反馈干扰
+            val lc0 = if (stableDrag) coords?.takeIf { it.isAttached } else null
+            val rootLeft = lc0?.positionInRoot()?.x ?: 0f
+            val rootW = if (lc0 != null) (lc0.size.width * UiScalePreview.gpuRatio()).coerceAtLeast(1f) else size.width.toFloat().coerceAtLeast(1f)
+            fun fracOf(pos: Offset): Float {
+                val curLc = if (stableDrag) coords?.takeIf { it.isAttached } else null
+                return if (lc0 != null && curLc != null) ((curLc.localToRoot(pos).x - rootLeft) / rootW).coerceIn(0f, 1f)
+                else (pos.x / size.width.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
+            }
+            cb(range.start + fracOf(down.position) * span); down.consume()
             while (true) {
                 val e = awaitPointerEvent()
                 val ch = e.changes.firstOrNull { it.id == down.id } ?: break
                 if (!ch.pressed) break
-                cb(range.start + (ch.position.x / size.width).coerceIn(0f, 1f) * span); ch.consume()
+                cb(range.start + fracOf(ch.position) * span); ch.consume()
             }
             active = false; done()
         }
     }.drawBehind {
-        val y = size.height / 2; val h = hh.value.dp.toPx(); val t = 14.dp.toPx() * th.value; val fv = fill.value
+        val y = size.height / 2; val h = hh.value.dp.toPx(); val t = 14.dp.toPx() * th.value; val fv = if (stableDrag && active) f else fill.value
         drawRect(p.l3, Offset(0f, y - h / 2), Size(size.width, h))
         drawRect(p.p, Offset(0f, y - h / 2), Size(size.width * fv, h))
         drawRect(p.p, Offset((size.width * fv - t / 2).coerceIn(0f, (size.width - t).coerceAtLeast(0f)), y - t / 2), Size(t, t))
@@ -230,8 +249,11 @@ class BgDraft {
         kotlinx.coroutines.delay(120)
         dr.shown = withContext(Dispatchers.Default) { if (dr.blur < .5f) s0 else Bg.blurred(s0, dr.blur) }
     }
-    val win = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
-    val ratio = win.width.toFloat() / win.height.coerceAtLeast(1)
+    val winInfo = androidx.compose.ui.platform.LocalWindowInfo.current
+    val ratio by remember(winInfo) { derivedStateOf {
+        val sz = winInfo.containerSize
+        ((sz.width.toFloat() / sz.height.coerceAtLeast(1)) * 20f).toInt() / 20f
+    } }
     val has = dr.src != null
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 24.dp)) {
         item {

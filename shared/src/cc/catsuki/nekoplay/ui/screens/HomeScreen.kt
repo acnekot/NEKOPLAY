@@ -87,7 +87,7 @@ import java.util.Calendar
                     Column(Modifier.padding(top = if (mi > 0) 32.dp else 0.dp)) {
                         Tag("CONTINUE LISTENING"); Spacer(Modifier.height(12.dp))
                         Row(verticalAlignment = Alignment.Bottom) {
-                            Box(Modifier.press { if (st.current != null) { nav.lyrics = false; nav.player = true } else if (daily.isNotEmpty()) Engine.playList(daily, 0) }) { Cover(cur?.cover, 128.dp, cur?.title ?: "") }
+                            Box(Modifier.press { if (st.current != null) { SharedHero.capture("now:${st.current!!.id}", st.current!!.cover, st.current!!.title); nav.lyrics = false; nav.player = true } else if (daily.isNotEmpty()) Engine.playList(daily, 0) }) { Cover(cur?.cover, 128.dp, cur?.title ?: "", modifier = Modifier.heroAnchor(st.current?.let { "now:${it.id}" }, cur?.cover, cur?.title ?: "")) }
                             Spacer(Modifier.width(16.dp))
                             Column(Modifier.weight(1f)) {
                                 T(cur?.title ?: tr("还没有曲目"), Fs.PAGE, w = 800, lines = 3, lh = 1.1f)
@@ -191,7 +191,7 @@ import java.util.Calendar
                     item { Column(Modifier.padding(top = 24.dp, bottom = 12.dp)) { TagRow("FOR YOU", 12.dp) { LinkBtn("全部") { nav.push(Page.Playlists("rec", "", "推荐歌单")) } } } }
                     item {
                         LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                            items(recPl.take(12), key = { "rp" + it.id }, contentType = { "card" }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, "${two(p.count)} 首") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+                            items(recPl.take(12), key = { "rp" + it.id }, contentType = { "card" }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name, modifier = Modifier.heroAnchor("pl:${p.id}", p.cover, p.name)) }, p.name, "${two(p.count)} 首") { SharedHero.capture("pl:${p.id}", p.cover, p.name); nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
                         }
                     }
                 }
@@ -209,11 +209,11 @@ import java.util.Calendar
                     LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         likedLists.forEach { (src, lk) ->
                             val name = if (likedLists.size > 1) "${src.name} 我喜欢" else "我喜欢"
-                            item(key = "lk" + lk.id) { CardItem({ LikedCover(lk.cover, 132.dp) }, name, "${two(lk.count)} 首") { nav.push(if (src.id == mainId) Page.Detail("liked", lk.id, name, lk.cover) else Page.Detail("pl", lk.id, name, lk.cover)) } }
+                            item(key = "lk" + lk.id) { CardItem({ LikedCover(lk.cover, 132.dp, Modifier.heroAnchor("pl:${lk.id}", lk.cover, name)) }, name, "${two(lk.count)} 首") { SharedHero.capture("pl:${lk.id}", lk.cover, name); nav.push(if (src.id == mainId) Page.Detail("liked", lk.id, name, lk.cover) else Page.Detail("pl", lk.id, name, lk.cover)) } }
                         }
-                        item { CardItem({ RecentCover(rec.firstOrNull()?.cover, 132.dp) }, "最近播放", listMeta(rec)) { nav.push(Page.Detail("recent", "recent", "最近播放")) } }
+                        item { CardItem({ RecentCover(rec.firstOrNull()?.cover, 132.dp, Modifier.heroAnchor("pl:recent", rec.firstOrNull()?.cover, "最近播放")) }, "最近播放", listMeta(rec)) { SharedHero.capture("pl:recent", rec.firstOrNull()?.cover, "最近播放"); nav.push(Page.Detail("recent", "recent", "最近播放")) } }
                         val others = homePls.filter { !it.liked }.take(24)
-                        items(others, key = { it.id }, contentType = { "card" }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, "${two(p.count)} 首") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+                        items(others, key = { it.id }, contentType = { "card" }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name, modifier = Modifier.heroAnchor("pl:${p.id}", p.cover, p.name)) }, p.name, "${two(p.count)} 首") { SharedHero.capture("pl:${p.id}", p.cover, p.name); nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
                     }
                 }
                 }
@@ -245,7 +245,7 @@ import java.util.Calendar
             l == null -> T("LOADING", 12, c.s, mono = true, ls = .06f)
             l.isEmpty() -> T("加载失败" + (err?.let { "：$it" } ?: ""), 13, c.s, lines = 3)
             else -> LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                items(l, key = { it.id }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name) }, p.name, if (p.count > 0) "${two(p.count)} 首" else "榜单") { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+                items(l, key = { it.id }) { p -> CardItem({ Cover(p.cover, 132.dp, p.name, modifier = Modifier.heroAnchor("pl:${p.id}", p.cover, p.name)) }, p.name, if (p.count > 0) "${two(p.count)} 首" else "榜单") { SharedHero.capture("pl:${p.id}", p.cover, p.name); nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
             }
         }
     }
@@ -284,7 +284,7 @@ object HomeSrc {
         TagRow("NEW ALBUMS · " + name.uppercase()); Spacer(Modifier.height(2.dp))
         T(name + "新碟", 24, w = 800, lh = 1.4f); Spacer(Modifier.height(10.dp))
         LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            items(l, key = { it.id }) { a -> CardItem({ Cover(a.pic, 132.dp, a.name) }, a.name, a.artist) { nav.push(Page.Album(a.id, a.name, a.pic)) } }
+            items(l, key = { it.id }) { a -> CardItem({ Cover(a.pic, 132.dp, a.name, modifier = Modifier.heroAnchor("alb:${a.id}", a.pic, a.name)) }, a.name, a.artist) { SharedHero.capture("alb:${a.id}", a.pic, a.name); nav.push(Page.Album(a.id, a.name, a.pic)) } }
         }
     }
 }

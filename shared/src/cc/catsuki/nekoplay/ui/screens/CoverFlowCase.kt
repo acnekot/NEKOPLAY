@@ -178,9 +178,16 @@ internal fun Modifier.cdThicknessEdge(dist: () -> Float, tiltX: () -> Float, til
             else -> LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(vertical = 2.dp)) {
                 itemsIndexed(tracks, key = { idx, t -> "${t.id}_$idx" }) { idx, t ->
                     val on = playingId == t.id
-                    Row(Modifier.fillMaxWidth().press { Engine.playList(tracks, idx) }.background(if (on) p.p.copy(alpha = 0.15f) else Color.Transparent).padding(horizontal = 3.dp, vertical = if (showArtist) 3.dp else 3.5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val selA = androidx.compose.animation.core.animateFloatAsState(if (on) 1f else 0f, Motion.standard(), label = "cdSel")
+                    Row(Modifier.fillMaxWidth().press { Engine.playList(tracks, idx) }.drawBehind {
+                        if (selA.value > 0.01f) drawRect(p.p.copy(alpha = 0.15f * selA.value))
+                    }.padding(horizontal = 3.dp, vertical = if (showArtist) 3.dp else 3.5.dp), verticalAlignment = Alignment.CenterVertically) {
                         T(two(idx + 1), 8, if (on) p.p else p.s, 600, mono = true, modifier = Modifier.width(18.dp))
-                        Column(Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f).graphicsLayer {
+                            val s = 1f + 0.045f * selA.value
+                            scaleX = s; scaleY = s
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+                        }) {
                             T(t.title, if (compact) 9 else 10, if (on) p.p else p.k, if (on) 700 else 600, lines = 1)
                             if (showArtist && t.artist.isNotBlank()) T(t.artist, 7, p.s, lines = 1)
                         }
@@ -199,7 +206,7 @@ internal fun Modifier.cdThicknessEdge(dist: () -> Float, tiltX: () -> Float, til
     canExpand: Boolean,
     isExpanded: Boolean,
     itemCount: Int,
-    sliderValue: Float,
+    sliderValue: () -> Float,
     onPlay: () -> Unit,
     onToggleExpand: () -> Unit,
     onToggleLandscapeExpand: () -> Unit,
@@ -231,7 +238,13 @@ internal fun Modifier.cdThicknessEdge(dist: () -> Float, tiltX: () -> Float, til
         }
         if (itemCount > 1) {
             Spacer(Modifier.height(10.dp))
-            NSlider(sliderValue.coerceIn(0f, (itemCount - 1).toFloat()), 0f..(itemCount - 1).toFloat(), onDone = onSlideEnd, onChange = onSlide)
+            CoverFlowSlider(itemCount, sliderValue, onSlideEnd, onSlide)
         }
     }
+}
+
+/** 独立读取 pos.value 的窄作用域滑条，避免 3D 封面墙滑动/惯性回弹时触发整页重组 */
+@Composable private fun CoverFlowSlider(itemCount: Int, valueProvider: () -> Float, onDone: () -> Unit, onChange: (Float) -> Unit) {
+    val maxV = (itemCount - 1).toFloat()
+    NSlider(valueProvider().coerceIn(0f, maxV), 0f..maxV, onDone = onDone, onChange = onChange)
 }

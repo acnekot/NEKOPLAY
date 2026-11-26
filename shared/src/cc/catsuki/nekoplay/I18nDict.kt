@@ -105,6 +105,20 @@ internal object I18nDict {
         "当前为预发布测试通道，直接下载对应平台安装包覆盖安装即可。" to "Beta channel: download your platform package to update in place.",
         "立即下载更新" to "Download Update", "查看详情" to "Release Notes", "跳过此版本" to "Skip Version", "稍后再说" to "Later",
         "打不开浏览器" to "Unable to open browser", "选择语言" to "Select Language",
+        // 插件、托盘与二级页补全
+        "音源插件" to "Sources", "功能插件" to "Extensions", "已安装" to "Installed", "安装" to "Install", "安装中…" to "Installing…",
+        "从文件导入" to "Import File", "从网址导入" to "Import URL", "导入中…" to "Importing…", "刷新" to "Refresh", "刷新中…" to "Refreshing…",
+        "添加订阅" to "Add Subscription", "添加" to "Add", "一键更新全部" to "Update All", "更新中…" to "Updating…",
+        "重新加载" to "Reload", "打开页面" to "Open Page", "执行" to "Run", "作者" to "Author", "权限" to "Permissions", "出错" to "Error",
+        "（仅本地，无联网）" to " (local only, offline)", "插件使用与安全提示" to "Plugin Safety Notice", "我已知晓并继续" to "I Understand & Continue",
+        "显示窗口" to "Show Window", "上一首" to "Previous", "下一首" to "Next", "打开桌面歌词" to "Show Desktop Lyrics",
+        "关闭桌面歌词" to "Hide Desktop Lyrics", "回正桌面歌词" to "Center Desktop Lyrics", "退出" to "Quit",
+        "关联集群" to "Groups", "全部单功能" to "All Features", "均衡器、低音、环绕、响度" to "EQ, Bass, Surround & Loudness",
+        "低音增强" to "Bass Boost", "环绕 / 3D" to "Surround / 3D", "响度增强" to "Loudness", "归零" to "Reset",
+        "允许读取音乐" to "Grant Audio Access", "重新扫描" to "Rescan", "扫描中…" to "Scanning…", "没有找到本地音乐" to "No local tracks found",
+        "只统计这台设备上的播放" to "Tracks playback on this device only", "今天" to "Today", "7 天" to "7 Days", "30 天" to "30 Days",
+        "WebDAV 备份" to "WebDAV Backup", "备份到网盘" to "Back Up", "从网盘恢复" to "Restore", "处理中…" to "Working…",
+        "拖动实时预览界面缩放，松手无感切回原生清晰渲染；小屏手机调小能看到更多内容" to "Drag for live GPU zoom preview; release for crisp native density",
     )
 
     val ja: Map<String, String> = mapOf(
@@ -208,6 +222,20 @@ internal object I18nDict {
         "当前为预发布测试通道，直接下载对应平台安装包覆盖安装即可。" to "テスト版チャンネルです。対応パッケージをダウンロードして上書き更新できます。",
         "立即下载更新" to "今すぐダウンロード", "查看详情" to "詳細を見る", "跳过此版本" to "スキップ", "稍后再说" to "あとで",
         "打不开浏览器" to "ブラウザを開けませんでした", "选择语言" to "言語を選択",
+        // プラグイン・トレイ・サブページ
+        "音源插件" to "音源プラグイン", "功能插件" to "機能プラグイン", "已安装" to "導入済み", "安装" to "導入", "安装中…" to "導入中…",
+        "从文件导入" to "ファイルから読込", "从网址导入" to "URL から読込", "导入中…" to "読込中…", "刷新" to "更新", "刷新中…" to "更新中…",
+        "添加订阅" to "購読を追加", "添加" to "追加", "一键更新全部" to "すべて更新", "更新中…" to "更新中…",
+        "重新加载" to "再読込", "打开页面" to "ページを開く", "执行" to "実行", "作者" to "作者", "权限" to "権限", "出错" to "エラー",
+        "（仅本地，无联网）" to "（ローカル専用・通信なし）", "插件使用与安全提示" to "プラグイン利用上の注意", "我已知晓并继续" to "了解して続行",
+        "显示窗口" to "ウィンドウを表示", "上一首" to "前の曲", "下一首" to "次の曲", "打开桌面歌词" to "デスクトップ歌詞を表示",
+        "关闭桌面歌词" to "デスクトップ歌詞を隠す", "回正桌面歌词" to "デスクトップ歌詞を中央へ", "退出" to "終了",
+        "关联集群" to "グループ別", "全部单功能" to "すべての機能", "均衡器、低音、环绕、响度" to "イコライザー・低音・サラウンド・ラウドネス",
+        "低音增强" to "低音ブースト", "环绕 / 3D" to "サラウンド / 3D", "响度增强" to "ラウドネス", "归零" to "リセット",
+        "允许读取音乐" to "音楽へのアクセスを許可", "重新扫描" to "再スキャン", "扫描中…" to "スキャン中…", "没有找到本地音乐" to "ローカル音楽が見つかりません",
+        "只统计这台设备上的播放" to "この端末での再生のみを集計します", "今天" to "今日", "7 天" to "7日間", "30 天" to "30日間",
+        "WebDAV 备份" to "WebDAV バックアップ", "备份到网盘" to "バックアップ", "从网盘恢复" to "復元", "处理中…" to "処理中…",
+        "拖动实时预览界面缩放，松手无感切回原生清晰渲染；小屏手机调小能看到更多内容" to "ドラッグ中は GPU でリアルタイム拡大縮小し、離すとネイティブ描画に切替えます",
     )
 
     /** 繁體中文慣用語詞映射（優先於字表轉換） */

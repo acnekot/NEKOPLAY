@@ -128,12 +128,14 @@ import kotlin.math.sign
     val canExpand = Screen.wide || ls || cfg.portraitExpand
     LaunchedEffect(canExpand) { if (!canExpand) expandedKey = null }
     val isExpanded = canExpand && expandedKey != null && curItem?.key == expandedKey
-    val expandProg by animateFloatAsState(if (isExpanded) 1f else 0f, if (AnimStyle.off) snap() else spring(dampingRatio = 0.85f, stiffness = Anim.stiff(88f)), label = "cfExp")
+    val expandState = animateFloatAsState(if (isExpanded) 1f else 0f, if (AnimStyle.off) snap() else spring(dampingRatio = 0.85f, stiffness = Anim.stiff(88f)), label = "cfExp")
+    val showTray by remember { derivedStateOf { expandState.value > 0.02f } }
+    val lidPastHalf by remember { derivedStateOf { smoothStep(0.02f, 0.72f, expandState.value) >= 0.5f } }
 
     fun openDetail(it: FlowItem) = when (it.kind) {
-        "album" -> nav.push(Page.Album(it.id, it.title, it.cover))
-        "pl" -> nav.push(Page.Detail("pl", it.id, it.title, it.cover))
-        "lpl" -> nav.push(Page.Detail("lpl", it.id, it.title))
+        "album" -> { SharedHero.capture("alb:${it.id}", it.cover, it.title); nav.push(Page.Album(it.id, it.title, it.cover)) }
+        "pl" -> { SharedHero.capture("pl:${it.id}", it.cover, it.title); nav.push(Page.Detail("pl", it.id, it.title, it.cover)) }
+        "lpl" -> { SharedHero.capture("pl:${it.id}", it.cover, it.title); nav.push(Page.Detail("lpl", it.id, it.title)) }
         else -> it.presetTracks?.let { ts -> Engine.playList(ts, 0); nav.player = true }
     }
     fun onCenterTap(it: FlowItem) {
@@ -279,7 +281,7 @@ import kotlin.math.sign
                             val wingAngle = -cfg.wingAngle * sign(d) * s
                             val extraGap = (centerGapPx - stackStepPx) * kotlin.math.tanh((ad * 1.35f).toDouble()).toFloat()
                             val tx = d * stackStepPx + sign(d) * extraGap
-                            val ep = expandProg.coerceIn(0f, 1.05f)
+                            val ep = expandState.value.coerceIn(0f, 1.05f)
                             // 分段编排：先优雅 3D 旋身翻盖，再平滑舒展放大居中（旋转 → 放大）
                             val zoomP = smoothStep(0.28f, 1.0f, ep)
                             val shiftP = smoothStep(0.08f, 0.92f, ep)
@@ -305,27 +307,28 @@ import kotlin.math.sign
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     // 实体 CD 塑料盒：外侧无缝挤出透明亚克力侧边厚度 + 右侧托盘 + 沿左铰链 180° 翻开的透明前盖
-                    val lidP = if (isCenter) smoothStep(0.02f, 0.72f, expandProg) else 0f
-                    Box(Modifier.size(caseW, caseH).cdThicknessEdge({ i - pos.value }, { tiltX.value }, { tiltY.value }, cfg.thicknessDp) { if (isCenter) (1f - smoothStep(0f, 0.45f, expandProg)) else 1f }) {
+                    val lidP = { if (isCenter) smoothStep(0.02f, 0.72f, expandState.value) else 0f }
+                    val heroKey = if (isCenter) when (item.kind) { "album" -> "alb:${item.id}"; "pl", "lpl" -> "pl:${item.id}"; else -> null } else null
+                    Box(Modifier.size(caseW, caseH).heroAnchor(heroKey, item.cover, item.title, border = false).cdThicknessEdge({ i - pos.value }, { tiltX.value }, { tiltY.value }, cfg.thicknessDp) { if (isCenter) (1f - smoothStep(0f, 0.45f, expandState.value)) else 1f }) {
 
                         // 右侧 CD 托盘层（随前盖沿左铰链翻开自然显露，炫彩光盘随开合微转）
-                        if (isCenter && expandProg > 0.02f) {
-                            Box(Modifier.matchParentSize().graphicsLayer { alpha = smoothStep(0.10f, 0.58f, expandProg) }) {
-                                CdTrayTracklist(item, sideTracks, sideLoading, compact = ls || stageW < 640f * density, openProg = { expandProg }, onClose = { expandedKey = null }, onOpenDetail = { openDetail(item) })
+                        if (isCenter && showTray) {
+                            Box(Modifier.matchParentSize().graphicsLayer { alpha = smoothStep(0.10f, 0.58f, expandState.value) }) {
+                                CdTrayTracklist(item, sideTracks, sideLoading, compact = ls || stageW < 640f * density, openProg = { expandState.value }, onClose = { expandedKey = null }, onOpenDetail = { openDetail(item) })
                             }
                         }
 
                         // 透明亚克力前盖：以左缘铰链为轴翻开 -180°（手机竖屏点击直进专辑页，横屏/桌面点击翻开 CD 盒）
                         Box(Modifier.matchParentSize()
-                            .graphicsLayer { rotationY = -180f * lidP; transformOrigin = TransformOrigin(0f, 0.5f); cameraDistance = 18f * density }
+                            .graphicsLayer { rotationY = -180f * lidP(); transformOrigin = TransformOrigin(0f, 0.5f); cameraDistance = 18f * density }
                             .pointerInput(item.key, isCenter, canExpand) {
                                 detectTapGestures {
                                     if (isCenter) onCenterTap(item)
                                     else if (expandedKey == null) snapTo(i)
                                 }
                             }) {
-                            val sweep = { kotlin.math.sin((lidP * kotlin.math.PI)).toFloat() }
-                            if (!isCenter || lidP < 0.5f) {
+                            val sweep = { kotlin.math.sin((lidP() * kotlin.math.PI)).toFloat() }
+                            if (!isCenter || !lidPastHalf) {
                                 CdCaseFrontLid(item, coverDp, spineDp, rimDp, isCenter, { i - pos.value }, { tiltX.value }, { tiltY.value }, sweep)
                             } else {
                                 CdCaseInnerLid(item, coverDp, spineDp, rimDp, sweep, onClose = { expandedKey = null })
@@ -335,7 +338,7 @@ import kotlin.math.sign
                     // 轻量高效底部镜面倒影：精确对齐外包 CD 盒尺寸与左脊柱（翻开 CD 盒时平滑淡出）
                     if (abs(i - curIdx) <= 3) Box(Modifier.size(caseW, reflH).clipToBounds()
                         .graphicsLayer {
-                            alpha = if (isCenter) (1f - expandProg * 1.6f).coerceIn(0f, 1f) else 1f
+                            alpha = if (isCenter) (1f - expandState.value * 1.6f).coerceIn(0f, 1f) else 1f
                             compositingStrategy = CompositingStrategy.Offscreen
                         }
                         .drawWithContent {
@@ -361,7 +364,7 @@ import kotlin.math.sign
                 canExpand = canExpand,
                 isExpanded = isExpanded,
                 itemCount = items.size,
-                sliderValue = pos.value,
+                sliderValue = { pos.value },
                 onPlay = {
                     if (curItem.presetTracks != null && curItem.presetTracks.isNotEmpty()) { Engine.playList(curItem.presetTracks, 0); nav.player = true }
                     else scope.launch {

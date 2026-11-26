@@ -31,6 +31,7 @@ import cc.catsuki.nekoplay.T
 import cc.catsuki.nekoplay.Tag
 import cc.catsuki.nekoplay.c
 import cc.catsuki.nekoplay.nbf
+import cc.catsuki.nekoplay.tr
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -41,9 +42,9 @@ import org.json.JSONObject
     var busy by remember { mutableStateOf(false) }
     @Composable fun Field(label: String, v: String, hint: String, secret: Boolean = false, set: (String) -> Unit) {
         Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-            T(label, 13, p.s); Spacer(Modifier.height(4.dp))
+            T(tr(label), 13, p.s); Spacer(Modifier.height(4.dp))
             Box(Modifier.fillMaxWidth().height(44.dp).nbf(1.dp, p.k).padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
-                if (v.isEmpty()) T(hint, 13, p.s, mono = true)
+                if (v.isEmpty()) T(tr(hint), 13, p.s, mono = true)
                 BasicTextField(v, { set(it); Backup.save() }, Modifier.fillMaxWidth(), singleLine = true, textStyle = TextStyle(color = p.k, fontSize = 13.sp, fontFamily = Mono),
                     cursorBrush = SolidColor(p.p), visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None)
             }
@@ -53,8 +54,8 @@ import org.json.JSONObject
         if (Features.on("webdav")) item {
             Column {
                 Tag("BACKUP"); Spacer(Modifier.height(4.dp))
-                T("WebDAV 备份", Fs.HERO, w = 800, lh = 1.3f)
-                T("将设置、主题、首页布局、效果器、歌词偏移、听歌统计、喜欢和最近播放同步到你的 WebDAV 网盘，手机和电脑可互通恢复", 13, p.s, lines = 3)
+                T(tr("WebDAV 备份"), Fs.HERO, w = 800, lh = 1.3f)
+                T(tr("将设置、主题、首页布局、效果器、歌词偏移、听歌统计、喜欢和最近播放同步到你的 WebDAV 网盘，手机和电脑可互通恢复"), 13, p.s, lines = 3)
                 Spacer(Modifier.height(10.dp))
                 Field("地址（文件夹）", Backup.url, "https://example.com/dav/NEKOPLAY/") { Backup.url = it }
                 Field("用户名", Backup.user, "") { Backup.user = it }

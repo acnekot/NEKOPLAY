@@ -32,7 +32,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  * 音源脚本（JS 插件）运行时。
  *
  * 本体不带任何在线音源；音源是用户导入的 .js 脚本，在内置的 QuickJS 里运行。
- * 脚本和本体之间只传 JSON 字符串，接口说明见 docs/source-api.md。
+ * 脚本和本体之间只传 JSON 字符串，接口说明见 docs/plugin-api.md。
  */
 /** 插件大类：音源插件（曲库/搜索/播放/歌词）、功能插件（槽位扩展/钩子/歌词管道）、页面插件（声明式页面）、动效插件（规范化动效引擎包） */
 enum class PluginKind(val id: String, val label: String) {
@@ -185,6 +185,7 @@ class JsSource(val file: File) {
             function("b64dec") { args -> Base64.decode(args[0] as String).decodeToString() }
             function("get") { args -> store.getString(args[0] as String, null) }
             function("set") { args -> store.edit().apply { val v = args.getOrNull(1); if (v == null) remove(args[0] as String) else putString(args[0] as String, v.toString()) }.apply(); null }
+            function("lang") { _ -> I18n.active }
             function("log") { args -> Debug.log("js:$id", 0, 0, "log", args.joinToString(" ")); null }
         }
     }
@@ -259,7 +260,7 @@ class JsSource(val file: File) {
               registerFeature: (s) => { globalThis.source = s; },
               registerPage: (s) => { globalThis.source = s; },
               registerMotion: (s) => { globalThis.source = s; },
-              host: { version: '${APP_VERSION}', platform: '${Plat.impl.name}' },
+              host: { version: '${APP_VERSION}', platform: '${Plat.impl.name}', get lang() { return __host.lang(); } },
             };
             globalThis.console = { log: nk.log, warn: nk.log, error: nk.log };
             globalThis.__caps = () => JSON.stringify(Object.keys(globalThis.source || {}).filter(k => typeof globalThis.source[k] === 'function'));

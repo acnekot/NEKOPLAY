@@ -55,8 +55,16 @@ import kotlinx.coroutines.launch
     val st by Engine.state.collectAsState()
     // 手机版里「打开队列」的操作，在宽屏上改为打开右侧队列面板
     LaunchedEffect(nav.queue) { if (nav.queue) { nav.side = if (nav.side == 2) 0 else 2; nav.queue = false } }
+    val playerDepth = animateFloatAsState(if (nav.player && MotionEffects.pageScale && !AnimStyle.off) 1f else 0f, Motion.page(), label = "wpDepth")
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().graphicsLayer {
+            val d = playerDepth.value
+            if (d > 0.001f) {
+                val sc = 1f - 0.025f * d
+                scaleX = sc; scaleY = sc
+                alpha = 1f - 0.14f * d
+            }
+        }) {
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 val showSidebar = !(nav.stack.lastOrNull() == Page.CoverFlow && nav.hideSidebar)
                 AnimatedVisibility(showSidebar,
@@ -128,12 +136,12 @@ import kotlinx.coroutines.launch
         Box(Modifier.padding(horizontal = 18.dp)) { TagRow("PLAYLISTS", 0.dp) }
         Spacer(Modifier.height(6.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-            if (liked != null) item { SideList(tr("我喜欢"), (top as? Page.Detail)?.id == liked.id, { LikedCover(liked.cover, 32.dp) }) { nav.stack.clear(); nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
-            item { SideList(tr("最近播放"), (top as? Page.Detail)?.kind == "recent", { RecentCover(rec.firstOrNull()?.cover, 32.dp) }) { nav.stack.clear(); nav.push(Page.Detail("recent", "recent", "最近播放")) } }
+            if (liked != null) item { SideList(tr("我喜欢"), (top as? Page.Detail)?.id == liked.id, { LikedCover(liked.cover, 32.dp, Modifier.heroAnchor("pl:${liked.id}", liked.cover, "我喜欢")) }) { SharedHero.capture("pl:${liked.id}", liked.cover, "我喜欢"); nav.stack.clear(); nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
+            item { SideList(tr("最近播放"), (top as? Page.Detail)?.kind == "recent", { RecentCover(rec.firstOrNull()?.cover, 32.dp, Modifier.heroAnchor("pl:recent", rec.firstOrNull()?.cover, "最近播放")) }) { SharedHero.capture("pl:recent", rec.firstOrNull()?.cover, "最近播放"); nav.stack.clear(); nav.push(Page.Detail("recent", "recent", "最近播放")) } }
             if (Features.on("local")) item { SideList(tr("本地音乐"), top == Page.Local, { IconCover(NIcons.disc, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.Local) } }
             if (Features.on("dl")) item { SideList(tr("本地下载"), top == Page.DlList, { IconCover(NIcons.download, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.DlList) } }
             items(pls.filter { !it.liked }, key = { "sp" + it.id }, contentType = { "pl" }) { pl ->
-                SideList(pl.name, (top as? Page.Detail)?.id == pl.id, { Cover(pl.cover, 32.dp, pl.name, decodeSize = 64.dp) }) { nav.stack.clear(); nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
+                SideList(pl.name, (top as? Page.Detail)?.id == pl.id, { Cover(pl.cover, 32.dp, pl.name, decodeSize = 64.dp, modifier = Modifier.heroAnchor("pl:${pl.id}", pl.cover, pl.name)) }) { SharedHero.capture("pl:${pl.id}", pl.cover, pl.name); nav.stack.clear(); nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
             }
         }
         }
@@ -150,6 +158,7 @@ import kotlinx.coroutines.launch
 
 @Composable private fun SideItem(icon: String, label: String, on: Boolean, slidingBg: Boolean = false, onClick: () -> Unit) {
     val p = c
+    val selAnim = animateFloatAsState(if (on) 1f else 0f, Motion.standard(), label = "siSel")
     val deskHover = Plat.isDesktop && !AnimStyle.off && (MotionEffects.hoverTint || MotionEffects.hoverShiftDp > 0.1f)
     val src = remember { MutableInteractionSource() }
     val hov = if (deskHover) remember(src) { Animatable(0f) } else null
@@ -173,13 +182,22 @@ import kotlinx.coroutines.launch
         }
         .padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.then(if (hov != null && shiftDp > 0.1f && !on) Modifier.graphicsLayer { val v = hov.value; if (v > 0.001f) translationX = (v * shiftDp).dp.toPx() } else Modifier), verticalAlignment = Alignment.CenterVertically) {
-            NIcon(icon, 18.dp, if (on) Color.White else p.k); Spacer(Modifier.width(12.dp)); T(label, 15, if (on) Color.White else p.k, 700)
+            Box(Modifier.graphicsLayer { val s = 1f + .09f * selAnim.value; scaleX = s; scaleY = s }) { NIcon(icon, 18.dp, if (on) Color.White else p.k) }
+            Spacer(Modifier.width(12.dp))
+            Box(Modifier.graphicsLayer {
+                val sa = selAnim.value
+                val s = 1f + .05f * sa
+                scaleX = s; scaleY = s
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+                translationX = 1.5.dp.toPx() * sa
+            }) { T(label, 15, if (on) Color.White else p.k, 700) }
         }
     }
 }
 
 @Composable private fun SideList(label: String, on: Boolean, cover: @Composable () -> Unit, onClick: () -> Unit) {
     val p = c
+    val selAnim = animateFloatAsState(if (on) 1f else 0f, Motion.standard(), label = "slSel")
     val deskHover = Plat.isDesktop && !AnimStyle.off && (MotionEffects.hoverTint || MotionEffects.hoverShiftDp > 0.1f)
     val src = remember { MutableInteractionSource() }
     val hov = if (deskHover) remember(src) { Animatable(0f) } else null
@@ -198,12 +216,24 @@ import kotlinx.coroutines.launch
     val showTint = deskHover && MotionEffects.hoverTint
     Row(Modifier.fillMaxWidth().height(44.dp).then(if (deskHover) Modifier.hoverable(src) else Modifier).press(interactionSource = src, onClick = onClick)
         .drawBehind {
-            if (on) drawRect(p.hl)
-            else if (showTint && hov != null && hov.value > 0.01f) drawRect(p.k.copy(alpha = .05f * hov.value))
+            val sa = selAnim.value
+            if (sa > 0.01f) {
+                drawRect(p.hl.copy(alpha = p.hl.alpha * sa))
+                val bh = size.height * sa
+                drawRect(p.p.copy(alpha = sa), Offset(0f, (size.height - bh) / 2f), Size(3.dp.toPx(), bh))
+            } else if (showTint && hov != null && hov.value > 0.01f) drawRect(p.k.copy(alpha = .05f * hov.value))
         }
         .padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.then(if (hov != null && shiftDp > 0.1f) Modifier.graphicsLayer { val v = hov.value; if (v > 0.001f) translationX = (v * shiftDp).dp.toPx() } else Modifier), verticalAlignment = Alignment.CenterVertically) {
-            cover(); Spacer(Modifier.width(10.dp)); T(label, 14, if (on) p.p else p.k, if (on) 700 else 500)
+            Box(Modifier.graphicsLayer { val s = 1f + .10f * selAnim.value; scaleX = s; scaleY = s }) { cover() }
+            Spacer(Modifier.width(10.dp))
+            Box(Modifier.weight(1f).graphicsLayer {
+                val sa = selAnim.value
+                val s = 1f + .05f * sa
+                scaleX = s; scaleY = s
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+                translationX = 2.5.dp.toPx() * sa
+            }) { T(label, 14, if (on) p.p else p.k, if (on) 700 else 500) }
         }
     }
 }
@@ -276,35 +306,46 @@ import kotlinx.coroutines.launch
 @Composable private fun Centered(content: @Composable () -> Unit) =
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) { Box(Modifier.widthIn(max = 980.dp).fillMaxHeight()) { content() } }
 
-/** 右侧面板：歌词或播放队列 */
+/** 右侧面板：歌词、播放队列与评论统一平滑切换 */
 @Composable private fun SidePanel(st: PlayState) {
     val nav = LocalNav.current
     val p = c
     val t = st.current ?: return
+    val cm = nav.comments
     Column(Modifier.width(380.dp).fillMaxHeight().background(p.page.copy(alpha = .94f)).drawBehind {
         if (!Look.flat) drawRect(p.k, Offset.Zero, Size(3.dp.toPx(), size.height))
     }.padding(start = 3.dp)) {
-        // 打开评论时，右栏换成评论；关掉回到歌词 / 队列
-        nav.comments?.let { ct -> CommentsBody(ct) { nav.comments = null }; return@Column }
-        if (nav.side == 0) return@Column
-        Row(Modifier.fillMaxWidth().height(52.dp).padding(start = 18.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            listOf(1 to "LYRICS", 2 to "QUEUE").forEach { (k, l) ->
-                Box(Modifier.padding(end = 8.dp).press { nav.side = k }.background(if (nav.side == k) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 5.dp)) {
-                    T(l, 12, if (nav.side == k) p.tagFg else p.k, 700, mono = true)
+        AnimatedContent(cm != null, Modifier.fillMaxSize(), transitionSpec = {
+            val dir = if (targetState) 1 else -1
+            val ms = Motion.standardMs; val ease = AnimStyle.activeEasing
+            if (AnimStyle.off) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
+            else (slideInHorizontally(tween(ms, easing = ease)) { (it * .18f * dir).toInt() } + fadeIn(tween(ms, easing = ease))) togetherWith
+                (slideOutHorizontally(tween(ms, easing = ease)) { (-it * .14f * dir).toInt() } + fadeOut(tween((ms * .7f).toInt())))
+        }, label = "sideMode") { isComments ->
+            if (isComments) {
+                val targetTrack = cm ?: t
+                CommentsBody(targetTrack) { nav.comments = null }
+            } else if (nav.side != 0) Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().height(52.dp).padding(start = 18.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    listOf(1 to "LYRICS", 2 to "QUEUE").forEach { (k, l) ->
+                        Box(Modifier.padding(end = 8.dp).press { nav.side = k }.background(if (nav.side == k) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 5.dp)) {
+                            T(l, 12, if (nav.side == k) p.tagFg else p.k, 700, mono = true)
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Box(Modifier.size(40.dp).press { nav.side = 0 }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp) }
+                }
+                AnimatedContent(nav.side, Modifier.weight(1f).fillMaxWidth(), transitionSpec = {
+                    val dir = if (targetState > initialState) 1 else -1
+                    val ms = Motion.standardMs
+                    val ease = AnimStyle.activeEasing
+                    (slideInHorizontally(tween(ms, easing = ease)) { (it * .18f * dir).toInt() } + fadeIn(tween(ms, easing = ease))) togetherWith
+                        (slideOutHorizontally(tween(ms, easing = ease)) { (-it * .14f * dir).toInt() } + fadeOut(tween((ms * .7f).toInt())))
+                }, label = "sideTab") { tab ->
+                    if (tab == 1) Box(Modifier.fillMaxSize()) { Lyrics(t, true) }
+                    else Box(Modifier.fillMaxSize()) { QueueList(st) }
                 }
             }
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.size(40.dp).press { nav.side = 0 }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp) }
-        }
-        AnimatedContent(nav.side, Modifier.weight(1f).fillMaxWidth(), transitionSpec = {
-            val dir = if (targetState > initialState) 1 else -1
-            val ms = Motion.standardMs
-            val ease = AnimStyle.activeEasing
-            (slideInHorizontally(tween(ms, easing = ease)) { (it * .18f * dir).toInt() } + fadeIn(tween(ms, easing = ease))) togetherWith
-                (slideOutHorizontally(tween(ms, easing = ease)) { (-it * .14f * dir).toInt() } + fadeOut(tween((ms * .7f).toInt())))
-        }, label = "sideTab") { tab ->
-            if (tab == 1) Box(Modifier.fillMaxSize()) { Lyrics(t, true) }
-            else Box(Modifier.fillMaxSize()) { QueueList(st) }
         }
     }
 }

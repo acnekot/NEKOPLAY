@@ -234,12 +234,26 @@ val LocalCompactAction = compositionLocalOf { false }
     }
 }
 
-@Composable fun Cover(url: String?, size: Dp, title: String = "", border: Boolean = true, decodeSize: Dp = size) {
+@Composable fun Cover(url: String?, size: Dp, title: String = "", border: Boolean = true, decodeSize: Dp = size, modifier: Modifier = Modifier) {
     val px = with(LocalDensity.current) { decodeSize.roundToPx() }.coerceAtLeast(1)
     val targetPx = when { px <= 160 -> 160; px <= 256 -> 256; px <= 512 -> 512; else -> 768 }
     val ctx = coil3.compose.LocalPlatformContext.current
-    Box(Modifier.size(size).background(c.ph).then(if (border) Modifier.nb(1.dp, c.k) else Modifier), contentAlignment = Alignment.Center) {
+    Box(modifier.size(size).background(c.ph).then(if (border) Modifier.nb(1.dp, c.k) else Modifier), contentAlignment = Alignment.Center) {
         if (url == null) T(title.take(1).uppercase().ifEmpty { "♪" }, size.value * .42f, c.s, 800)
+        else {
+            val req = remember(url, targetPx) { coil3.request.ImageRequest.Builder(ctx).data(img(url, targetPx)).size(targetPx).build() }
+            AsyncImage(req, null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+        }
+    }
+}
+
+/** 填满宽度的 1:1 方形封面（替代网格卡片中的 BoxWithConstraints，零 SubcomposeLayout 开销） */
+@Composable fun CoverFill(url: String?, title: String = "", border: Boolean = true, decodeSize: Dp = 256.dp, modifier: Modifier = Modifier) {
+    val px = with(LocalDensity.current) { decodeSize.roundToPx() }.coerceAtLeast(1)
+    val targetPx = when { px <= 160 -> 160; px <= 256 -> 256; px <= 512 -> 512; else -> 768 }
+    val ctx = coil3.compose.LocalPlatformContext.current
+    Box(modifier.fillMaxWidth().aspectRatio(1f).background(c.ph).then(if (border) Modifier.nb(1.dp, c.k) else Modifier), contentAlignment = Alignment.Center) {
+        if (url == null) T(title.take(1).uppercase().ifEmpty { "♪" }, 32f, c.s, 800)
         else {
             val req = remember(url, targetPx) { coil3.request.ImageRequest.Builder(ctx).data(img(url, targetPx)).size(targetPx).build() }
             AsyncImage(req, null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
@@ -283,10 +297,10 @@ fun listMeta(l: List<Track>) = "${two(l.size)} 首 · ${fmt(l.sumOf { it.duratio
     else Row(Modifier.fillMaxWidth(), content = content)
 }
 
-@Composable fun BadgeCover(url: String?, size: Dp, icon: String, filledFallback: Boolean) {
-    if (url == null) { IconCover(icon, size, filledFallback, if (size > 80.dp) 44.dp else 24.dp); return }
+@Composable fun BadgeCover(url: String?, size: Dp, icon: String, filledFallback: Boolean, modifier: Modifier = Modifier) {
+    if (url == null) { Box(modifier) { IconCover(icon, size, filledFallback, if (size > 80.dp) 44.dp else 24.dp) }; return }
     val badge = (size.value * .3f).coerceIn(18f, 40f).dp
-    Box(Modifier.size(size)) {
+    Box(modifier.size(size)) {
         Cover(url, size)
         Box(Modifier.align(Alignment.BottomEnd).size(badge).background(c.p).nb(1.dp, c.k), contentAlignment = Alignment.Center) {
             NIcon(icon, badge * .62f, Color.White)
@@ -295,7 +309,7 @@ fun listMeta(l: List<Track>) = "${two(l.size)} 首 · ${fmt(l.sumOf { it.duratio
 }
 
 /** 「我喜欢」：歌单封面 + 爱心角标 */
-@Composable fun LikedCover(url: String?, size: Dp) = BadgeCover(url, size, NIcons.heart, true)
+@Composable fun LikedCover(url: String?, size: Dp, modifier: Modifier = Modifier) = BadgeCover(url, size, NIcons.heart, true, modifier)
 
 /** 「最近播放」：最后播放那首的封面 + 时钟角标 */
-@Composable fun RecentCover(url: String?, size: Dp) = BadgeCover(url, size, NIcons.clock, false)
+@Composable fun RecentCover(url: String?, size: Dp, modifier: Modifier = Modifier) = BadgeCover(url, size, NIcons.clock, false, modifier)

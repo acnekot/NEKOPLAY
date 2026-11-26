@@ -66,12 +66,41 @@ NEKOPLAY 本体完全中立，不内置任何在线音源与重型特色扩展�
 
 ## 功能 / 页面 / 动效插件（API v2）
 
-- **功能槽位（`@feature <slot>`）**：
-  - `coverflow`：解锁 3D 封面墙入口与手机横屏自动展开，通过 `config()` 热更新 3D 外观与交互策略。
-  - `scrub`：解锁切歌按钮长按变速快进 / 快退，通过 `config()` 热更新预设、变调开关与触发时长。
-- **生命周期与管道钩子**：`onTrackChange(track)`、`onPlayState(state)`、`transformLyric(track, lyric)`、`action(track)`。
-- **声明式页面（`render(ctx)` / `onAction(act, payload)`）**：支持 `column`、`row`、`card`、`tag`、`text`、`button`、`cover`、`divider`、`spacer` 原生节点，返回 `{ toast?, open?, refresh? }`。
-- **动效引擎（`profile()`）**：返回 `{ name, presetLabel, quick, standard, page, crossfade, hero, effects }`，支持 `outQuad / outCubic / outQuart / outQuint / outExpo / outExpoTail / outPow10 / outCirc / outBack / outElasticHalf / outElasticQuarter / bezier / spring` 以及 `listStaggerMs` / `listSlideDp` 瀑布入场参数。
+### 1. 功能槽位（`@feature <slot>`）与热更新 `config()`
+
+| 槽位 | 说明 | `config()` 支持字段 |
+|---|---|---|
+| `coverflow` | 解锁 3D 封面墙入口与手机横屏自动展开 | `wingAngle`（25–80）、`maxOpenScale`（1.0–2.0）、`spinDeg`（0–45）、`spineRatio`（0.06–0.18）、`thicknessDp`（0–14）、`reflectionAlpha`（0–0.55）、`portraitExpand`（bool）、`desktopSidebarToggle`（bool） |
+| `scrub` | 解锁切歌按钮长按变速快进 / 快退 | `preset`（string）、`pitchShift`（bool，是否随转速变调）、`holdMs`（长按触发延迟 ms）、`minRate` / `maxRate`（倍率区间）、`accelMs`（电机加速时长 ms） |
+
+### 2. 生命周期与管道钩子
+- `onTrackChange(track)`：切歌回调
+- `onPlayState(state)`：播放状态变化回调
+- `transformLyric(track, lyric)`：歌词后处理管道
+- `action(track)`：自定义快捷动作，返回 `{ toast?, open? }`（`open` 支持 `"coverflow"` / `"settings"` / `"plugin:<id>"`）
+
+### 3. 声明式页面（`render(ctx)` / `onAction(action, payload)`）
+- 宿主传入 `ctx`：`{ hostVersion, platform, lang, wide, landscape, playing, track?, playlistCount, recentCount }`
+- 支持 9 种原生 Compose 节点（跨五端一致渲染）：
+  - 容器：`column` / `row` / `card`（支持 `pad`, `gap`, `action`, `payload`, `grow`, `children`）
+  - 展示：`tag`（`text`）、`text`（`text`, `size`, `tone: "primary"|"sub"|"bad"`, `weight`, `lines`, `mono`）、`cover`（`url`, `size`, `title`）、`divider`、`spacer`（`size`）
+  - 交互：`button`（`text`, `primary`, `action`, `payload`）
+- `onAction(action, payload)` 返回 `{ toast?, open?, refresh? }`（`refresh` 默认 `true`，触发重新渲染并刷新 `config()`/`profile()`）。
+
+### 4. 动效引擎（`@type motion` · `profile()`）
+```json
+{
+  "name": "示例动效",
+  "presetLabel": "标准",
+  "quick": { "easing": "outExpo", "ms": 140 },
+  "standard": { "easing": "outQuint", "ms": 300 },
+  "page": { "easing": "outQuint", "ms": 420 },
+  "crossfade": { "easing": "outQuint", "ms": 460 },
+  "hero": { "easing": "spring", "damping": 0.82, "stiffness": 420 },
+  "effects": { "hoverShiftDp": 5, "hoverTint": true, "pressScale": 0.985, "pageScale": true, "listStaggerMs": 24, "listSlideDp": 36 }
+}
+```
+支持缓动名称：`outQuad` / `outCubic` / `outQuart` / `outQuint` / `outExpo` / `outExpoTail` / `outPow10` / `outCirc` / `outBack` / `outElasticHalf` / `outElasticQuarter` / `bezier`（配 `x1,y1,x2,y2`） / `spring`（配 `damping,stiffness`）。
 
 ---
 
@@ -79,14 +108,24 @@ NEKOPLAY 本体完全中立，不内置任何在线音源与重型特色扩展�
 
 ```js
 const r = await nk.http({ url, method, headers, json, form, body, redirect, binary, timeout });
+// r = { status, url, headers: { [lowerName]: string[] }, body | bodyBase64 }
+// 便捷方法：r.header('content-type') / r.cookies() / r.json()
+
 nk.md5(text);
 nk.md5Base64(b64);
 nk.aes({ data, dataBase64, key, iv, mode: 'cbc', padding: true, decrypt: false });
 nk.base64.encode(s); nk.base64.decode(b64);
 nk.store.get(k); nk.store.set(k, v);
 nk.log(...args);
-nk.host; // { version, platform }
+nk.host; // { version, platform, lang } — lang 为当前界面语言（zh-CN / zh-TW / en / ja）
 ```
+
+---
+
+## 许可与责任说明
+
+- NEKOPLAY 本体遵循仓库根目录 [LICENSE](../LICENSE)（保留全部所有权）；官方插件仓库 [`acnekot/NEKOPLAY_PLUGINS`](https://github.com/acnekot/NEKOPLAY_PLUGINS) 独立采用 **MIT** 开源许可证，两者边界清晰互不影响。
+- 用户导入第三方插件或订阅时，客户端将展示首次安全与责任确认提示；第三方插件的内容与合规责任由其作者及使用者自行承担。
 
 ---
 

@@ -62,8 +62,8 @@ import kotlinx.coroutines.flow.map
             (androidx.compose.animation.slideInVertically(tween(ms, easing = ease)) { it / 3 } + fadeIn(tween(ms, easing = ease))) togetherWith
                 (androidx.compose.animation.slideOutVertically(tween((ms * .7f).toInt(), easing = ease)) { -it / 3 } + fadeOut(tween((ms * .6f).toInt())))
         }, label = "barTrack") { cur ->
-            Row(Modifier.fillMaxWidth().press { if (cur != null) { nav.lyrics = false; nav.player = true } }, verticalAlignment = Alignment.CenterVertically) {
-                Cover(cur?.cover, 56.dp, cur?.title ?: "")
+            Row(Modifier.fillMaxWidth().press { if (cur != null) { SharedHero.capture("now:${cur.id}", cur.cover, cur.title); nav.lyrics = false; nav.player = true } }, verticalAlignment = Alignment.CenterVertically) {
+                Cover(cur?.cover, 56.dp, cur?.title ?: "", modifier = Modifier.heroAnchor(cur?.let { "now:${it.id}" }, cur?.cover, cur?.title ?: ""))
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     T(cur?.title ?: tr("还没有曲目"), 15, w = 800, lh = 1.3f)

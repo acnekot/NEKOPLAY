@@ -62,6 +62,8 @@ import java.awt.MouseInfo
             val start = MouseInfo.getPointerInfo().location
             var w0 = window.location
             var moved = false
+            var lastWinX = w0.x
+            var lastWinY = w0.y
             while (true) {
                 val ev = awaitPointerEvent()
                 if (ev.changes.none { it.pressed }) break
@@ -76,9 +78,14 @@ import java.awt.MouseInfo
                     val r = window.bounds
                     window.setLocation(start.x - (r.width * fx).toInt(), start.y - (start.y - b.y))
                     w0 = window.location
+                    lastWinX = w0.x; lastWinY = w0.y
                 }
                 moved = true
-                window.setLocation(w0.x + dx, w0.y + dy)
+                val nx = w0.x + dx; val ny = w0.y + dy
+                if (nx != lastWinX || ny != lastWinY) {
+                    window.setLocation(nx, ny)
+                    lastWinX = nx; lastWinY = ny
+                }
                 WinFrame.preview(p0)
                 ev.changes.forEach { it.consume() }
             }
@@ -158,10 +165,12 @@ private fun DrawScope.square(col: Color, ox: Float, oy: Float, s: Float) {
                 val start = MouseInfo.getPointerInfo().location
                 val b0 = window.bounds
                 val minW = window.minimumSize.width; val minH = window.minimumSize.height
+                var lastX = b0.x; var lastY = b0.y; var lastW = b0.width; var lastH = b0.height
+                var pendX = lastX; var pendY = lastY; var pendW = lastW; var pendH = lastH
+                var lastApplyNs = 0L
                 while (true) {
                     val ev = awaitPointerEvent()
-                    if (ev.changes.none { it.pressed }) break
-                    ev.changes.forEach { it.consume() }
+                    val pressed = ev.changes.any { it.pressed }
                     val now = MouseInfo.getPointerInfo().location
                     val dx = now.x - start.x; val dy = now.y - start.y
                     var x = b0.x; var y = b0.y; var w = b0.width; var h = b0.height
@@ -169,7 +178,21 @@ private fun DrawScope.square(col: Color, ox: Float, oy: Float, s: Float) {
                     if (bottom) h = maxOf(minH, b0.height + dy)
                     if (left) { w = maxOf(minW, b0.width - dx); x = b0.x + b0.width - w }
                     if (top) { h = maxOf(minH, b0.height - dy); y = b0.y + b0.height - h }
-                    window.setBounds(x, y, w, h)
+                    pendX = x; pendY = y; pendW = w; pendH = h
+                    if (!pressed) {
+                        if (pendX != lastX || pendY != lastY || pendW != lastW || pendH != lastH) {
+                            window.setBounds(pendX, pendY, pendW, pendH)
+                        }
+                        break
+                    }
+                    ev.changes.forEach { it.consume() }
+                    val tNs = System.nanoTime()
+                    // 按 120Hz 帧步调合批 setBounds，消除高回报率鼠标下频繁重建 Swapchain 造成的卡顿与高 CPU
+                    if ((pendX != lastX || pendY != lastY || pendW != lastW || pendH != lastH) && tNs - lastApplyNs >= 7_500_000L) {
+                        window.setBounds(pendX, pendY, pendW, pendH)
+                        lastX = pendX; lastY = pendY; lastW = pendW; lastH = pendH
+                        lastApplyNs = tNs
+                    }
                 }
             }
         }

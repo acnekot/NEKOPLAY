@@ -50,8 +50,8 @@ import androidx.compose.ui.unit.dp
                     val d = if (forward) 1 else -1
                     (slideInHorizontally(Motion.hero()) { it / 2 * d } + fadeIn(Motion.standard())) togetherWith (slideOutHorizontally(Motion.hero()) { -it / 2 * d } + fadeOut(Motion.quick()))
                 }, label = "fm") { t ->
-                    Box(Modifier.size(big).press(.98f) { if (t != null) { nav.lyrics = false; nav.player = true } }, contentAlignment = Alignment.Center) {
-                        if (t == null) IconCover(NIcons.radio, big, true) else Cover(t.cover, big, t.title, decodeSize = 512.dp)
+                    Box(Modifier.size(big).press(.98f) { if (t != null) { SharedHero.capture("now:${t.id}", t.cover, t.title); nav.lyrics = false; nav.player = true } }, contentAlignment = Alignment.Center) {
+                        if (t == null) IconCover(NIcons.radio, big, true) else Cover(t.cover, big, t.title, decodeSize = 512.dp, modifier = Modifier.heroAnchor("now:${t.id}", t.cover, t.title))
                     }
                 }
                 Spacer(Modifier.width(24.dp))

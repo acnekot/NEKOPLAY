@@ -83,8 +83,8 @@ import java.util.Calendar
             }
         }
         val net = main != null
-        if (net && liked != null) item { ListRow({ LikedCover(liked.cover, 56.dp) }, "我喜欢", "${two(liked.count)} 首") { nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
-        item { ListRow({ RecentCover(rec.firstOrNull()?.cover, 56.dp) }, "最近播放", listMeta(rec)) { nav.push(Page.Detail("recent", "recent", "最近播放")) } }
+        if (net && liked != null) item { ListRow({ LikedCover(liked.cover, 56.dp, Modifier.heroAnchor("pl:${liked.id}", liked.cover, "我喜欢")) }, "我喜欢", "${two(liked.count)} 首") { SharedHero.capture("pl:${liked.id}", liked.cover, "我喜欢"); nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
+        item { ListRow({ RecentCover(rec.firstOrNull()?.cover, 56.dp, Modifier.heroAnchor("pl:recent", rec.firstOrNull()?.cover, "最近播放")) }, "最近播放", listMeta(rec)) { SharedHero.capture("pl:recent", rec.firstOrNull()?.cover, "最近播放"); nav.push(Page.Detail("recent", "recent", "最近播放")) } }
         if (Features.on("dl")) item { val dls by Downloads.items.collectAsState(); ListRow({ IconCover(NIcons.download, 56.dp) }, "本地下载", "${two(dls.size)} 首") { nav.push(Page.DlList) } }
         if (Features.on("stats")) item { ListRow({ IconCover(NIcons.chart, 56.dp) }, "听歌统计", "本机的播放次数和时长") { nav.push(Page.Stats) } }
         if (Features.on("local")) item { val loc by LocalMusic.list.collectAsState(); ListRow({ IconCover(NIcons.disc, 56.dp) }, "本地音乐", if (loc.isEmpty()) "扫描手机 / 电脑里的歌" else "${two(loc.size)} 首") { nav.push(Page.Local) } }
@@ -101,19 +101,19 @@ import java.util.Calendar
                 }
             }
         }
-        if (net && prof == null && main!!.has("loginQr")) item {
+        if (main != null && prof == null && main.has("loginQr")) item {
             Column(Modifier.padding(vertical = 24.dp)) {
                 T("NOT LOGGED IN", 12, c.s, mono = true, lines = 2, ls = .06f, lh = 1.7f)
-                Spacer(Modifier.height(12.dp)); ActionRow { PrimaryBar("登录" + main!!.name, NIcons.chevronRight, Modifier.weight(1f)) { nav.push(Page.PluginLogin(main.id)) } }
+                Spacer(Modifier.height(12.dp)); ActionRow { PrimaryBar("登录" + main.name, NIcons.chevronRight, Modifier.weight(1f)) { nav.push(Page.PluginLogin(main.id)) } }
             }
         }
-        if (net && prof != null && main!!.has("cloud")) {
+        if (main != null && prof != null && main.has("cloud")) {
             item { ListRow({ IconCover(NIcons.cloud, 56.dp) }, "云盘", "自己上传的歌") { nav.push(Page.Detail("cloud", "cloud", "云盘")) } }
         }
         val made = if (net) others.filter { it.mine } else emptyList(); val faved = if (net) others.filter { !it.mine } else emptyList()
         val albums = if (net) subAlbums ?: emptyList() else emptyList()
         if (albums.isNotEmpty()) {
-            fun openAl(al: Album) = nav.push(Page.Album(al.id, al.name, al.pic))
+            fun openAl(al: Album) { SharedHero.capture("alb:${al.id}", al.pic, al.name); nav.push(Page.Album(al.id, al.name, al.pic)) }
             fun longAl(al: Album) {
                 nav.sheet = SheetSpec(al.name, al.artist, listOf(SheetItem("取消收藏", danger = true) {
                     Store.run { try { Ncm.subAlbum(al.id, false); nav.toast = "已取消收藏"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "操作失败：${e.message}" } }
@@ -123,7 +123,7 @@ import java.util.Calendar
                 Column(Modifier.padding(top = 26.dp, bottom = 6.dp)) {
                     TagRow("ALBUMS · 专辑", 12.dp) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            T("${two(albums.size)} 张", 12, c.s, mono = true)
+                            T(trKnown("${two(albums.size)} 张"), 12, c.s, mono = true)
                             LinkBtn(if (albumCard) "列表" else "卡片", 12) {
                                 albumCard = !albumCard
                                 Plat.prefs("ui").edit().putInt("lib_album_style", if (albumCard) 0 else 1).apply()
@@ -133,57 +133,52 @@ import java.util.Calendar
                             }
                         }
                     }
-                    if (albumCard) {
+                    if (albumCard && !albumAll) {
                         Spacer(Modifier.height(14.dp))
-                        if (!albumAll) {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                items(albums, key = { "al" + it.id }) { al ->
-                                    Column(Modifier.width(124.dp).press(onLong = { longAl(al) }) { openAl(al) }) {
-                                        Cover(al.pic, 124.dp, al.name)
-                                        Spacer(Modifier.height(8.dp))
-                                        T(al.name, 14, w = 700, lines = 1)
-                                        val sub = al.artist.ifEmpty { if (al.size > 0) "${al.size} 首" else "" }
-                                        if (sub.isNotEmpty()) T(sub, 12, c.s, lines = 1, modifier = Modifier.padding(top = 2.dp))
-                                    }
-                                }
-                            }
-                        } else {
-                            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                                val cols = ((maxWidth + 12.dp) / 136.dp).toInt().coerceAtLeast(2)
-                                val cardW = (maxWidth - 12.dp * (cols - 1)) / cols
-                                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    albums.chunked(cols).forEach { row ->
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            row.forEach { al ->
-                                                Column(Modifier.width(cardW).press(onLong = { longAl(al) }) { openAl(al) }) {
-                                                    Cover(al.pic, cardW, al.name)
-                                                    Spacer(Modifier.height(8.dp))
-                                                    T(al.name, 14, w = 700, lines = 1)
-                                                    val sub = al.artist.ifEmpty { if (al.size > 0) "${al.size} 首" else "" }
-                                                    if (sub.isNotEmpty()) T(sub, 12, c.s, lines = 1, modifier = Modifier.padding(top = 2.dp))
-                                                }
-                                            }
-                                            repeat(cols - row.size) { Spacer(Modifier.width(cardW)) }
-                                        }
-                                    }
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            items(albums, key = { "al" + it.id }, contentType = { "albumCard" }) { al ->
+                                Column(Modifier.width(124.dp).press(onLong = { longAl(al) }) { openAl(al) }) {
+                                    Cover(al.pic, 124.dp, al.name, modifier = Modifier.heroAnchor("alb:${al.id}", al.pic, al.name))
+                                    Spacer(Modifier.height(8.dp))
+                                    T(al.name, 14, w = 700, lines = 1)
+                                    val sub = al.artist.ifEmpty { if (al.size > 0) "${al.size} 首" else "" }
+                                    if (sub.isNotEmpty()) T(sub, 12, c.s, lines = 1, modifier = Modifier.padding(top = 2.dp))
                                 }
                             }
                         }
                     }
                 }
             }
+            if (albumCard && albumAll) {
+                val cols = if (Screen.wide) 5 else if (Screen.narrow) 2 else 3
+                val rows = albums.chunked(cols)
+                itemsIndexed(rows, key = { idx, r -> "al_grid_${idx}_${r.first().id}" }, contentType = { _, _ -> "albumGridRow" }) { idx, row ->
+                    Row(Modifier.fillMaxWidth().padding(top = if (idx == 0) 8.dp else 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        row.forEach { al ->
+                            Column(Modifier.weight(1f).press(onLong = { longAl(al) }) { openAl(al) }) {
+                                CoverFill(al.pic, al.name, modifier = Modifier.heroAnchor("alb:${al.id}", al.pic, al.name))
+                                Spacer(Modifier.height(8.dp))
+                                T(al.name, 14, w = 700, lines = 1)
+                                val sub = al.artist.ifEmpty { if (al.size > 0) "${al.size} 首" else "" }
+                                if (sub.isNotEmpty()) T(sub, 12, c.s, lines = 1, modifier = Modifier.padding(top = 2.dp))
+                            }
+                        }
+                        repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
             if (!albumCard) {
                 val shown = if (albumAll) albums else albums.take(5)
-                items(shown, key = { "al_row_" + it.id }) { al ->
-                    ListRow({ Cover(al.pic, 56.dp, al.name) }, al.name, "专辑 · " + listOf(al.artist, if (al.size > 0) "${al.size} 首" else "").filter { it.isNotEmpty() }.joinToString(" · "),
+                items(shown, key = { "al_row_" + it.id }, contentType = { "albumRow" }) { al ->
+                    ListRow({ Cover(al.pic, 56.dp, al.name, modifier = Modifier.heroAnchor("alb:${al.id}", al.pic, al.name)) }, al.name, "专辑 · " + listOf(al.artist, if (al.size > 0) "${al.size} 首" else "").filter { it.isNotEmpty() }.joinToString(" · "),
                         onLong = { longAl(al) }) { openAl(al) }
                 }
             }
         }
-        if (made.isNotEmpty()) item { Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("CREATED", 12.dp) { T("${two(made.size)} 个", 13, c.s, mono = true) } } }
-        items(made, key = { it.id }, contentType = { "pl" }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name) }, p.name, "${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
-        if (faved.isNotEmpty()) item { Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("COLLECTED", 12.dp) { T("${two(faved.size)} 个", 13, c.s, mono = true) } } }
-        items(faved, key = { it.id }, contentType = { "pl" }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name) }, p.name, "歌单 · ${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+        if (made.isNotEmpty()) item { Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("CREATED", 12.dp) { T(trKnown("${two(made.size)} 个"), 13, c.s, mono = true) } } }
+        items(made, key = { it.id }, contentType = { "pl" }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name, modifier = Modifier.heroAnchor("pl:${p.id}", p.cover, p.name)) }, p.name, "${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { SharedHero.capture("pl:${p.id}", p.cover, p.name); nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
+        if (faved.isNotEmpty()) item { Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("COLLECTED", 12.dp) { T(trKnown("${two(faved.size)} 个"), 13, c.s, mono = true) } } }
+        items(faved, key = { it.id }, contentType = { "pl" }) { p -> ListRow({ Cover(p.cover, 56.dp, p.name, modifier = Modifier.heroAnchor("pl:${p.id}", p.cover, p.name)) }, p.name, "歌单 · ${two(p.count)} 首", onLong = { playlistActions(nav, p) }) { SharedHero.capture("pl:${p.id}", p.cover, p.name); nav.push(Page.Detail("pl", p.id, p.name, p.cover)) } }
         // 没有任何插件：本体只剩本地功能
         if (main == null) item {
             Column(Modifier.padding(vertical = 24.dp)) {
@@ -230,10 +225,12 @@ import java.util.Calendar
                 Tag(when (p.kind) { "daily" -> "DAILY MIX"; "pl" -> "PLAYLIST"; "simi" -> "SIMILAR"; "newsong" -> "NEW SONGS"; "hist" -> "DAILY MIX"; "cloud" -> "CLOUD"; "radio" -> "PODCAST"; else -> "COLLECTION" })
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.height(112.dp)) {
+                    val heroUrl = p.cover ?: list.firstOrNull()?.cover
+                    val heroMod = Modifier.heroAnchor("pl:${p.id}", heroUrl, p.title)
                     when {
-                        p.kind == "liked" -> LikedCover(p.cover ?: list.firstOrNull()?.cover, 112.dp)
-                        p.kind == "recent" -> RecentCover(list.firstOrNull()?.cover, 112.dp)
-                        else -> Cover(p.cover ?: list.firstOrNull()?.cover, 112.dp, p.title)
+                        p.kind == "liked" -> LikedCover(heroUrl, 112.dp, heroMod)
+                        p.kind == "recent" -> RecentCover(list.firstOrNull()?.cover, 112.dp, heroMod)
+                        else -> Cover(heroUrl, 112.dp, p.title, modifier = heroMod)
                     }
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f).fillMaxHeight()) {

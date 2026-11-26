@@ -23,6 +23,7 @@ import cc.catsuki.nekoplay.Tag
 import cc.catsuki.nekoplay.TagRow
 import cc.catsuki.nekoplay.bottomLine
 import cc.catsuki.nekoplay.c
+import cc.catsuki.nekoplay.tr
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -34,7 +35,7 @@ import kotlin.math.roundToInt
             Column {
                 Tag("EFFECTS"); Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { T("效果器", Fs.HERO, w = 800, lh = 1.3f); T("均衡器、低音、环绕、响度", 13, p.s) }
+                    Column(Modifier.weight(1f)) { T(tr("效果器"), Fs.HERO, w = 800, lh = 1.3f); T(tr("均衡器、低音、环绕、响度"), 13, p.s) }
                     NSwitch(fx.on) { FxStore.set(fx.copy(on = it)) }
                 }
                 Spacer(Modifier.height(12.dp)); Rule()
@@ -82,7 +83,7 @@ import kotlin.math.roundToInt
 @Composable private fun FxRow(label: String, v: Float, onChange: (Float) -> Unit) {
     val p = c
     Column(Modifier.fillMaxWidth().bottomLine().padding(vertical = 10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) { T(label, 16, w = 600, modifier = Modifier.weight(1f)); T("${(v * 100f).roundToInt()}%", 13, p.p, 600, mono = true) }
+        Row(verticalAlignment = Alignment.CenterVertically) { T(tr(label), 16, w = 600, modifier = Modifier.weight(1f)); T("${(v * 100f).roundToInt()}%", 13, p.p, 600, mono = true) }
         NSlider(v, 0f..1f, onDone = { FxStore.set(FxStore.fx) }, onChange = onChange)
     }
 }

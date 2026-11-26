@@ -68,7 +68,7 @@ val Light = Pal(false, Color(0xFF0E1117), Color(0xFF1A4BE0), Color(0xFF46505E), 
 val Dark = Pal(true, Color(0xFFE6EDF3), Color(0xFF5580F7), Color(0xFF9DA7B3), Color(0xFFB8C1CC), Color(0x1FE6EDF3), Color(0x33E6EDF3), Color(0x47E6EDF3),
     Color(0xFF2D333B), Color(0xFF373E47), Color(0xFFE6EDF3), Color(0xFF2D333B), Color(0x12FFFFFF), Color(0xFFF0F2F5), Color(0xFF0E1117), Color(0xFF0E1117),
     Color(0xFFF85149), Color(0xFF1B2027), Color(0xFF2D333B), Color(0xFF2D333B))
-val LocalPal = staticCompositionLocalOf { Light }
+val LocalPal = compositionLocalOf { Light }
 val c: Pal @Composable get() = LocalPal.current
 
 /** 深浅色：0 跟随系统 / 1 浅色 / 2 深色 */
@@ -105,32 +105,49 @@ object ThemePref {
     MonetCoverWatcher()
     val customPal = ThemeStore.activePal()
     val base = customPal ?: if (dark) Dark else Light
-    // 全局缩放：严禁在 NekoTheme 顶层直接读取 LocalWindowInfo.containerSize（拖窗每动 1px 都会触发整棵 App 重组导致掉帧！）
-    // 改在 LaunchedEffect 里用 snapshotFlow 采样 + 250ms 防抖，拖窗全程 NekoTheme 0 重组
+    // 全局缩放：拖窗期间通过 UiScalePreview 做纯 GPU 实时响应（0 重组），停手 180ms 后无缝原子落位到原生 LocalDensity
     val d = androidx.compose.ui.platform.LocalDensity.current
     val winInfo = androidx.compose.ui.platform.LocalWindowInfo.current
     var settledAuto by remember { mutableFloatStateOf(1f) }
     LaunchedEffect(UiPref.autoScale, d.density) {
-        if (!UiPref.autoScale || !Plat.isDesktop) { settledAuto = 1f; return@LaunchedEffect }
+        if (!UiPref.autoScale || !Plat.isDesktop) {
+            settledAuto = 1f
+            UiScalePreview.liveAutoScale = null
+            return@LaunchedEffect
+        }
         var job: kotlinx.coroutines.Job? = null
         snapshotFlow { winInfo.containerSize.width }.collect { winPx ->
             if (winPx <= 0) return@collect
             val logicalW = winPx / d.density
-            val target = if (logicalW < 760f) 1f else ((((logicalW / 1280f).coerceIn(.85f, 1.25f) * 20f).roundToInt()) / 20f)
-            if (target != settledAuto) {
+            val target = if (logicalW < 760f) 1f else (((logicalW / 1280f).coerceIn(.85f, 1.25f) * 100f).roundToInt() / 100f)
+            if (kotlin.math.abs(target - settledAuto) >= 0.005f) {
+                UiScalePreview.liveAutoScale = target
                 job?.cancel()
-                job = launch { kotlinx.coroutines.delay(250); settledAuto = target }
+                job = launch {
+                    kotlinx.coroutines.delay(180)
+                    settledAuto = target
+                    UiScalePreview.liveAutoScale = null
+                }
+            } else {
+                job?.cancel()
+                UiScalePreview.liveAutoScale = null
             }
         }
     }
-    val finalScale = (UiPref.scale / 100f * settledAuto).coerceIn(.6f, 1.6f)
+    val userScale = UiPref.scale / 100f
+    SideEffect {
+        UiScalePreview.committedUserScale = userScale
+        UiScalePreview.committedAutoScale = settledAuto
+    }
+    val finalScale = (userScale * settledAuto).coerceIn(.6f, 1.6f)
     val dens = remember(d, finalScale) { androidx.compose.ui.unit.Density(d.density * finalScale, d.fontScale) }
     val resolvedPal = if (customPal != null) base else if (Monet.on) Monet.apply(base) else base
     CompositionLocalProvider(LocalPal provides animPal(resolvedPal), androidx.compose.ui.platform.LocalDensity provides dens, content = content)
 }
 
-/** 配色切换（换歌跟封面变色）时背景层和主色做一个渐变 */
+/** 配色切换（换歌跟封面变色）时背景层和主色做一个渐变；动效关闭时直接短路，零协程开销 */
 @Composable private fun animPal(t: Pal): Pal {
+    if (AnimStyle.off) return t
     val sp = Motion.crossfade<Color>()
     @Composable fun a(v: Color, l: String) = androidx.compose.animation.animateColorAsState(v, sp, label = l).value
     return t.copy(p = a(t.p, "p"), page = a(t.page, "pg"), bar = a(t.bar, "bar"), sheet = a(t.sheet, "sh"), pop = a(t.pop, "pop"), ph = a(t.ph, "ph"), lyBg = a(t.lyBg, "ly"), tagFg = a(t.tagFg, "tf"))

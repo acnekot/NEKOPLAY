@@ -57,64 +57,108 @@ import kotlinx.coroutines.launch
     var libBuilt by remember { mutableStateOf(false) }
     if (nav.tab == 1) libBuilt = true
     val x = animateFloatAsState(nav.tab.toFloat(), spF, label = "tab")
-    BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
-        val w = constraints.maxWidth.toFloat()
-        Box(Modifier.fillMaxSize().graphicsLayer { translationX = -w * x.value }) { HomePage() }
-        if (libBuilt) Box(Modifier.fillMaxSize().graphicsLayer { translationX = w * (1 - x.value) }) { LibraryPage() }
+    // 去掉 BoxWithConstraints：直接在 graphicsLayer 读 size.width，缩放/切 Tab 全程 0 Subcompose、0 重组
+    Box(Modifier.fillMaxSize().clipToBounds()) {
+        Box(Modifier.fillMaxSize().graphicsLayer { translationX = -size.width * x.value }) { HomePage() }
+        if (libBuilt) Box(Modifier.fillMaxSize().graphicsLayer { translationX = size.width * (1f - x.value) }) { LibraryPage() }
     }
 }
 
 @Composable fun BottomNav() {
     val nav = LocalNav.current
     val p = c
-    Row(Modifier.fillMaxWidth().background(barBg()).drawBehind { if (!Look.flat) drawRect(p.k, size = androidx.compose.ui.geometry.Size(size.width, 3.dp.toPx())) }.navigationBarsPadding().padding(top = 3.dp).height(56.dp)) {
-        listOf(Triple(NIcons.home, tr("主页"), 0), Triple(NIcons.library, tr("曲库"), 1)).forEach { (i, l, k) ->
-            val on = nav.tab == k && nav.stack.isEmpty()
-            val bg by androidx.compose.animation.animateColorAsState(if (on) p.p else Color.Transparent, Motion.standard(), label = "bnb")
-            val fg by androidx.compose.animation.animateColorAsState(if (on) Color.White else p.k, Motion.standard(), label = "bnf")
-            Column(Modifier.weight(1f).fillMaxHeight().press(haptic = true) { nav.stack.clear(); nav.tab = k }.background(bg),
-                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                NIcon(i, 22.dp, fg); Spacer(Modifier.height(2.dp)); T(l, 11, fg, 700)
+    val active = nav.stack.isEmpty()
+    val indX = animateFloatAsState(nav.tab.toFloat(), spF, label = "bnx")
+    val indA = animateFloatAsState(if (active) 1f else 0f, Motion.quick(), label = "bna")
+    Box(Modifier.fillMaxWidth().background(barBg()).drawBehind {
+        if (!Look.flat) drawRect(p.k, size = androidx.compose.ui.geometry.Size(size.width, 3.dp.toPx()))
+    }.navigationBarsPadding().padding(top = 3.dp).height(56.dp)) {
+        // 与桌面 Sidebar 统一的连续滑动高亮块：切 Tab 时顺滑横移，0 重组
+        Box(Modifier.fillMaxWidth(.5f).fillMaxHeight().graphicsLayer {
+            translationX = size.width * indX.value
+            alpha = indA.value
+        }.background(p.p))
+        Row(Modifier.fillMaxSize()) {
+            listOf(Triple(NIcons.home, tr("主页"), 0), Triple(NIcons.library, tr("曲库"), 1)).forEach { (i, l, k) ->
+                val on = nav.tab == k && active
+                val selA = animateFloatAsState(if (on) 1f else 0f, Motion.standard(), label = "bns$k")
+                val fg = if (on) Color.White else p.k
+                Column(Modifier.weight(1f).fillMaxHeight().press(haptic = true) { nav.stack.clear(); nav.tab = k },
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Box(Modifier.graphicsLayer { val s = 1f + .10f * selA.value; scaleX = s; scaleY = s }) { NIcon(i, 22.dp, fg) }
+                    Spacer(Modifier.height(2.dp))
+                    Box(Modifier.graphicsLayer { val s = 1f + .06f * selA.value; scaleX = s; scaleY = s }) { T(l, 11, fg, 700) }
+                }
             }
         }
     }
 }
 
-/** 子页面层：整页从右侧推入；左边缘 22dp 内可以跟手滑动返回 */
+/** 子页面层：整页从右侧推入；多级页面按前进/返回双向推拉；左边缘 22dp 支持跟手滑返与速度甩动返回 */
 @Composable fun SubLayer(sub: Animatable<Float, AnimationVector1D>, w: Float) {
     val nav = LocalNav.current
     val scope = rememberCoroutineScope()
     var shown by remember { mutableStateOf<Page?>(null) }
     nav.stack.lastOrNull()?.let { shown = it }
     val pg = shown ?: return
-    if (sub.value <= 0f && nav.stack.isEmpty()) return
+    val visible by remember { derivedStateOf { sub.value > 0.001f || nav.stack.isNotEmpty() } }
+    if (!visible) return
+    var lastDepth by remember { mutableIntStateOf(nav.stack.size) }
+    val forward = nav.stack.size >= lastDepth
+    SideEffect { lastDepth = nav.stack.size }
     val p = c
-    Box(Modifier.fillMaxSize().graphicsLayer { translationX = w * (1 - sub.value) }
+    val widthState by rememberUpdatedState(w.coerceAtLeast(1f))
+    Box(Modifier.fillMaxSize().graphicsLayer { translationX = size.width * (1f - sub.value) }
+        .drawBehind {
+            val edgeW = 14.dp.toPx()
+            drawRect(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .14f * sub.value)), -edgeW, 0f),
+                Offset(-edgeW, 0f), androidx.compose.ui.geometry.Size(edgeW, size.height))
+        }
         .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }) {
         Box(Modifier.fillMaxSize().background(p.page)) { BgLayer() }
         Column(Modifier.fillMaxSize()) {
             AnimatedContent(pg, Modifier.weight(1f), transitionSpec = {
-                (androidx.compose.animation.slideInHorizontally(Motion.page()) { (it * .18f).toInt() } + fadeIn(Motion.page())) togetherWith
-                    (androidx.compose.animation.slideOutHorizontally(Motion.standard()) { -(it * .10f).toInt() } + fadeOut(Motion.quick()))
+                if (AnimStyle.off) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
+                else if (forward) {
+                    (androidx.compose.animation.slideInHorizontally(Motion.page()) { (it * .20f).toInt() } + fadeIn(Motion.page())) togetherWith
+                        (androidx.compose.animation.slideOutHorizontally(Motion.standard()) { -(it * .12f).toInt() } + fadeOut(Motion.quick()))
+                } else {
+                    (androidx.compose.animation.slideInHorizontally(Motion.page()) { -(it * .12f).toInt() } + fadeIn(Motion.page())) togetherWith
+                        (androidx.compose.animation.slideOutHorizontally(Motion.standard()) { (it * .20f).toInt() } + fadeOut(Motion.quick()))
+                }
             }, label = "sub") { page ->
                 PageContent(page)
             }
-            if (Engine.state.collectAsState().value.current != null && !(Screen.landscape && pg == Page.CoverFlow)) MiniBar()
+            SubMiniBarHost(!(Screen.landscape && pg == Page.CoverFlow))
             Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime.union(WindowInsets.navigationBars)))
         }
-        Box(Modifier.fillMaxHeight().width(22.dp).pointerInput(Unit) {
+        Box(Modifier.fillMaxHeight().width(24.dp).pointerInput(Unit) {
+            val vt = androidx.compose.ui.input.pointer.util.VelocityTracker()
             detectHorizontalDragGestures(
+                onDragStart = { vt.resetTracking() },
                 onDragEnd = {
+                    val vx = vt.calculateVelocity().x
+                    val dismiss = sub.value < .62f || vx > 900f
                     scope.launch {
-                        if (sub.value < .6f && nav.stack.size > 1) { nav.stack.removeAt(nav.stack.lastIndex); sub.animateTo(1f, spF) }
-                        else if (sub.value < .6f) nav.stack.clear()
+                        if (dismiss && nav.stack.size > 1) { nav.stack.removeAt(nav.stack.lastIndex); sub.animateTo(1f, spF) }
+                        else if (dismiss) nav.stack.clear()
                         else sub.animateTo(1f, spF)
                     }
                 },
                 onDragCancel = { scope.launch { sub.animateTo(1f, spF) } },
-            ) { _, dx -> scope.launch { sub.snapTo((sub.value - dx / w).coerceIn(0f, 1f)) } }
+            ) { ch, dx ->
+                vt.addPosition(ch.uptimeMillis, ch.position)
+                scope.launch { sub.snapTo((sub.value - dx / widthState).coerceIn(0f, 1f)) }
+            }
         })
     }
+}
+
+/** 独立作用域：避免播放状态变动牵连整个 SubLayer 重组 */
+@Composable private fun SubMiniBarHost(allow: Boolean) {
+    if (!allow) return
+    val hasTrack by remember { Engine.state }.collectAsState().let { s -> remember { derivedStateOf { s.value.current != null } } }
+    if (hasTrack) MiniBar()
 }
 
 /** 子页面：顶部返回栏 + 页面内容（手机子页面层和宽屏内容区共用） */

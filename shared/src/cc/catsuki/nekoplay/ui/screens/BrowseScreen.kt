@@ -48,7 +48,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
                     list!!.isEmpty() -> T("EMPTY", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp)) }
             }
         }
-        items(list ?: emptyList(), key = { it.id }) { pl -> ProfileRow({ Cover(pl.cover, 56.dp, pl.name) }, pl.name, if (pl.desc.isNotEmpty()) pl.desc else "${two(pl.count)} 首") { nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) } }
+        items(list ?: emptyList(), key = { it.id }) { pl ->
+            ProfileRow({ Cover(pl.cover, 56.dp, pl.name, modifier = Modifier.heroAnchor("pl:${pl.id}", pl.cover, pl.name)) }, pl.name, if (pl.desc.isNotEmpty()) pl.desc else "${two(pl.count)} 首") {
+                SharedHero.capture("pl:${pl.id}", pl.cover, pl.name)
+                nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover))
+            }
+        }
     }
 }
 
@@ -84,7 +89,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
                 Spacer(Modifier.height(12.dp)); Rule()
             }
         }
-        items(list, key = { "sq" + it.id }) { pl -> ProfileRow({ Cover(pl.cover, 56.dp, pl.name) }, pl.name, "${two(pl.count)} 首") { nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) } }
+        items(list, key = { "sq" + it.id }) { pl ->
+            ProfileRow({ Cover(pl.cover, 56.dp, pl.name, modifier = Modifier.heroAnchor("pl:${pl.id}", pl.cover, pl.name)) }, pl.name, "${two(pl.count)} 首") {
+                SharedHero.capture("pl:${pl.id}", pl.cover, pl.name)
+                nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover))
+            }
+        }
         item { T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; !more -> "END"; else -> "" }, 12, p.s, mono = true, ls = .08f, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 20.dp)) }
     }
 }
@@ -119,7 +129,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
                 Spacer(Modifier.height(12.dp)); Rule()
             }
         }
-        items(list, key = { "na" + it.id }) { al -> ProfileRow({ Cover(al.pic, 56.dp, al.name) }, al.name, listOf(al.artist, al.year).filter { it.isNotEmpty() }.joinToString(" · ")) { nav.push(Page.Album(al.id, al.name, al.pic)) } }
+        items(list, key = { "na" + it.id }) { al ->
+            ProfileRow({ Cover(al.pic, 56.dp, al.name, modifier = Modifier.heroAnchor("alb:${al.id}", al.pic, al.name)) }, al.name, listOf(al.artist, al.year).filter { it.isNotEmpty() }.joinToString(" · ")) {
+                SharedHero.capture("alb:${al.id}", al.pic, al.name)
+                nav.push(Page.Album(al.id, al.name, al.pic))
+            }
+        }
         item { T(when { err != null -> "加载失败：$err"; busy -> "LOADING"; !more -> "END"; else -> "" }, 12, p.s, mono = true, ls = .08f, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 20.dp)) }
     }
 }
@@ -176,8 +191,18 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
                     n == 0 -> T("EMPTY", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp)) }
             }
         }
-        items(albums ?: emptyList(), key = { "a" + it.id }) { al -> ProfileRow({ Cover(al.pic, 56.dp, al.name) }, al.name, listOf(al.artist, if (al.size > 0) "${al.size} 首" else "").filter { it.isNotEmpty() }.joinToString(" · ")) { nav.push(Page.Album(al.id, al.name, al.pic)) } }
-        items(artists ?: emptyList(), key = { "r" + it.id }) { ar -> ProfileRow({ Cover(ar.pic, 56.dp, ar.name) }, ar.name, "${two(ar.albums)} 张专辑") { nav.push(Page.Artist(ar.id, ar.name)) } }
+        items(albums ?: emptyList(), key = { "a" + it.id }) { al ->
+            ProfileRow({ Cover(al.pic, 56.dp, al.name, modifier = Modifier.heroAnchor("alb:${al.id}", al.pic, al.name)) }, al.name, listOf(al.artist, if (al.size > 0) "${al.size} 首" else "").filter { it.isNotEmpty() }.joinToString(" · ")) {
+                SharedHero.capture("alb:${al.id}", al.pic, al.name)
+                nav.push(Page.Album(al.id, al.name, al.pic))
+            }
+        }
+        items(artists ?: emptyList(), key = { "r" + it.id }) { ar ->
+            ProfileRow({ Cover(ar.pic, 56.dp, ar.name, modifier = Modifier.heroAnchor("art:${ar.id}", ar.pic, ar.name)) }, ar.name, "${two(ar.albums)} 张专辑") {
+                SharedHero.capture("art:${ar.id}", ar.pic, ar.name)
+                nav.push(Page.Artist(ar.id, ar.name))
+            }
+        }
     }
 }
 
@@ -215,9 +240,9 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
 
 
 // ======================= MV =======================
-@Composable fun MvCard(mv: Mv, width: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+@Composable fun MvCard(mv: Mv, width: androidx.compose.ui.unit.Dp? = null, onClick: () -> Unit) {
     val p = c
-    Column(Modifier.width(width).press(onClick = onClick)) {
+    Column((if (width != null) Modifier.width(width) else Modifier.fillMaxWidth()).press(onClick = onClick)) {
         Box(Modifier.fillMaxWidth().aspectRatio(16 / 9f).background(p.ph).nb(1.dp, p.k)) {
             if (mv.cover != null) AsyncImage(img(mv.cover, 480), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
             Box(Modifier.align(Alignment.BottomEnd).background(p.k).padding(horizontal = 6.dp, vertical = 2.dp)) { T(if (mv.durationMs > 0) fmt(mv.durationMs) else "MV", 11, p.tagFg, mono = true) }
@@ -235,14 +260,14 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item {
             Column {
-                Tag("MUSIC VIDEO"); Spacer(Modifier.height(4.dp)); T("MV 精选", Fs.HERO, w = 800, lh = 1.3f)
+                Tag("MUSIC VIDEO"); Spacer(Modifier.height(4.dp)); T(tr("MV 精选"), Fs.HERO, w = 800, lh = 1.3f)
                 Spacer(Modifier.height(12.dp)); ChipRow(listOf("推荐", "排行榜"), sel) { sel = it }
                 Spacer(Modifier.height(12.dp)); Rule()
-                when { err != null -> T("加载失败：$err", 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(top = 20.dp))
+                when { err != null -> T(trKnown("加载失败：$err"), 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(top = 20.dp))
                     list == null -> T("LOADING", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(top = 20.dp)) }
             }
         }
-        items(list ?: emptyList(), key = { "m" + it.id }) { mv -> BoxWithConstraints { MvCard(mv, maxWidth) { nav.push(Page.Mv(mv.id, mv.name, mv.artist)) } } }
+        items(list ?: emptyList(), key = { "m" + it.id }, contentType = { "mv" }) { mv -> MvCard(mv) { nav.push(Page.Mv(mv.id, mv.name, mv.artist)) } }
     }
 }
 

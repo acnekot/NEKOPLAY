@@ -32,6 +32,7 @@ import org.json.JSONObject
     fun buildCtx(): JSONObject = JSONObject().apply {
         put("hostVersion", APP_VERSION)
         put("platform", Plat.impl.name)
+        put("lang", I18n.active)
         put("wide", Screen.wide)
         put("landscape", Screen.landscape)
         put("playing", st.playing)
