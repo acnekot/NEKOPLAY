@@ -44,7 +44,7 @@ object Bg {
     var scale by mutableFloatStateOf(1f)     // 1..4
     var ox by mutableFloatStateOf(0f)        // 相对宽度
     var oy by mutableFloatStateOf(0f)        // 相对高度
-    val on get() = image != null
+    val on get() = Features.on("bg") && image != null
     private lateinit var file: File
     private lateinit var prefs: KV
 
@@ -131,7 +131,7 @@ object Bg {
 
 /** 背景图层：放在页面最底下。base 是图片下面的底色（图片半透明时透出来）；draft 不为空时画草稿（编辑页预览用） */
 @Composable fun BgLayer(base: Color? = null, draft: BgDraft? = null) {
-    val img = (if (draft != null) draft.shown ?: draft.src else Bg.image) ?: return
+    val img = (if (draft != null) draft.shown ?: draft.src else if (Features.on("bg")) Bg.image else null) ?: return
     val sc = draft?.scale ?: Bg.scale; val x = draft?.ox ?: Bg.ox; val y = draft?.oy ?: Bg.oy; val a = draft?.alpha ?: Bg.alpha
     Box(Modifier.fillMaxSize().then(if (base != null) Modifier.background(base) else Modifier).clipToBounds()) {
         Image(img, null, Modifier.fillMaxSize().graphicsLayer {

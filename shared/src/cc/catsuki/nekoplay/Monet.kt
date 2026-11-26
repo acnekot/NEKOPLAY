@@ -29,7 +29,7 @@ object Monet {
     /** 背景色浓淡：0 很淡 ~ 1 很浓 */
     var strength by mutableFloatStateOf(.5f)
 
-    val on get() = mode != 0 && seed != null
+    val on get() = Features.on("monet") && mode != 0 && seed != null
     val availableModes: List<Int> get() = MODES.indices.filter { it != 1 || Plat.impl.systemSeed() != null }
 
     fun load() {
@@ -60,6 +60,7 @@ object Monet {
 
     /** 按种子色改写一套配色：文字和功能色不动，只换背景层和主色 */
     fun apply(base: Pal): Pal {
+        if (!Features.on("monet")) return base
         val sd = seed ?: return base
         val (h, s0) = hueSat(sd)
         val s = s0.coerceIn(.18f, .9f)

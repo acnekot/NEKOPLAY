@@ -72,14 +72,12 @@ data class MotionPluginProfile(
     val displayName: String get() = if (presetLabel.isNotBlank()) "$pluginName · $presetLabel" else pluginName
 }
 
-/** 空间微交互令牌（与曲线/时间引擎完全解耦；启用动效插件时自动读取插件建议值，关闭插件立刻还原用户原值） */
+/** 空间微交互令牌（与曲线/时间引擎解耦；瀑布入场等重动效完全剥离至 @type motion 插件，未装插件时保持纯净轻量默认） */
 object MotionEffects {
-    var userHoverShiftDp by mutableFloatStateOf(5f)
+    var userHoverShiftDp by mutableFloatStateOf(3f)
     var userHoverTint by mutableStateOf(true)
     var userPressScale by mutableFloatStateOf(0.985f)
     var userPageScale by mutableStateOf(true)
-    var userListStaggerMs by mutableIntStateOf(24)
-    var userListSlideDp by mutableFloatStateOf(36f)
 
     var hoverShiftDp: Float
         get() = AnimStyle.pluginProfile?.hoverShiftDp ?: userHoverShiftDp
@@ -93,28 +91,22 @@ object MotionEffects {
     var pageScale: Boolean
         get() = AnimStyle.pluginProfile?.pageScale ?: userPageScale
         set(v) { userPageScale = v }
-    var listStaggerMs: Int
-        get() = AnimStyle.pluginProfile?.listStaggerMs ?: userListStaggerMs
-        set(v) { userListStaggerMs = v.coerceIn(0, 80) }
-    var listSlideDp: Float
-        get() = AnimStyle.pluginProfile?.listSlideDp ?: userListSlideDp
-        set(v) { userListSlideDp = v.coerceIn(0f, 80f) }
+    /** 瀑布错峰入场仅由外置 @type motion 插件提供；未安装动效插件时始终为 0（纯净默认） */
+    val listStaggerMs: Int get() = AnimStyle.pluginProfile?.listStaggerMs ?: 0
+    val listSlideDp: Float get() = AnimStyle.pluginProfile?.listSlideDp ?: 0f
 
     private val k get() = Plat.prefs("ui")
     fun load() {
-        userHoverShiftDp = k.getFloat("me_hoverShift", 5f).coerceIn(0f, 12f)
+        userHoverShiftDp = k.getFloat("me_hoverShift", 3f).coerceIn(0f, 12f)
         userHoverTint = k.getBoolean("me_hoverTint", true)
         userPressScale = k.getFloat("me_pressScale", 0.985f).coerceIn(0.92f, 1.0f)
         userPageScale = k.getBoolean("me_pageScale", true)
-        userListStaggerMs = k.getInt("me_listStagger", 24).coerceIn(0, 80)
-        userListSlideDp = k.getFloat("me_listSlide", 36f).coerceIn(0f, 80f)
     }
     fun save() {
         k.edit().putFloat("me_hoverShift", userHoverShiftDp).putBoolean("me_hoverTint", userHoverTint)
-            .putFloat("me_pressScale", userPressScale).putBoolean("me_pageScale", userPageScale)
-            .putInt("me_listStagger", userListStaggerMs).putFloat("me_listSlide", userListSlideDp).apply()
+            .putFloat("me_pressScale", userPressScale).putBoolean("me_pageScale", userPageScale).apply()
     }
-    fun reset() { userHoverShiftDp = 5f; userHoverTint = true; userPressScale = 0.985f; userPageScale = true; userListStaggerMs = 24; userListSlideDp = 36f; save() }
+    fun reset() { userHoverShiftDp = 3f; userHoverTint = true; userPressScale = 0.985f; userPageScale = true; save() }
 }
 
 /** 内置动效形式（纯基础原语）：0 弹簧 / 1 缓动 / 2 线性 / 3 关闭 / 4 自定义曲线；特色动效（如 osu!lazer）已独立为 @type motion 插件 */
@@ -138,8 +130,8 @@ object AnimStyle {
     var pageBaseMs by mutableIntStateOf(320)
     var crossfadeBaseMs by mutableIntStateOf(400)
 
-    val off get() = style == 3
-    val custom get() = style == 4
+    val off get() = style == 3 || !Features.on("motion")
+    val custom get() = style == 4 && Features.on("motion")
     val activeLabel: String get() = if (off) labels[3] else pluginProfile?.displayName ?: labels[style]
 
     private var cachedKey = ""
@@ -384,10 +376,11 @@ object ListStagger {
     }
 }
 
-/** 歌单 / 曲目逐项右滑留尾错峰入场（纯 GPU graphicsLayer，0 重组） */
+/** 外置动效插件驱动的列表逐项瀑布入场（未安装动效插件时直接返回原 Modifier，零额外开销） */
 fun Modifier.cascadeEnter(): Modifier = composed {
+    if (AnimStyle.off || AnimStyle.pluginProfile == null) return@composed this
     val slideDp = MotionEffects.listSlideDp; val stagger = MotionEffects.listStaggerMs
-    if (AnimStyle.off || (stagger <= 0 && slideDp < 1f)) return@composed this
+    if (stagger <= 0 && slideDp < 1f) return@composed this
     val prog = remember { Animatable(0f) }
     LaunchedEffect(Unit) { val d = ListStagger.nextDelayMs(); if (d > 0L) delay(d); prog.animateTo(1f, Motion.page()) }
     this.graphicsLayer { val p = prog.value; alpha = p.coerceIn(0f, 1f); translationX = (1f - p) * slideDp.dp.toPx() }

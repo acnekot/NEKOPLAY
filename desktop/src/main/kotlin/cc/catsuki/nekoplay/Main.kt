@@ -48,7 +48,7 @@ fun main() {
     Thread {
         Thread.sleep(150)
         Boot.initDeferred()
-        (Plat.impl.vst as? DesktopVstHost)?.initSaved()
+        if (Features.on("vst")) (Plat.impl.vst as? DesktopVstHost)?.initSaved()
         Store.refreshAll()
     }.apply { isDaemon = true; name = "boot-deferred" }.start()
     if (System.getenv("NEKOPLAY_BENCH") == "1") {

@@ -28,7 +28,7 @@ object LyricNotify {
             while (isActive) {
                 delay(300)
                 val st = Engine.state.value; val t = st.current
-                if (!DeskLyric.notify || t == null || !st.playing) {
+                if (!Features.on("notify") || !DeskLyric.notify || t == null || !st.playing) {
                     if (last.isNotEmpty()) { nm.cancel(ID); audio.setLyric(null); last = "" }
                     continue
                 }

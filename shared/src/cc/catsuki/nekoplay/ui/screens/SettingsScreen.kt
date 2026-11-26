@@ -94,7 +94,13 @@ import java.util.Calendar
         item { SecRow("存储", "下载、本地音乐、播放缓存") { nav.push(Page.SetSub("storage")) } }
         if (Plat.isDesktop) item { SecRow("桌面", "托盘、侧拉模式、Discord、快捷键") { nav.push(Page.SetSub("desktop")) } }
         item { val pl by Plugins.list.collectAsState(); SecRow("插件", if (pl.isEmpty()) "导入 JS 插件：在线音源、歌词等服务" else "${pl.count { Plugins.on(it.id) }}/${pl.size} 个已开启") { nav.push(Page.PluginMgr) } }
-        item { SecRow("功能管理", "开关内置插件：${Features.list.count { Features.on(it.id) }}/${Features.list.size} 已开启") { nav.push(Page.Feats) } }
+        item {
+            val allPlugs by Plugins.list.collectAsState()
+            val rev = Plugins.rev
+            val extAll = remember(allPlugs, rev) { Plugins.features }
+            val extOn = extAll.count { Plugins.on(it.id) }
+            SecRow("功能管理", "内置模块 ${Features.list.count { Features.on(it.id) }}/${Features.list.size} · 外置功能 $extOn/${extAll.size}") { nav.push(Page.Feats) }
+        }
         item { SecRow("数据", "配置备份 / 导入、WebDAV、听歌统计") { nav.push(Page.SetSub("data")) } }
         item { SecRow("高级", "性能、内存、调试") { nav.push(Page.SetSub("adv")) } }
         item { SecRow("关于", APP_VERSION) { nav.push(Page.SetSub("about")) } }
@@ -117,9 +123,9 @@ import java.util.Calendar
             }
         }
         item { NavRow("字体", "默认 Inter 无衬线；也可以改用系统字体", if (Typo.sans == 0) "系统字体" else "Inter") { Typo.set(1 - Typo.sans) } }
-        item { MonetSettings() }
-        item { NavRow("自定义背景", "选一张图片，可调模糊、透明度、位置和大小", if (Bg.on) "已设置" else "未设置") { nav.push(Page.Background) } }
-        if (Bg.on) item {
+        if (Features.on("monet")) item { MonetSettings() }
+        if (Features.on("bg")) item { NavRow("自定义背景", "选一张图片，可调模糊、透明度、位置和大小", if (Bg.on) "已设置" else "未设置") { nav.push(Page.Background) } }
+        if (Features.on("bg") && Bg.on) item {
             SetLine("栏位不透明度", "有自定义背景时，侧边栏、顶栏、播放条的不透明度") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { NSlider(UiPref.barAlpha, 0f..1f, onDone = { UiPref.save() }) { UiPref.barAlpha = it } }
@@ -127,7 +133,7 @@ import java.util.Calendar
                 }
             }
         }
-        item { NavRow("动效", "动画形式、曲线与动效插件", "${AnimStyle.activeLabel} · ${Anim.labels[Anim.level]}") { nav.push(Page.Tuning) } }
+        if (Features.on("motion")) item { NavRow("动效", "简单配置 / 高级曲线与外置动效插件", "${AnimStyle.activeLabel} · ${Anim.labels[Anim.level]}") { nav.push(Page.Tuning) } }
        }
        "layout" -> {
         item { NavRow("首页布局", "调整首页模块的顺序，或关掉不需要的", "${HomeLayout.visible.size}/${HomeLayout.ALL.size}") { nav.push(Page.HomeLayout) } }
@@ -182,15 +188,15 @@ import java.util.Calendar
         item { SwitchRow("当前句指示条", "在当前演唱句左侧显示主题色竖条（Hydrogen 风格默认开启）", LyricPref.accentBar) { LyricPref.accentBar = it; LyricPref.save() } }
         item { SwitchRow("逐字高亮", "有逐字歌词的歌，当前句一个字一个字亮起来", UiPref.karaoke) { UiPref.karaoke = it; UiPref.save() } }
         item { SwitchRow("远处歌词模糊", "离当前句较远的行轻微模糊（更有层次，略耗性能）", UiPref.lyricBlur) { UiPref.lyricBlur = it; UiPref.save() } }
-        if (!Plat.isDesktop) item { SwitchRow("通知栏歌词", "播放通知里显示当前这句歌词；也会发送状态栏歌词（魅族协议，配合状态栏歌词模块）", DeskLyric.notify) { DeskLyric.notify = it; DeskLyric.save() } }
+        if (!Plat.isDesktop && Features.on("notify")) item { SwitchRow("通知栏歌词", "播放通知里显示当前这句歌词；也会发送状态栏歌词（魅族协议，配合状态栏歌词模块）", DeskLyric.notify) { DeskLyric.notify = it; DeskLyric.save() } }
         if (Features.on("desk")) item { SwitchRow("桌面歌词", "置顶的悬浮歌词窗：鼠标移上去可以切歌、调字号、锁定；托盘菜单也能开关", DeskLyric.on) { DeskLyric.on = it; DeskLyric.save() } }
         if (Features.on("desk") && DeskLyric.on) deskLyricSettings(p)
        }
        "play" -> {
         item { NavRow(if (Plat.isDesktop) "音质" else "Wi-Fi 音质", "在线播放的档位，拿不到时自动降一档", Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav) } }
         if (!Plat.isDesktop) item { NavRow("流量音质", "用手机流量时换成这个档位", if (Engine.qualityCell < 0) "同 Wi-Fi" else Ncm.LEVEL_LABELS[Engine.qualityCell]) { cellQualitySheet(nav) } }
-        item { NavRow("效果器", "10 段均衡器、低音增强、环绕、响度", if (FxStore.fx.on) FxStore.fx.preset else "关") { nav.push(Page.Effects) } }
-        Plat.impl.vst?.let { v ->
+        if (Features.on("fx")) item { NavRow("效果器", "10 段均衡器、低音增强、环绕、响度", if (FxStore.fx.on) FxStore.fx.preset else "关") { nav.push(Page.Effects) } }
+        if (Features.on("vst")) Plat.impl.vst?.let { v ->
             item { NavRow("VST 插件 (Beta)", "实验性：加载 VST3 / VST2 音效与可视化仪（如 MiniMeters），支持置顶浮窗", if (v.enabled) "${v.chain.size} 个运行中" else if (v.chain.isNotEmpty()) "已停用（${v.chain.size}）" else "关") { nav.push(Page.Vst) } }
         }
         item { val ms = listOf(0, 150, 300, 800); SetLine("淡入淡出", "暂停、继续和切歌时音量渐变") { ChipRow(listOf("关", "短", "中", "长"), ms.indexOf(Engine.fadeMs).coerceAtLeast(0)) { Engine.setFade(ms[it]) } } }
@@ -211,8 +217,8 @@ import java.util.Calendar
        "desktop" -> {
         if (UiPref.isMac) item { SwitchRow("窗口圆角", "使用 macOS 原生不透明圆角窗口与系统阴影（关掉后为直角无边框窗口，重启后生效）", UiPref.round) { UiPref.round = it; UiPref.save(); nav.toast = "重启后生效" } }
         item { SwitchRow("后台留存", "关闭窗口时缩到系统托盘继续播放；托盘图标可以播放 / 暂停、切歌、退出", UiPref.tray) { UiPref.tray = it; UiPref.save() } }
-        item { NavRow("侧拉模式", "窗口变成手机宽度贴在屏幕边上，鼠标离开就收起；也可以右键左上角 NEKOPLAY 进入", if (SidePref.active != 0) "使用中" else null) { SidePref.menu(nav) } }
-        item {
+        if (Features.on("side")) item { NavRow("侧拉模式", "窗口变成手机宽度贴在屏幕边上，鼠标离开就收起；也可以右键左上角 NEKOPLAY 进入", if (SidePref.active != 0) "使用中" else null) { SidePref.menu(nav) } }
+        if (Features.on("side")) item {
             SetLine("侧拉宽度", "侧拉模式下窗口的宽度") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { NSlider(SidePref.width.toFloat(), 360f..560f, onDone = { SidePref.save() }) { SidePref.width = it.toInt() } }

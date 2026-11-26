@@ -32,7 +32,7 @@ private val CURVE_PRESETS = listOf(
     CurvePreset("Material", 0.20f, 0.00f, 0.00f, 1.00f),
 )
 
-/** 动效：可视化贝塞尔曲线拖拽编辑器 + 弹簧物理 + 各场景时长全自定义 */
+/** 动效设置：分为「简单配置」（默认纯净基础动效 + 插件入口）与「高级自定义」（贝塞尔曲线 / 物理参数 / 时长 / 微交互） */
 @Composable fun TuningPage() {
     val nav = LocalNav.current
     val p = c
@@ -41,19 +41,28 @@ private val CURVE_PRESETS = listOf(
     val preview = remember { Animatable(0f) }
     var previewForward by remember { mutableStateOf(true) }
     var previewJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var tab by remember { mutableIntStateOf(0) } // 0 简单配置 / 1 高级自定义
+    var lastOnStyle by remember { mutableIntStateOf(if (AnimStyle.style == 3) 0 else AnimStyle.style) }
 
     fun playPreview() {
         previewJob?.cancel()
         val target = if (previewForward) 1f else 0f
         previewForward = !previewForward
-        previewJob = scope.launch {
-            preview.animateTo(target, spF)
-        }
+        previewJob = scope.launch { preview.animateTo(target, spF) }
     }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 48.dp)) {
-        item { Column { Tag("MOTION"); Spacer(Modifier.height(4.dp)); T("动效与曲线", Fs.HERO, w = 800, lh = 1.3f); Spacer(Modifier.height(12.dp)); Rule() } }
+        item {
+            Column {
+                Tag("MOTION"); Spacer(Modifier.height(4.dp))
+                T("动效与曲线", Fs.HERO, w = 800, lh = 1.3f)
+                Spacer(Modifier.height(12.dp))
+                ChipRow(listOf("简单配置", "高级自定义"), tab) { tab = it }
+                Spacer(Modifier.height(12.dp)); Rule()
+            }
+        }
 
+        // 顶部外置动效插件状态卡（简单与高级视图均可见，清晰标明插件接管边界）
         item {
             val mp = AnimStyle.pluginProfile
             if (mp != null) {
@@ -61,150 +70,167 @@ private val CURVE_PRESETS = listOf(
                     T("MOTION PLUGIN ACTIVE · 外置动效插件已接管", 10, p.p, 800, mono = true)
                     Spacer(Modifier.height(4.dp))
                     T(mp.displayName, 16, p.k, 800)
-                    T("当前所有页面切换、弹窗与微交互均由该动效插件实时驱动（仍受下方全局速度倍率控制）", 12, p.s, lines = 2)
+                    T("特色缓动曲线与列表瀑布入场已由该插件独立驱动（仍受全局动效开关与速度倍率控制）", 12, p.s, lines = 2)
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (Plugins.get(mp.pluginId)?.has("render") == true) Box(Modifier.press { nav.push(Page.PluginPage(mp.pluginId)) }.background(p.p).padding(horizontal = 12.dp, vertical = 6.dp)) { T("调整插件预设", 11, Color.White, 700) }
-                        Box(Modifier.press { Plugins.set(mp.pluginId, false); playPreview() }.nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 6.dp)) { T("停用并切回内置", 11, p.k, 600) }
-                        Box(Modifier.press { playPreview() }.nbf(1.dp, p.l2).padding(horizontal = 12.dp, vertical = 6.dp)) { T("试播留尾", 11, p.k, 600) }
+                        if (Plugins.get(mp.pluginId)?.has("render") == true) Box(Modifier.press { nav.push(Page.PluginPage(mp.pluginId)) }.background(p.p).padding(horizontal = 12.dp, vertical = 6.dp)) { T("插件设置", 11, Color.White, 700) }
+                        Box(Modifier.press { Plugins.set(mp.pluginId, false); playPreview() }.nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 6.dp)) { T("停用并切回默认", 11, p.k, 600) }
+                        Box(Modifier.press { playPreview() }.nbf(1.dp, p.l2).padding(horizontal = 12.dp, vertical = 6.dp)) { T("试播", 11, p.k, 600) }
                     }
                 }
             } else {
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp).press { nav.push(Page.PluginMgr) }.background(p.sheet).nbf(1.dp, p.l2).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        T("需要 osu!lazer 等特色动效？", 13, p.k, 700)
-                        T("特色动效已按 Plugin API v2 拆分为独立动效插件，可在插件中心一键订阅安装与热更新", 11, p.s, lines = 2)
+                        T("主软件默认仅保留简洁基础动效", 13, p.k, 700)
+                        T("瀑布入场、长留尾缓动等特色动效已剥离为独立动效插件，需要时到插件中心按需安装", 11, p.s, lines = 2)
                     }
-                    T("前往插件 →", 11, p.p, 700)
+                    Spacer(Modifier.width(8.dp))
+                    T("插件中心 →", 11, p.p, 700)
                 }
             }
         }
 
-        item {
-            SetLine("内置动效形式", "弹簧带物理回弹，缓动先快后慢，自定义曲线可直接在下方可视化拖拽控制点（启用动效插件时由插件优先接管）") {
-                ChipRow(AnimStyle.labels, AnimStyle.style) { AnimStyle.set(it); playPreview() }
+        if (tab == 0) {
+            item {
+                SwitchRow("启用界面动效", "关闭后页面切换、弹窗与交互立即响应，零动画耗时", AnimStyle.style != 3) { on ->
+                    if (on) AnimStyle.set(if (lastOnStyle == 3) 0 else lastOnStyle)
+                    else { if (AnimStyle.style != 3) lastOnStyle = AnimStyle.style; AnimStyle.set(3) }
+                    playPreview()
+                }
             }
-        }
-
-        item {
-            SetLine("可视化曲线编辑器", "拖动蓝色 P1 与粉色 P2 控制点实时调整 cubic-bezier 曲线（纵轴支持拉出 0~1 范围产生过冲回弹）") {
-                BezierCurveEditor(
-                    x1 = AnimStyle.x1, y1 = AnimStyle.y1, x2 = AnimStyle.x2, y2 = AnimStyle.y2,
-                    onChange = { a, b, c2, d -> AnimStyle.setCurve(a, b, c2, d, switchCustom = true, persist = false) },
-                    onDragEnd = { AnimStyle.save(); playPreview() },
-                )
-                Spacer(Modifier.height(10.dp))
-                T(
-                    "cubic-bezier(%.2f, %.2f, %.2f, %.2f)".format(AnimStyle.x1, AnimStyle.y1, AnimStyle.x2, AnimStyle.y2),
-                    12, p.p, 700, mono = true,
-                )
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CURVE_PRESETS.forEach { pr ->
-                        Box(Modifier.press { AnimStyle.setCurve(pr.x1, pr.y1, pr.x2, pr.y2, switchCustom = true); playPreview() }
-                            .nbf(1.dp, p.l2).padding(horizontal = 10.dp, vertical = 5.dp)) {
-                            T(pr.name, 11, p.k, 600)
+            if (AnimStyle.style != 3) {
+                item {
+                    val simpleLabels = listOf("默认弹簧", "柔和缓动", "线性")
+                    val curIdx = if (AnimStyle.style in 0..2) AnimStyle.style else -1
+                    SetLine(
+                        "基础动效风格",
+                        if (AnimStyle.pluginProfile != null) "当前正由外置动效插件接管；停用插件后将使用此处基础风格"
+                        else if (AnimStyle.style == 4) "当前正使用「高级自定义」曲线；点击下方选项可切回简洁内置风格"
+                        else "轻盈干净的内置基础动效，不附加列表瀑布入场等重动画",
+                    ) {
+                        ChipRow(simpleLabels, curIdx) { lastOnStyle = it; AnimStyle.set(it); playPreview() }
+                    }
+                }
+                item {
+                    SetLine("全局速度倍率", "整体加快或放慢所有页面切换、播放页与弹窗动画") {
+                        ChipRow(Anim.labels, Anim.level) { Anim.set(it); playPreview() }
+                    }
+                }
+                item {
+                    SetLine("动效预览", "点击试播感受当前节奏（含外置动效插件）") {
+                        PreviewTrack(preview.value) { playPreview() }
+                    }
+                }
+            }
+        } else {
+            item {
+                SetLine("内置动效引擎", "完整模式：弹簧 / 缓动 / 线性 / 关闭 / 自定义贝塞尔曲线") {
+                    ChipRow(AnimStyle.labels, AnimStyle.style) { if (it != 3) lastOnStyle = it; AnimStyle.set(it); playPreview() }
+                }
+            }
+            item {
+                SetLine("可视化曲线编辑器", "拖动蓝色 P1 与粉色 P2 控制点实时调整 cubic-bezier 曲线（纵轴支持拉出 0~1 产生过冲回弹）") {
+                    BezierCurveEditor(
+                        x1 = AnimStyle.x1, y1 = AnimStyle.y1, x2 = AnimStyle.x2, y2 = AnimStyle.y2,
+                        onChange = { a, b, c2, d -> AnimStyle.setCurve(a, b, c2, d, switchCustom = true, persist = false) },
+                        onDragEnd = { AnimStyle.save(); playPreview() },
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    T("cubic-bezier(%.2f, %.2f, %.2f, %.2f)".format(AnimStyle.x1, AnimStyle.y1, AnimStyle.x2, AnimStyle.y2), 12, p.p, 700, mono = true)
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CURVE_PRESETS.forEach { pr ->
+                            Box(Modifier.press { AnimStyle.setCurve(pr.x1, pr.y1, pr.x2, pr.y2, switchCustom = true); playPreview() }
+                                .nbf(1.dp, p.l2).padding(horizontal = 10.dp, vertical = 5.dp)) {
+                                T(pr.name, 11, p.k, 600)
+                            }
                         }
                     }
+                    Spacer(Modifier.height(14.dp))
+                    PreviewTrack(preview.value) { playPreview() }
                 }
-                Spacer(Modifier.height(14.dp))
-                // 实时试播轨道（纯 GPU graphicsLayer 位移，0 重组 / 0 重排，完整展示过冲不截断）
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    var trackPx by remember { mutableFloatStateOf(0f) }
-                    Box(Modifier.weight(1f).height(34.dp).background(p.sheet).nbf(1.dp, p.l2)
-                        .onSizeChanged { trackPx = it.width.toFloat() }
-                        .padding(horizontal = 24.dp), contentAlignment = Alignment.CenterStart) {
-                        Box(Modifier.size(22.dp).graphicsLayer {
-                            val travel = (trackPx - 48.dp.toPx() - 22.dp.toPx()).coerceAtLeast(1f)
-                            translationX = travel * preview.value
-                        }.background(p.p))
+            }
+            item {
+                SetLine("空间微交互", "悬停位移、底色高亮、按压缩放与切页微缩放（瀑布入场已剥离至外置动效插件）") {
+                    ParamSlider("侧栏 / 列表悬停位移", MotionEffects.hoverShiftDp, 0f..12f, if (MotionEffects.hoverShiftDp < 0.5f) "关" else "${MotionEffects.hoverShiftDp.toInt()} dp", onDone = { MotionEffects.save() }) {
+                        MotionEffects.hoverShiftDp = it.roundToInt().toFloat()
                     }
-                    Box(Modifier.press { playPreview() }.background(p.p).padding(horizontal = 14.dp, vertical = 8.dp)) {
-                        T("试播动效", 12, Color.White, 700)
+                    Spacer(Modifier.height(10.dp))
+                    ParamSlider("按压缩放幅度（1.00 = 关闭）", MotionEffects.pressScale, 0.92f..1.00f, "%.3f".format(MotionEffects.pressScale), onDone = { MotionEffects.save() }) {
+                        MotionEffects.pressScale = (it * 200f).roundToInt() / 200f
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    SwitchRow("悬停底色高亮", "鼠标滑过侧边栏导航或歌单项时显示柔和底色", MotionEffects.hoverTint) { MotionEffects.hoverTint = it; MotionEffects.save() }
+                    SwitchRow("播放页 / 切页微缩放", "展开或收起播放页时叠加空间缩放过渡", MotionEffects.pageScale) { MotionEffects.pageScale = it; MotionEffects.save() }
+                }
+            }
+            item {
+                SetLine("弹簧物理参数", "用于「弹簧」模式与播放页展开等物理动效") {
+                    ParamSlider("阻尼 Damping（越小越弹）", AnimStyle.springDamping, 0.35f..1.0f, "%.2f".format(AnimStyle.springDamping), onDone = { AnimStyle.save(); playPreview() }) {
+                        AnimStyle.springDamping = (it * 100f).roundToInt() / 100f
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    ParamSlider("刚度 Stiffness（越大越快）", AnimStyle.springStiffness, 100f..1200f, "${AnimStyle.springStiffness.toInt()}", onDone = { AnimStyle.save(); playPreview() }) {
+                        AnimStyle.springStiffness = (it / 20f).roundToInt() * 20f
                     }
                 }
             }
-        }
-
-        item {
-            SetLine("全局速度倍率", "整体加快或放慢所有页面切换、播放页、队列与弹窗动画") {
-                ChipRow(Anim.labels, Anim.level) { Anim.set(it); playPreview() }
-            }
-        }
-
-        item {
-            SetLine("空间微交互（与曲线解耦）", "悬停位移、底色高亮、按压缩放与切页微缩放均独立控制，任意曲线模式下都能自由开关和调参") {
-                ParamSlider("侧栏 / 列表悬停位移", MotionEffects.hoverShiftDp, 0f..12f, if (MotionEffects.hoverShiftDp < 0.5f) "关" else "${MotionEffects.hoverShiftDp.toInt()} dp", onDone = { MotionEffects.save() }) {
-                    MotionEffects.hoverShiftDp = it.roundToInt().toFloat()
-                }
-                Spacer(Modifier.height(10.dp))
-                ParamSlider("按压缩放幅度（1.00 = 关闭）", MotionEffects.pressScale, 0.92f..1.00f, "%.3f".format(MotionEffects.pressScale), onDone = { MotionEffects.save() }) {
-                    MotionEffects.pressScale = (it * 200f).roundToInt() / 200f
-                }
-                Spacer(Modifier.height(10.dp))
-                ParamSlider("歌单 / 曲目逐项入场间隔", MotionEffects.listStaggerMs.toFloat(), 0f..60f, if (MotionEffects.listStaggerMs == 0) "关" else "${MotionEffects.listStaggerMs} ms", onDone = { MotionEffects.save() }) {
-                    MotionEffects.listStaggerMs = (it / 2f).roundToInt() * 2
-                }
-                Spacer(Modifier.height(10.dp))
-                ParamSlider("歌单 / 曲目入场滑入距离", MotionEffects.listSlideDp, 0f..72f, if (MotionEffects.listSlideDp < 1f) "关" else "${MotionEffects.listSlideDp.toInt()} dp", onDone = { MotionEffects.save() }) {
-                    MotionEffects.listSlideDp = (it / 2f).roundToInt() * 2f
-                }
-                Spacer(Modifier.height(8.dp))
-                SwitchRow("悬停底色高亮", "鼠标滑过侧边栏导航或歌单项时显示柔和底色", MotionEffects.hoverTint) { MotionEffects.hoverTint = it; MotionEffects.save() }
-                SwitchRow("播放页 / 切页微缩放", "展开或收起播放页时叠加 0.96 → 1.00 的空间缩放过渡", MotionEffects.pageScale) { MotionEffects.pageScale = it; MotionEffects.save() }
-            }
-        }
-
-        item {
-            SetLine("弹簧物理参数", "用于「弹簧」模式与播放页展开等物理动效") {
-                ParamSlider("阻尼 Damping（越小越弹）", AnimStyle.springDamping, 0.35f..1.0f, "%.2f".format(AnimStyle.springDamping), onDone = { AnimStyle.save(); playPreview() }) {
-                    AnimStyle.springDamping = (it * 100f).roundToInt() / 100f
-                }
-                Spacer(Modifier.height(10.dp))
-                ParamSlider("刚度 Stiffness（越大越快）", AnimStyle.springStiffness, 100f..1200f, "${AnimStyle.springStiffness.toInt()}", onDone = { AnimStyle.save(); playPreview() }) {
-                    AnimStyle.springStiffness = (it / 20f).roundToInt() * 20f
-                }
-            }
-        }
-
-        item {
-            SetLine("各场景动画时长（ms）", "精细控制微交互、弹窗、切页与封面渐变的基准时长") {
-                ParamSlider("微交互（按钮 / 开关）", AnimStyle.quickBaseMs.toFloat(), 40f..400f, "${AnimStyle.quickBaseMs} ms", onDone = { AnimStyle.save() }) {
-                    AnimStyle.quickBaseMs = (it / 10f).roundToInt() * 10
-                }
-                Spacer(Modifier.height(10.dp))
-                ParamSlider("弹窗 / 菜单 / 面板", AnimStyle.standardBaseMs.toFloat(), 80f..600f, "${AnimStyle.standardBaseMs} ms", onDone = { AnimStyle.save() }) {
-                    AnimStyle.standardBaseMs = (it / 10f).roundToInt() * 10
-                }
-                Spacer(Modifier.height(10.dp))
-                ParamSlider("页面切换 / 播放页", AnimStyle.pageBaseMs.toFloat(), 100f..800f, "${AnimStyle.pageBaseMs} ms", onDone = { AnimStyle.save(); playPreview() }) {
-                    AnimStyle.pageBaseMs = (it / 10f).roundToInt() * 10
-                }
-                Spacer(Modifier.height(10.dp))
-                ParamSlider("封面 / 背景交叉淡化", AnimStyle.crossfadeBaseMs.toFloat(), 100f..1000f, "${AnimStyle.crossfadeBaseMs} ms", onDone = { AnimStyle.save() }) {
-                    AnimStyle.crossfadeBaseMs = (it / 20f).roundToInt() * 20
-                }
-            }
-        }
-
-        item {
-            SetLine("导入 / 导出动效配置", "复制或粘贴完整的曲线与时长 JSON，方便跨设备同步或分享") {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.press { copy(AnimStyle.exportJson(), "动效配置 JSON") }.nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 7.dp)) {
-                        T("导出 JSON", 12, p.k, 700)
+            item {
+                SetLine("各场景动画时长（ms）", "精细控制微交互、弹窗、切页与封面渐变的基准时长") {
+                    ParamSlider("微交互（按钮 / 开关）", AnimStyle.quickBaseMs.toFloat(), 40f..400f, "${AnimStyle.quickBaseMs} ms", onDone = { AnimStyle.save() }) {
+                        AnimStyle.quickBaseMs = (it / 10f).roundToInt() * 10
                     }
-                    Box(Modifier.press {
-                        nav.input = InputSpec("导入动效 JSON", "粘贴导出的动效配置 JSON（nekoplay-motion-v1）") { raw ->
-                            runCatching { AnimStyle.importJson(raw) }.onFailure { nav.toast = "JSON 格式有误：${it.message}"; return@InputSpec }
-                            nav.toast = "已导入动效配置"; playPreview()
+                    Spacer(Modifier.height(10.dp))
+                    ParamSlider("弹窗 / 菜单 / 面板", AnimStyle.standardBaseMs.toFloat(), 80f..600f, "${AnimStyle.standardBaseMs} ms", onDone = { AnimStyle.save() }) {
+                        AnimStyle.standardBaseMs = (it / 10f).roundToInt() * 10
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    ParamSlider("页面切换 / 播放页", AnimStyle.pageBaseMs.toFloat(), 100f..800f, "${AnimStyle.pageBaseMs} ms", onDone = { AnimStyle.save(); playPreview() }) {
+                        AnimStyle.pageBaseMs = (it / 10f).roundToInt() * 10
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    ParamSlider("封面 / 背景交叉淡化", AnimStyle.crossfadeBaseMs.toFloat(), 100f..1000f, "${AnimStyle.crossfadeBaseMs} ms", onDone = { AnimStyle.save() }) {
+                        AnimStyle.crossfadeBaseMs = (it / 20f).roundToInt() * 20
+                    }
+                }
+            }
+            item {
+                SetLine("导入 / 导出动效配置", "复制或粘贴完整的曲线与时长 JSON，方便跨设备同步或分享") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.press { copy(AnimStyle.exportJson(), "动效配置 JSON") }.nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 7.dp)) {
+                            T("导出 JSON", 12, p.k, 700)
                         }
-                    }.background(p.k).padding(horizontal = 12.dp, vertical = 7.dp)) {
-                        T("导入 JSON", 12, p.tagFg, 700)
+                        Box(Modifier.press {
+                            nav.input = InputSpec("导入动效 JSON", "粘贴导出的动效配置 JSON（nekoplay-motion-v2）") { raw ->
+                                runCatching { AnimStyle.importJson(raw) }.onFailure { nav.toast = "JSON 格式有误：${it.message}"; return@InputSpec }
+                                nav.toast = "已导入动效配置"; playPreview()
+                            }
+                        }.background(p.k).padding(horizontal = 12.dp, vertical = 7.dp)) {
+                            T("导入 JSON", 12, p.tagFg, 700)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        LinkBtn("恢复默认", 12) { AnimStyle.reset(); nav.toast = "已恢复默认动效"; playPreview() }
                     }
-                    Spacer(Modifier.weight(1f))
-                    LinkBtn("恢复默认", 12) { AnimStyle.reset(); nav.toast = "已恢复默认动效"; playPreview() }
                 }
             }
+        }
+    }
+}
+
+@Composable private fun PreviewTrack(progress: Float, onPlay: () -> Unit) {
+    val p = c
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        var trackPx by remember { mutableFloatStateOf(0f) }
+        Box(Modifier.weight(1f).height(34.dp).background(p.sheet).nbf(1.dp, p.l2)
+            .onSizeChanged { trackPx = it.width.toFloat() }
+            .padding(horizontal = 24.dp), contentAlignment = Alignment.CenterStart) {
+            Box(Modifier.size(22.dp).graphicsLayer {
+                val travel = (trackPx - 48.dp.toPx() - 22.dp.toPx()).coerceAtLeast(1f)
+                translationX = travel * progress
+            }.background(p.p))
+        }
+        Box(Modifier.press(onClick = onPlay).background(p.p).padding(horizontal = 14.dp, vertical = 8.dp)) {
+            T("试播动效", 12, Color.White, 700)
         }
     }
 }
@@ -230,12 +256,12 @@ private val CURVE_PRESETS = listOf(
     val c1Color = p.p
     val c2Color = Color(0xFFFF4D6D)
     val latest by rememberUpdatedState(listOf(x1, y1, x2, y2))
-    var dragging by remember { mutableIntStateOf(0) } // 1 = P1, 2 = P2
+    var dragging by remember { mutableIntStateOf(0) }
 
-    Box(Modifier.fillMaxWidth().height(230.dp).background(p.sheet).nbf(1.dp, p.k)) {
+    Box(Modifier.fillMaxWidth().height(220.dp).background(p.sheet).nbf(1.dp, p.k)) {
         Canvas(Modifier.fillMaxSize().pointerInput(Unit) {
             val padX = 28.dp.toPx()
-            val padY = 44.dp.toPx()
+            val padY = 42.dp.toPx()
             fun plotW() = (size.width - padX * 2).coerceAtLeast(1f)
             fun plotH() = (size.height - padY * 2).coerceAtLeast(1f)
             fun toPx(nx: Float, ny: Float) = Offset(padX + nx * plotW(), size.height - padY - ny * plotH())
@@ -262,39 +288,27 @@ private val CURVE_PRESETS = listOf(
             }
         }) {
             val padX = 28.dp.toPx()
-            val padY = 44.dp.toPx()
+            val padY = 42.dp.toPx()
             val pw = (size.width - padX * 2).coerceAtLeast(1f)
             val ph = (size.height - padY * 2).coerceAtLeast(1f)
             fun pt(nx: Float, ny: Float) = Offset(padX + nx * pw, size.height - padY - ny * ph)
 
-            // 网格与 0..1 基准框
             val gridCol = p.l2
             for (g in 0..4) {
                 val f = g / 4f
                 drawLine(gridCol, pt(f, 0f), pt(f, 1f), strokeWidth = 1f)
                 drawLine(gridCol, pt(0f, f), pt(1f, f), strokeWidth = 1f)
             }
-            // 对角线参考（线性）
             val dash = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f)
             drawLine(p.l3, pt(0f, 0f), pt(1f, 1f), strokeWidth = 1.5f, pathEffect = dash)
 
-            val p0 = pt(0f, 0f)
-            val p1 = pt(x1, y1)
-            val p2 = pt(x2, y2)
-            val p3 = pt(1f, 1f)
-
-            // 控制柄切线
+            val p0 = pt(0f, 0f); val p1 = pt(x1, y1); val p2 = pt(x2, y2); val p3 = pt(1f, 1f)
             drawLine(c1Color.copy(alpha = 0.55f), p0, p1, strokeWidth = 2.dp.toPx())
             drawLine(c2Color.copy(alpha = 0.55f), p3, p2, strokeWidth = 2.dp.toPx())
 
-            // 三次贝塞尔曲线本体
-            val path = Path().apply {
-                moveTo(p0.x, p0.y)
-                cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
-            }
+            val path = Path().apply { moveTo(p0.x, p0.y); cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y) }
             drawPath(path, color = p.k, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
 
-            // 端点与可拖拽控制点
             drawCircle(p.k, radius = 4.dp.toPx(), center = p0)
             drawCircle(p.k, radius = 4.dp.toPx(), center = p3)
             drawCircle(c1Color, radius = if (dragging == 1) 10.dp.toPx() else 8.dp.toPx(), center = p1)

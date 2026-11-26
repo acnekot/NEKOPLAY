@@ -147,7 +147,7 @@ object Boot {
     LaunchedEffect(openPlayer) { if (openPlayer > 0 && Engine.state.value.current != null) nav.player = true }
     // 手机横屏且已启用 3D 封面墙功能插件时自动进入封面墙；转回竖屏自动退出
     val allPlugs by Plugins.list.collectAsState()
-    LaunchedEffect(Plugins.rev) { AnimStyle.applyPlugin(Plugins.activeMotionProfile()) }
+    LaunchedEffect(Plugins.rev, Features.off) { AnimStyle.applyPlugin(if (Features.on("motion")) Plugins.activeMotionProfile() else null) }
     val cfEnabled = remember(allPlugs, Plugins.off) { Plugins.hasFeature("coverflow") }
     var autoCf by remember { mutableStateOf(false) }
     LaunchedEffect(Screen.landscape, cfEnabled) {

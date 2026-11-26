@@ -93,7 +93,7 @@ import java.awt.MouseInfo
                 awaitPointerEventScope {
                     while (true) {
                         val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                        if (e.type == androidx.compose.ui.input.pointer.PointerEventType.Press && e.buttons.isSecondaryPressed) { e.changes.forEach { it.consume() }; SidePref.menu(nav) }
+                        if (e.type == androidx.compose.ui.input.pointer.PointerEventType.Press && e.buttons.isSecondaryPressed && Features.on("side")) { e.changes.forEach { it.consume() }; SidePref.menu(nav) }
                     }
                 }
             }.press { nav.player = false; nav.stack.clear(); nav.tab = 0 })

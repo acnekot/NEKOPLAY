@@ -39,11 +39,14 @@ object FxStore {
         val k = Plat.prefs("fx")
         fx = Fx(k.getBoolean("on", false), (k.getString("bands", null)?.split(',')?.mapNotNull { it.toFloatOrNull() }?.takeIf { it.size == 10 }) ?: List(10) { 0f },
             k.getFloat("bass", 0f), k.getFloat("sur", 0f), k.getFloat("loud", 0f), k.getString("preset", "默认") ?: "默认")
-        runCatching { Plat.impl.audio.applyFx(fx) }
+        applyEffective()
+    }
+    fun applyEffective() {
+        runCatching { Plat.impl.audio.applyFx(if (Features.on("fx")) fx else Fx(on = false)) }
     }
     fun set(n: Fx, save: Boolean = true) {
         fx = n
-        runCatching { Plat.impl.audio.applyFx(n) }
+        applyEffective()
         if (save) Plat.prefs("fx").edit().putBoolean("on", n.on).putString("bands", n.bands.joinToString(",")).putFloat("bass", n.bass)
             .putFloat("sur", n.surround).putFloat("loud", n.loud).putString("preset", n.preset).apply()
     }
