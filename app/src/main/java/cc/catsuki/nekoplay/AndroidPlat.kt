@@ -190,23 +190,57 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
 
     override val hasWebView get() = true
     @android.annotation.SuppressLint("SetJavaScriptEnabled")
-    @Composable override fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean, onInfo: (String) -> Unit, stopOn: String?, intercept: (String) -> Boolean) {
-        val cb by rememberUpdatedState(intercept); val info by rememberUpdatedState(onInfo)
+    @Composable override fun WebPage(
+        url: String,
+        modifier: Modifier,
+        desktopUa: Boolean,
+        onInfo: (String) -> Unit,
+        stopOn: String?,
+        cookieUrl: String?,
+        clearCookie: String?,
+        onCookie: (String) -> Unit,
+        intercept: (String) -> Boolean,
+    ) {
+        val cb by rememberUpdatedState(intercept)
+        val info by rememberUpdatedState(onInfo)
+        val cookieCb by rememberUpdatedState(onCookie)
         val loaded = remember { arrayOfNulls<String>(1) }
+        LaunchedEffect(cookieUrl, clearCookie) {
+            val target = cookieUrl?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+            delay(800)
+            while (true) {
+                val ck = runCatching { android.webkit.CookieManager.getInstance().getCookie(target) }.getOrNull()
+                if (!ck.isNullOrBlank()) cookieCb(ck)
+                delay(1200)
+            }
+        }
         androidx.compose.ui.viewinterop.AndroidView(factory = { ctx ->
             android.webkit.WebView(ctx).apply {
                 layoutParams = android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
                 settings.javaScriptEnabled = true; settings.domStorageEnabled = true; settings.databaseEnabled = true
                 settings.loadWithOverviewMode = true; settings.useWideViewPort = true
                 settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                if (desktopUa) settings.userAgentString = DESKTOP_UA
-                android.webkit.CookieManager.getInstance().setAcceptCookie(true)
-                android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                settings.userAgentString = if (desktopUa) DESKTOP_UA else settings.userAgentString.replace("; wv", "")
+                val cm = android.webkit.CookieManager.getInstance()
+                cm.setAcceptCookie(true)
+                cm.setAcceptThirdPartyCookies(this, true)
+                if (!clearCookie.isNullOrBlank() && !cookieUrl.isNullOrBlank()) {
+                    val host = android.net.Uri.parse(cookieUrl).host.orEmpty()
+                    cm.setCookie(cookieUrl, "$clearCookie=; Max-Age=0; Path=/")
+                    if (host.isNotEmpty()) cm.setCookie(cookieUrl, "$clearCookie=; Max-Age=0; Path=/; Domain=.$host")
+                    cm.flush()
+                }
                 webChromeClient = object : android.webkit.WebChromeClient() {
                     override fun onProgressChanged(v: android.webkit.WebView, p: Int) { info(if (p < 100) "加载中 $p% · ${android.net.Uri.parse(v.url ?: "").host ?: ""}" else "") }
                 }
                 webViewClient = object : android.webkit.WebViewClient() {
                     override fun shouldOverrideUrlLoading(v: android.webkit.WebView, r: android.webkit.WebResourceRequest): Boolean = r.isForMainFrame && cb(r.url.toString())
+                    override fun onPageFinished(v: android.webkit.WebView, pageUrl: String?) {
+                        if (!cookieUrl.isNullOrBlank()) {
+                            runCatching { android.webkit.CookieManager.getInstance().getCookie(cookieUrl) }
+                                .getOrNull()?.takeIf { it.isNotBlank() }?.let { cookieCb(it) }
+                        }
+                    }
                     override fun onReceivedError(v: android.webkit.WebView, r: android.webkit.WebResourceRequest, e: android.webkit.WebResourceError) {
                         if (r.isForMainFrame) info("加载失败：${e.description}（${e.errorCode}）")
                     }

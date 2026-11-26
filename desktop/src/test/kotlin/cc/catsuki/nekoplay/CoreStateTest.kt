@@ -503,6 +503,8 @@ class CoreStateTest {
             nk.register({
               search() { return []; },
               stream() { return null; },
+              loginWeb(env) { return { url: 'https://example.com/signin', cookieUrl: 'https://example.com', cookieMatch: 'tok=[^;]+', clearCookie: 'tok' }; },
+              loginWebDone(url, ck) { nk.store.set('ck', ck || url); return { state: 'done' }; },
               setCookie(raw) { nk.store.set('ck', raw); },
               account() { return null; }
             });
@@ -521,8 +523,13 @@ class CoreStateTest {
         val s1 = Plugins.import(cookieSrc)
         val s2 = Plugins.import(plainSrc)
         try {
-            assertTrue(s1.has("setCookie") && !s1.has("loginQr") && !s1.has("loginWeb"))
+            assertTrue(s1.has("setCookie") && s1.has("loginWeb") && !s1.has("loginQr"))
             assertTrue(s1.canLogin)
+            val cfg = s1.call("loginWeb", JSONObject().put("desktop", true)) as JSONObject
+            assertEquals("https://example.com", cfg.getString("cookieUrl"))
+            assertEquals("tok", cfg.getString("clearCookie"))
+            val res = s1.call("loginWebDone", "https://example.com/home", "tok=abc123") as JSONObject
+            assertEquals("done", res.getString("state"))
             assertFalse(s2.canLogin)
         } finally {
             Plugins.delete(s1.id)

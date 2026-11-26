@@ -16,12 +16,48 @@ object FxWebView {
     }
 }
 
-/** 网页里的地址每变一次就报给 intercept；匹配 stopOn 的页面先取消加载，免得页面自己用掉登录 code */
-@Composable fun FxWebPage(url: String, modifier: Modifier, desktopUa: Boolean, stopOn: String?, onInfo: (String) -> Unit, intercept: (String) -> Boolean) {
+/** 网页里的地址每变一次就报给 intercept；匹配 stopOn 的页面先取消加载；cookieUrl 不为空时定时读取 Cookie */
+@Composable fun FxWebPage(
+    url: String,
+    modifier: Modifier,
+    desktopUa: Boolean,
+    stopOn: String?,
+    cookieUrl: String?,
+    clearCookie: String?,
+    onCookie: (String) -> Unit,
+    onInfo: (String) -> Unit,
+    intercept: (String) -> Boolean,
+) {
     val cb by rememberUpdatedState(intercept)
     val info by rememberUpdatedState(onInfo)
+    val cookieCb by rememberUpdatedState(onCookie)
     val stop = remember(stopOn) { stopOn?.let { runCatching { Regex(it) }.getOrNull() } }
-    val holder = remember { FxHolder() }
+    val cookieHost = remember(cookieUrl) { cookieUrl?.let { runCatching { java.net.URI(it).host.orEmpty().lowercase() }.getOrDefault("") }.orEmpty() }
+    val holder = remember { FxHolder().apply { cleared = clearCookie.isNullOrBlank() } }
+    LaunchedEffect(cookieHost, url) {
+        if (cookieHost.isEmpty()) return@LaunchedEffect
+        kotlinx.coroutines.delay(900)
+        while (true) {
+            javafx.application.Platform.runLater {
+                val e = holder.engine ?: return@runLater
+                val curHost = runCatching { java.net.URI(e.location ?: "").host.orEmpty().lowercase() }.getOrDefault("")
+                if (curHost == cookieHost || curHost.endsWith(".$cookieHost")) {
+                    val ck = runCatching { e.executeScript("document.cookie || ''")?.toString() }.getOrNull().orEmpty()
+                    if (!holder.cleared && !clearCookie.isNullOrBlank()) {
+                        holder.cleared = true
+                        if (Regex("(?:^|;\\s*)${Regex.escape(clearCookie)}=").containsMatchIn(ck)) {
+                            val safe = org.json.JSONObject.quote(clearCookie)
+                            runCatching { e.executeScript("var d=location.hostname.split('.').slice(-2).join('.');document.cookie=$safe+'=;Max-Age=0;path=/';document.cookie=$safe+'=;Max-Age=0;path=/;domain=.'+d;") }
+                            e.load(url)
+                            return@runLater
+                        }
+                    }
+                    if (ck.isNotEmpty()) java.awt.EventQueue.invokeLater { cookieCb(ck) }
+                }
+            }
+            kotlinx.coroutines.delay(1200)
+        }
+    }
     val panel = remember {
         javafx.embed.swing.JFXPanel().also { p ->
             javafx.application.Platform.setImplicitExit(false)
@@ -48,4 +84,4 @@ object FxWebView {
     SwingPanel(factory = { panel }, modifier = modifier)
 }
 
-private class FxHolder { var engine: javafx.scene.web.WebEngine? = null; var pending: String? = null; var stopped = false }
+private class FxHolder { var engine: javafx.scene.web.WebEngine? = null; var pending: String? = null; var stopped = false; var cleared = true }

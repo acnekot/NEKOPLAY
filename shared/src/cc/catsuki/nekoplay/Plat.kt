@@ -137,9 +137,19 @@ interface PlatImpl {
     @Composable fun VideoPlayer(url: String?, modifier: Modifier, onState: (playing: Boolean, pos: Long, dur: Long, err: String?) -> Unit, control: VideoControl)
     /** 能动的图片（动态头像 GIF 等），不支持就按静态图显示 */
     @Composable fun AnimatedImage(url: String, modifier: Modifier)
-    /** 内嵌网页（QQ 网页登录用）。intercept 返回 true 表示拦下这次跳转；url 变了就重新加载。不支持的平台不显示 */
-    /** stopOn：地址匹配这个正则的页面打开时先停止加载（电脑版网页看不到跳转前的地址，只能这样拦） */
-    @Composable fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean = false, onInfo: (String) -> Unit = {}, stopOn: String? = null, intercept: (String) -> Boolean) {}
+    /** 内嵌网页（插件网页登录用）。intercept 返回 true 表示拦下这次跳转；cookieUrl 不为空时自动监听并回传对应域名 Cookie */
+    /** stopOn：地址匹配这个正则的页面打开时先停止加载；clearCookie：打开前先清理指定旧 Cookie 键以便切换账号 */
+    @Composable fun WebPage(
+        url: String,
+        modifier: Modifier,
+        desktopUa: Boolean = false,
+        onInfo: (String) -> Unit = {},
+        stopOn: String? = null,
+        cookieUrl: String? = null,
+        clearCookie: String? = null,
+        onCookie: (String) -> Unit = {},
+        intercept: (String) -> Boolean,
+    ) {}
     val hasWebView: Boolean get() = false
     /** 桌面版：本进程 CPU（%）和内存 RSS/WorkingSet（MB）；安卓返回 null（用 /proc） */
     fun cpuMem(): Pair<Float, Long>? = null

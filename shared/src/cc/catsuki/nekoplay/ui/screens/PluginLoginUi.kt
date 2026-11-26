@@ -21,18 +21,22 @@ import kotlinx.coroutines.launch
     val mobile = Plat.impl.name != "desktop"
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     val scope = rememberCoroutineScope()
-    val modes by produceState<List<org.json.JSONObject>>(emptyList(), pid) {
+    val allowWeb = Plat.impl.hasWebView && (!Plat.isDesktop || s?.has("loginQr") != true)
+    val modes by produceState<List<org.json.JSONObject>>(emptyList(), pid, allowWeb) {
         val l = runCatching { Plugins.arr(s?.takeIf { it.start() && it.has("loginModes") }?.call("loginModes")) }.getOrDefault(emptyList())
-        value = l.filter { !it.optBoolean("web") || Plat.impl.hasWebView }.ifEmpty {
+        val base = l.filter { !it.optBoolean("web") || allowWeb }.ifEmpty {
             listOfNotNull(
-                if (s?.has("loginWeb") == true && Plat.impl.hasWebView) org.json.JSONObject().put("id", "web").put("name", "网页登录").put("web", true) else null,
+                if (s?.has("loginWeb") == true && allowWeb) org.json.JSONObject().put("id", "web").put("name", "网页登录").put("web", true) else null,
                 if (s?.has("loginQr") == true) org.json.JSONObject().put("id", "qr").put("name", "扫码登录") else null,
             )
         }
+        value = if (base.isNotEmpty() && base.all { it.optBoolean("web") } && s?.has("setCookie") == true) {
+            base + org.json.JSONObject().put("id", "cookie").put("name", "Cookie 粘贴").put("cookie", true)
+        } else base
     }
     var mode by remember { mutableStateOf<org.json.JSONObject?>(null) }
     LaunchedEffect(modes) {
-        if (mode == null) mode = if (Plat.isDesktop) (modes.firstOrNull { !it.optBoolean("web") } ?: modes.firstOrNull()) else modes.firstOrNull()
+        if (mode == null) mode = if (Plat.isDesktop) (modes.firstOrNull { !it.optBoolean("web") && !it.optBoolean("cookie") } ?: modes.firstOrNull()) else modes.firstOrNull()
     }
     var round by remember { mutableIntStateOf(0) }
     var img by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
@@ -42,8 +46,9 @@ import kotlinx.coroutines.launch
     fun done() { nav.toast = "${s?.name} 登录成功"; PluginStore.refresh(); if (pid == Plugins.main()?.id) Store.refreshAll(); nav.back() }
     val m = mode
     val web = m?.optBoolean("web") == true
+    val cookieTab = m?.optBoolean("cookie") == true
     LaunchedEffect(m?.optString("id"), round) {
-        if (m == null || web || s == null) return@LaunchedEffect
+        if (m == null || web || cookieTab || s == null) return@LaunchedEffect
         img = null; qrInfo = null; status = "正在获取二维码…"
         try {
             val q = s.call("loginQr", m.optString("id")) as? org.json.JSONObject ?: throw NcmError("插件不支持扫码登录")
@@ -79,7 +84,7 @@ import kotlinx.coroutines.launch
         if (s == null) { T("插件没有安装", 13, p.s); return@Column }
         if (web) { Spacer(Modifier.height(12.dp)); PluginWebLogin(s, Modifier.weight(1f)) { done() }; return@Column }
         Spacer(Modifier.height(18.dp))
-        if (m != null) {
+        if (m != null && !cookieTab) {
             Box(Modifier.size(240.dp).align(Alignment.CenterHorizontally).nb(1.dp, p.k).background(androidx.compose.ui.graphics.Color.White).press { round++ }, contentAlignment = Alignment.Center) {
                 img?.let { androidx.compose.foundation.Image(it, "二维码", Modifier.size(220.dp)) } ?: T("…", 20, androidx.compose.ui.graphics.Color.Black)
             }
@@ -98,7 +103,17 @@ import kotlinx.coroutines.launch
             }
         }
         if (s.has("setCookie")) {
-            Spacer(Modifier.height(28.dp)); TagRow("COOKIE"); Spacer(Modifier.height(12.dp))
+            if (!allowWeb && s.has("loginWeb")) {
+                val extUrl by produceState<String?>(null, s.id) {
+                    value = runCatching { (s.call("loginWeb", org.json.JSONObject().put("desktop", Plat.isDesktop)) as? org.json.JSONObject)?.optString("url")?.ifEmpty { null } }.getOrNull()
+                }
+                extUrl?.let { u ->
+                    T("当前系统未提供内嵌浏览器，可先在系统浏览器登录，再复制 Cookie 粘贴到下方", 13, p.s, lines = 3, lh = 1.5f)
+                    Spacer(Modifier.height(10.dp))
+                    OutlineBtn("在浏览器打开登录页", pad = 14.dp) { runCatching { uri.openUri(u) }.onFailure { nav.toast = "无法打开浏览器" } }
+                }
+            }
+            Spacer(Modifier.height(if (cookieTab) 8.dp else 28.dp)); TagRow("COOKIE"); Spacer(Modifier.height(12.dp))
             Box(Modifier.fillMaxWidth().height(44.dp).nbf(1.dp, p.k).padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
                 if (ck.isEmpty()) T("粘贴 Cookie", 13, p.s, mono = true)
                 BasicTextField(ck, { ck = it }, Modifier.fillMaxWidth(), singleLine = true, textStyle = TextStyle(color = p.k, fontSize = Fs.SUB.sp, fontFamily = Mono), cursorBrush = SolidColor(p.p))
@@ -111,7 +126,7 @@ import kotlinx.coroutines.launch
     }
 }
 
-/** 网页登录：内嵌插件提供的登录页，拦截 done 地址换凭证、open 地址拉起外部应用 */
+/** 网页登录：内嵌插件提供的登录页，支持地址拦截换凭证、自动捕获 Cookie 凭证与外部应用回调 */
 @Composable private fun PluginWebLogin(s: JsSource, modifier: Modifier, onDone: () -> Unit) {
     val p = c
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
@@ -119,11 +134,15 @@ import kotlinx.coroutines.launch
     val cfg by produceState<org.json.JSONObject?>(null, s.id) { value = runCatching { s.call("loginWeb", org.json.JSONObject().put("desktop", Plat.isDesktop)) as? org.json.JSONObject }.getOrNull() }
     val c0 = cfg ?: run { Box(modifier) { T("LOADING", 12, p.s, mono = true) }; return }
     var url by remember(c0) { mutableStateOf(c0.optString("url")) }
+    var lastUrl by remember(c0) { mutableStateOf(c0.optString("url")) }
     var status by remember(c0) { mutableStateOf(c0.optString("hint")) }
     var busy by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf("") }
     val doneRe = remember(c0) { c0.optString("done").takeIf { it.isNotEmpty() }?.let { Regex(it) } }
     val openRe = remember(c0) { c0.optString("open").takeIf { it.isNotEmpty() }?.let { Regex(it) } }
+    val cookieUrl = remember(c0) { c0.optString("cookieUrl").ifEmpty { null } }
+    val clearCookie = remember(c0) { c0.optString("clearCookie").ifEmpty { null } }
+    val cookieRe = remember(c0) { c0.optString("cookieMatch").takeIf { it.isNotEmpty() }?.let { Regex(it) } }
     val back by DeepLink.url.collectAsState()
     LaunchedEffect(back) {
         val b = back ?: return@LaunchedEffect
@@ -136,7 +155,30 @@ import kotlinx.coroutines.launch
         if (info.isNotEmpty()) T(info, 12, p.s, lines = 2, mono = true)
         Spacer(Modifier.height(8.dp))
         Box(Modifier.fillMaxWidth().weight(1f).nbf(1.dp, p.k)) {
-            Plat.impl.WebPage(url, Modifier.fillMaxSize(), desktopUa = c0.optBoolean("pc"), onInfo = { info = it }, stopOn = c0.optString("done").ifEmpty { null }) { u ->
+            Plat.impl.WebPage(
+                url = url,
+                modifier = Modifier.fillMaxSize(),
+                desktopUa = c0.optBoolean("pc"),
+                onInfo = { info = it },
+                stopOn = c0.optString("done").ifEmpty { null },
+                cookieUrl = cookieUrl,
+                clearCookie = clearCookie,
+                onCookie = { rawCookie ->
+                    if (!busy && cookieRe != null && cookieRe.containsMatchIn(rawCookie)) {
+                        busy = true
+                        scope.launch {
+                            status = "已捕获登录凭证，正在验证…"
+                            try {
+                                if (s.has("loginWebDone")) s.call("loginWebDone", lastUrl, rawCookie)
+                                else if (s.has("setCookie")) s.call("setCookie", rawCookie)
+                                onDone()
+                            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                            catch (e: Exception) { status = "验证失败：${e.message}"; busy = false }
+                        }
+                    }
+                },
+            ) { u ->
+                if (u.startsWith("http")) lastUrl = u
                 when {
                     doneRe?.containsMatchIn(u) == true -> {
                         if (!busy) { busy = true; scope.launch {

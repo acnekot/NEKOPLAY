@@ -60,7 +60,7 @@ NEKOPLAY 本体完全中立，不内置任何在线音源与重型特色扩展�
 | `toplists()` / `newAlbums()` / `newSongs()` / `daily()` / `fm()` / `recPlaylists()` / `square(cat, page)` | 首页与发现模块 |
 | `comments(id, page)` / `commentFloor(...)` / `commentLike(...)` / `commentPost(...)` | 评论与楼中楼互动 |
 | `account()` / `user(uid)` / `myPlaylists()` / `like(id, on)` / `signin()` | 账号、主页、收藏与签到 |
-| `loginModes()` / `loginQr(mode)` / `loginCheck(key)` / `loginWeb(opt)` / `setCookie(raw)` / `logout()` | 扫码 / 网页 / Cookie 通用登录 |
+| `loginModes()` / `loginQr(mode)` / `loginCheck(key)` / `loginWeb(opt)` / `loginWebDone(url, cookie?)` / `setCookie(raw)` / `logout()` | 扫码 / 内嵌网页（支持地址拦截 `done` 或自动捕获 `cookieUrl` + `cookieMatch` + `clearCookie`）/ Cookie 通用登录 |
 
 ---
 

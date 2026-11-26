@@ -181,13 +181,67 @@ class IosPlat : PlatImpl {
     }
 
     override val hasWebView get() = true
-    @Composable override fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean, onInfo: (String) -> Unit, stopOn: String?, intercept: (String) -> Boolean) {
+    @Composable override fun WebPage(
+        url: String,
+        modifier: Modifier,
+        desktopUa: Boolean,
+        onInfo: (String) -> Unit,
+        stopOn: String?,
+        cookieUrl: String?,
+        clearCookie: String?,
+        onCookie: (String) -> Unit,
+        intercept: (String) -> Boolean,
+    ) {
         val cb by rememberUpdatedState(intercept)
+        val cookieCb by rememberUpdatedState(onCookie)
         val del = remember { WebDelegate { cb } }
         val loaded = remember { arrayOfNulls<String>(1) }
+        val cleared = remember { booleanArrayOf(clearCookie.isNullOrBlank()) }
+        val webRef = remember { arrayOfNulls<platform.WebKit.WKWebView>(1) }
+        val cookieHost = remember(cookieUrl) { cookieUrl?.let { NSURL.URLWithString(it)?.host?.lowercase() }.orEmpty() }
+        LaunchedEffect(cookieHost) {
+            if (cookieHost.isEmpty()) return@LaunchedEffect
+            delay(900)
+            while (true) {
+                val w = webRef[0]
+                if (w != null && cleared[0]) {
+                    w.configuration.websiteDataStore.httpCookieStore.getAllCookies { list ->
+                        val joined = list?.mapNotNull { it as? NSHTTPCookie }
+                            ?.filter { c ->
+                                val d = c.domain.lowercase().trimStart('.')
+                                cookieHost == d || cookieHost.endsWith(".$d")
+                            }
+                            ?.joinToString("; ") { "${it.name}=${it.value}" }
+                            .orEmpty()
+                        if (joined.isNotEmpty()) cookieCb(joined)
+                    }
+                }
+                delay(1200)
+            }
+        }
         androidx.compose.ui.viewinterop.UIKitView(factory = {
-            platform.WebKit.WKWebView(frame = platform.CoreGraphics.CGRectZero.readValue(), configuration = platform.WebKit.WKWebViewConfiguration()).apply { navigationDelegate = del; if (desktopUa) customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" }
-        }, modifier = modifier, update = { w -> if (loaded[0] != url) { loaded[0] = url; NSURL.URLWithString(url)?.let { w.loadRequest(NSURLRequest.requestWithURL(it)) } } })
+            platform.WebKit.WKWebView(frame = platform.CoreGraphics.CGRectZero.readValue(), configuration = platform.WebKit.WKWebViewConfiguration()).apply {
+                navigationDelegate = del
+                if (desktopUa) customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+                webRef[0] = this
+            }
+        }, modifier = modifier, update = { w ->
+            webRef[0] = w
+            if (loaded[0] != url) {
+                loaded[0] = url
+                val load = { NSURL.URLWithString(url)?.let { w.loadRequest(NSURLRequest.requestWithURL(it)) }; Unit }
+                if (!cleared[0] && !clearCookie.isNullOrBlank()) {
+                    val store = w.configuration.websiteDataStore.httpCookieStore
+                    store.getAllCookies { list ->
+                        list?.mapNotNull { it as? NSHTTPCookie }?.filter { c ->
+                            c.name == clearCookie && (cookieHost.isEmpty() || c.domain.lowercase().trimStart('.').let { d -> cookieHost == d || cookieHost.endsWith(".$d") })
+                        }?.forEach { store.deleteCookie(it, null) }
+                        cleared[0] = true
+                        load()
+                    }
+                } else load()
+            }
+        })
     }
 
     @Composable override fun AnimatedImage(url: String, modifier: Modifier) =

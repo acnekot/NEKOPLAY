@@ -108,11 +108,21 @@ class DesktopPlat : PlatImpl {
         }
     }
 
-    // 内嵌网页（插件的网页登录）：Windows 与 macOS 均对齐禁用内嵌 WebView，统一走原生扫码 / Cookie 登录；仅 Linux 保留 JavaFX WebView
+    // 内嵌网页（插件网页登录）：Windows x64 使用 WebView2，Linux 使用 JavaFX WebView；有原生扫码的插件桌面端仍优先扫码
     override val hasWebView get() = DesktopWebView.available || FxWebView.available
-    @Composable override fun WebPage(url: String, modifier: Modifier, desktopUa: Boolean, onInfo: (String) -> Unit, stopOn: String?, intercept: (String) -> Boolean) {
-        if (DesktopWebView.available) DesktopWebPage(url, modifier, stopOn, onInfo, intercept)
-        else FxWebPage(url, modifier, desktopUa, stopOn, onInfo, intercept)
+    @Composable override fun WebPage(
+        url: String,
+        modifier: Modifier,
+        desktopUa: Boolean,
+        onInfo: (String) -> Unit,
+        stopOn: String?,
+        cookieUrl: String?,
+        clearCookie: String?,
+        onCookie: (String) -> Unit,
+        intercept: (String) -> Boolean,
+    ) {
+        if (DesktopWebView.available) DesktopWebPage(url, modifier, stopOn, cookieUrl, clearCookie, onCookie, onInfo, intercept)
+        else FxWebPage(url, modifier, desktopUa, stopOn, cookieUrl, clearCookie, onCookie, onInfo, intercept)
     }
 
     /** MV：另开一个 mpv 窗口播放（嵌入播放以后再做） */
