@@ -6,6 +6,7 @@
 ## [未发布]
 
 ### 性能与渲染修复
+- **3D 封面墙鼠标跟随升级为 1:1 零延迟实时跟踪**：移除每次鼠标移动反复取消并重建低刚度弹簧协程的滞后逻辑，改为 `PointerEventPass.Initial` 直接写入纯 GPU 状态（0 协程/移动事件、0 重组、0ms 延迟实时贴合光标），鼠标移出舞台时再平滑回正。
 - **彻底解决 Windows 端拖窗闪白、切换卡顿与页面透明重影**：
   - 桌面端 JVM 统一升级为低停顿 **G1GC（`-XX:MaxGCPauseMillis=10`，堆 `48M–384M`）**，全平台补齐 `-Dsun.awt.noerasebackground=true`、`-Dskiko.buffering=TRIPLE` 与 64MB GPU 纹理/图片内存缓存，窗口底层背景色实时同步主题 `c.page` 彻底消除 Windows 拖窗右侧闪白条；Windows 拖边调整窗口尺寸按 ~60Hz 节流避免 D3D SwapChain 重建积压掉帧
   - 移除 `Root` 宽窄屏切换的双树并发 `AnimatedContent(wide)` 以及 `PlayerOverlay` / `WidePlayerBody` 中的 `BoxWithConstraints`（`SubcomposeLayout`），拖窗越过 900dp 断点与缩放播放页/评论区不再全树双重渲染或花屏卡死

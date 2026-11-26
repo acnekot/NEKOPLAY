@@ -82,23 +82,34 @@ import kotlin.math.sign
     var expandedKey by remember { mutableStateOf<String?>(null) }
     var stageW by remember { mutableFloatStateOf(0f) }
     var stageH by remember { mutableFloatStateOf(0f) }
-    // 纯 GPU 零重组倾斜状态：桌面鼠标与手机陀螺仪均在协程里平滑驱动 Animatable，仅在 graphicsLayer / draw 阶段读取，全程 0 重组
-    val tiltX = remember { Animatable(0f) }
-    val tiltY = remember { Animatable(0f) }
-    var tiltJob by remember { mutableStateOf<Job?>(null) }
-    fun setTiltTarget(tx: Float, ty: Float) {
+    // 纯 GPU 零重组实时倾斜状态：桌面鼠标移动零延迟 1:1 实时跟手（0 协程/移动事件），离场时轻柔回正；移动端直连陀螺仪
+    val tiltX = remember { mutableFloatStateOf(0f) }
+    val tiltY = remember { mutableFloatStateOf(0f) }
+    var tiltExitJob by remember { mutableStateOf<Job?>(null) }
+    fun setTiltImmediate(tx: Float, ty: Float) {
         if (AnimStyle.off) return
-        tiltJob?.cancel()
-        tiltJob = scope.launch {
-            launch { tiltX.animateTo(tx, spring(0.88f, Anim.stiff(Spring.StiffnessLow))) }
-            launch { tiltY.animateTo(ty, spring(0.88f, Anim.stiff(Spring.StiffnessLow))) }
+        tiltExitJob?.cancel(); tiltExitJob = null
+        tiltX.floatValue = tx
+        tiltY.floatValue = ty
+    }
+    fun resetTiltSmooth() {
+        if (AnimStyle.off) { tiltX.floatValue = 0f; tiltY.floatValue = 0f; return }
+        tiltExitJob?.cancel()
+        val sx = tiltX.floatValue; val sy = tiltY.floatValue
+        if (abs(sx) < 0.002f && abs(sy) < 0.002f) { tiltX.floatValue = 0f; tiltY.floatValue = 0f; return }
+        tiltExitJob = scope.launch {
+            val anim = Animatable(1f)
+            anim.animateTo(0f, spring(0.86f, Anim.stiff(480f))) {
+                tiltX.floatValue = sx * value
+                tiltY.floatValue = sy * value
+            }
         }
     }
     DisposableEffect(Unit) { TiltBus.onObserve?.invoke(true); onDispose { TiltBus.onObserve?.invoke(false) } }
     LaunchedEffect(Unit) {
         if (!Plat.isDesktop) {
-            launch { TiltBus.x.collect { if (!AnimStyle.off) tiltX.snapTo(it) } }
-            launch { TiltBus.y.collect { if (!AnimStyle.off) tiltY.snapTo(it) } }
+            launch { TiltBus.x.collect { if (!AnimStyle.off) tiltX.floatValue = it } }
+            launch { TiltBus.y.collect { if (!AnimStyle.off) tiltY.floatValue = it } }
         }
     }
     val ls = Screen.landscape
@@ -215,7 +226,7 @@ import kotlin.math.sign
                 awaitPointerEventScope {
                     var wheelAcc = 0f
                     while (true) {
-                        val ev = awaitPointerEvent()
+                        val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
                         when (ev.type) {
                             PointerEventType.Scroll -> if (expandedKey == null) {
                                 val d = ev.changes.fold(0f) { acc, ch -> acc + ch.scrollDelta.y + ch.scrollDelta.x }
@@ -235,10 +246,10 @@ import kotlin.math.sign
                             }
                             PointerEventType.Move, PointerEventType.Enter -> {
                                 ev.changes.firstOrNull()?.position?.let { pt ->
-                                    if (stageW > 1f && stageH > 1f) setTiltTarget(((pt.x / stageW) * 2f - 1f).coerceIn(-1f, 1f), ((pt.y / stageH) * 2f - 1f).coerceIn(-1f, 1f))
+                                    if (stageW > 1f && stageH > 1f) setTiltImmediate(((pt.x / stageW) * 2f - 1f).coerceIn(-1f, 1f), ((pt.y / stageH) * 2f - 1f).coerceIn(-1f, 1f))
                                 }
                             }
-                            PointerEventType.Exit -> setTiltTarget(0f, 0f)
+                            PointerEventType.Exit -> resetTiltSmooth()
                         }
                     }
                 }
@@ -288,7 +299,7 @@ import kotlin.math.sign
                             val swirl = kotlin.math.sin((ep.coerceIn(0f, 1f) * kotlin.math.PI)).toFloat()
                             val sc = (1f - 0.20f * s) * (if (isCenter) 1f + (maxOpenScale - 1f) * zoomP else 1f)
                             val centerWeight = (1f - s).coerceIn(0f, 1f)
-                            val tX = tiltX.value; val tY = tiltY.value
+                            val tX = tiltX.floatValue; val tY = tiltY.floatValue
                             val tiltDamp = 1f - 0.55f * ep.coerceAtMost(1f)
                             val expX = if (isCenter) caseWPx * 0.50f * sc * shiftP else sign(d) * smoothStep(0f, 0.65f, ep) * 76f * density
                             val liftY = if (isCenter) -14f * density * swirl else 0f
@@ -309,7 +320,7 @@ import kotlin.math.sign
                     // 实体 CD 塑料盒：外侧无缝挤出透明亚克力侧边厚度 + 右侧托盘 + 沿左铰链 180° 翻开的透明前盖
                     val lidP = { if (isCenter) smoothStep(0.02f, 0.72f, expandState.value) else 0f }
                     val heroKey = if (isCenter) when (item.kind) { "album" -> "alb:${item.id}"; "pl", "lpl" -> "pl:${item.id}"; else -> null } else null
-                    Box(Modifier.size(caseW, caseH).heroAnchor(heroKey, item.cover, item.title, border = false).cdThicknessEdge({ i - pos.value }, { tiltX.value }, { tiltY.value }, cfg.thicknessDp) { if (isCenter) (1f - smoothStep(0f, 0.45f, expandState.value)) else 1f }) {
+                    Box(Modifier.size(caseW, caseH).heroAnchor(heroKey, item.cover, item.title, border = false).cdThicknessEdge({ i - pos.value }, { tiltX.floatValue }, { tiltY.floatValue }, cfg.thicknessDp) { if (isCenter) (1f - smoothStep(0f, 0.45f, expandState.value)) else 1f }) {
 
                         // 右侧 CD 托盘层（随前盖沿左铰链翻开自然显露，炫彩光盘随开合微转）
                         if (isCenter && showTray) {
@@ -329,7 +340,7 @@ import kotlin.math.sign
                             }) {
                             val sweep = { kotlin.math.sin((lidP() * kotlin.math.PI)).toFloat() }
                             if (!isCenter || !lidPastHalf) {
-                                CdCaseFrontLid(item, coverDp, spineDp, rimDp, isCenter, { i - pos.value }, { tiltX.value }, { tiltY.value }, sweep)
+                                CdCaseFrontLid(item, coverDp, spineDp, rimDp, isCenter, { i - pos.value }, { tiltX.floatValue }, { tiltY.floatValue }, sweep)
                             } else {
                                 CdCaseInnerLid(item, coverDp, spineDp, rimDp, sweep, onClose = { expandedKey = null })
                             }
