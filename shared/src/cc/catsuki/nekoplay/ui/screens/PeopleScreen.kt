@@ -47,7 +47,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
             Column {
                 Tag("ARTIST"); Spacer(Modifier.height(12.dp))
                 Row(Modifier.height(112.dp)) {
-                    Cover(a?.pic, 112.dp, pg.name, modifier = Modifier.heroAnchor("art:${pg.id}", a?.pic, pg.name, isTarget = true))
+                    Cover(a?.pic, 112.dp, pg.name, modifier = Modifier.heroAnchor("art:${pg.id}", a?.pic, pg.name, isTarget = true).geomReveal("art:${pg.id}"))
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         T(pg.name, 24, w = 800, lines = 2, lh = 1.25f)
@@ -121,7 +121,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
             Column {
                 Tag("ALBUM"); Spacer(Modifier.height(12.dp))
                 Row(Modifier.height(112.dp)) {
-                    Cover(al?.pic ?: pg.cover, 112.dp, pg.name, modifier = Modifier.heroAnchor("alb:${pg.id}", al?.pic ?: pg.cover, pg.name, isTarget = true))
+                    Cover(al?.pic ?: pg.cover, 112.dp, pg.name, modifier = Modifier.heroAnchor("alb:${pg.id}", al?.pic ?: pg.cover, pg.name, isTarget = true).geomReveal("alb:${pg.id}"))
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         T(pg.name, 24, w = 800, lines = 2, lh = 1.25f)

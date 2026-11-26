@@ -216,7 +216,10 @@ object Boot {
                 Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().onSizeChanged { subW = it.width.toFloat().coerceAtLeast(1f) }) {
                     val sub = remember { Animatable(0f) }
                     val inSub = nav.stack.isNotEmpty()
-                    LaunchedEffect(inSub) { sub.animateTo(if (inSub) 1f else 0f, spF) }
+                    LaunchedEffect(inSub) {
+                        val spec = if (MotionEffects.geomContainer) tween(Motion.pageMs, easing = androidx.compose.animation.core.LinearEasing) else spF
+                        sub.animateTo(if (inSub) 1f else 0f, spec)
+                    }
                     // 首页 / 曲库：源点模式下就地景深微缩，常规模式下往左退 28% 形成视差，全程纯 graphicsLayer/drawBehind 0 重组
                     val originExp = MotionEffects.originExpand
                     Column(Modifier.fillMaxSize().graphicsLayer {

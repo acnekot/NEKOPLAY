@@ -61,7 +61,7 @@ import kotlin.math.sign
         val albumItems = subAlbums.map { a ->
             FlowItem("alb:${a.id}", "album", a.id, a.name, listOfNotNull(a.artist.ifBlank { null }, a.year.ifBlank { null }, "${a.size} 首").joinToString(" · "), a.pic)
         }
-        val recentAlbums = rec.groupBy { it.album.ifBlank { it.title } }.entries.mapNotNull { (alb, ts) ->
+        val recentAlbums = rec.distinctBy { it.id }.groupBy { it.album.ifBlank { it.title } }.entries.mapNotNull { (alb, ts) ->
             val first = ts.firstOrNull() ?: return@mapNotNull null
             val hasAlb = first.albumId.isNotEmpty()
             val key = if (hasAlb) "alb:${first.albumId}" else "rec:$alb"

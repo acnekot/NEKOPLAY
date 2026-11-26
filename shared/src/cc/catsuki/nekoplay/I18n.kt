@@ -110,6 +110,9 @@ object I18n {
     private val rxQuality = Regex("""^音质：(.+)$""")
     private val rxCellQuality = Regex("""^流量音质：(.+)$""")
     private val rxLangSet = Regex("""^已切换语言：(.+)$""")
+    private val rxHistMeta = Regex("""^(\d+)\s*条\s*·\s*(\d+)\s*天\s*·\s*(.+)$""")
+    private val rxDayRel = Regex("""^(今天|昨天)\s*·\s*(.+)$""")
+    private val rxDayWd = Regex("""^(\d{4}-\d{2}-\d{2})\s*·\s*周([日一二三四五六])$""")
 
     private fun translatePattern(s: String, lang: String): String? {
         rxTracksDur.matchEntire(s)?.let { m ->
@@ -208,7 +211,34 @@ object I18n {
             val l = m.groupValues[1]
             return when (lang) { EN -> "Language: $l"; JA -> "言語を変更しました: $l"; else -> "已切換語言：$l" }
         }
-        return null
+        rxHistMeta.matchEntire(s)?.let { m ->
+            val (n, d, dur) = m.destructured
+            return when (lang) { EN -> "$n plays · $d days · $dur"; JA -> "$n 件 · $d 日 · $dur"; else -> "$n 條 · $d 天 · $dur" }
+        }
+        rxDayRel.matchEntire(s)?.let { m ->
+            val (rel, date) = m.destructured
+            val w = when (lang) {
+                EN -> if (rel == "今天") "Today" else "Yesterday"
+                JA -> if (rel == "今天") "今日" else "昨日"
+                else -> rel
+            }
+            return "$w · $date"
+        }
+        rxDayWd.matchEntire(s)?.let { m ->
+            val (date, ch) = m.destructured
+            val wd = when (lang) {
+                EN -> mapOf("日" to "Sun", "一" to "Mon", "二" to "Tue", "三" to "Wed", "四" to "Thu", "五" to "Fri", "六" to "Sat")[ch] ?: ch
+                JA -> ch
+                else -> "週$ch"
+            }
+            return "$date · $wd"
+        }
+        return when (s) {
+            "更早记录" -> when (lang) { EN -> "Earlier"; JA -> "以前の履歴"; else -> "更早記錄" }
+            "本机记录 · 按天划分" -> when (lang) { EN -> "Local history · Grouped by day"; JA -> "ローカル履歴 · 日別"; else -> "本機記錄 · 按天劃分" }
+            "播放当天" -> when (lang) { EN -> "Play day"; JA -> "この日を再生"; else -> "播放當天" }
+            else -> null
+        }
     }
 }
 

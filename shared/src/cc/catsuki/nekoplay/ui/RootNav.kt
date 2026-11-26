@@ -111,10 +111,11 @@ import kotlinx.coroutines.launch
     val p = c
     val widthState by rememberUpdatedState(w.coerceAtLeast(1f))
     val originExp = MotionEffects.originExpand
-    val containerMod = if (originExp) {
-        Modifier.fillMaxSize().originContainerExpand({ sub.value }, { OriginBus.activePageOrigin() })
-    } else {
-        Modifier.fillMaxSize().graphicsLayer { translationX = size.width * (1f - sub.value) }.drawBehind {
+    val geomExp = MotionEffects.geomContainer
+    val containerMod = when {
+        geomExp -> Modifier.fillMaxSize().geomContainerReveal { sub.value }
+        originExp -> Modifier.fillMaxSize().originContainerExpand({ sub.value }, { OriginBus.activePageOrigin() })
+        else -> Modifier.fillMaxSize().graphicsLayer { translationX = size.width * (1f - sub.value) }.drawBehind {
             val edgeW = 14.dp.toPx()
             drawRect(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .14f * sub.value)), -edgeW, 0f),
                 Offset(-edgeW, 0f), androidx.compose.ui.geometry.Size(edgeW, size.height))
@@ -124,7 +125,7 @@ import kotlinx.coroutines.launch
         Box(Modifier.fillMaxSize().background(p.page)) { BgLayer() }
         Column(Modifier.fillMaxSize()) {
             AnimatedContent(pg, Modifier.weight(1f), transitionSpec = {
-                if (AnimStyle.off) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
+                if (AnimStyle.off || geomExp) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
                 else if (originExp) {
                     val to = OriginBus.originTransformOrigin(useClosing = !forward)
                     if (forward) (androidx.compose.animation.scaleIn(Motion.page(), 0.84f, to) + fadeIn(Motion.page())) togetherWith
@@ -139,7 +140,7 @@ import kotlinx.coroutines.launch
                         (androidx.compose.animation.slideOutHorizontally(Motion.standard()) { (it * .20f).toInt() } + fadeOut(Motion.quick()))
                 }
             }, label = "sub") { page ->
-                PageContent(page)
+                Box(Modifier.fillMaxSize().then(if (geomExp) Modifier.geomReveal(page, innerScale = false) else Modifier)) { PageContent(page) }
             }
             SubMiniBarHost(!(Screen.landscape && pg == Page.CoverFlow))
             Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime.union(WindowInsets.navigationBars)))

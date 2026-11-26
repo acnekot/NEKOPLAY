@@ -5,6 +5,14 @@
 
 ## [未发布]
 
+### 新增与优化
+- **独立「点线面几何动效」插件能力（`@type motion` · `geom_motion.js`）**：
+  - 扩展 Plugin API v2 `@type motion` 规范（新增 `geomReveal`、`geomLineRatio`、`geomLineDp`、`geomReverse`、`geomContainer`、`geomAccent`）并新增零开销纯 GPU 绘制引擎 `GeomMotion.kt`（`Modifier.geomReveal`、`Modifier.geomContainerReveal`、`CoverRevealSwitch`）；未启用插件时零额外开销，安装并启用官方插件库「点线面几何动效（`geom_motion.js`）」后生效
+  - 正方形封面（播放页大封面切歌/入场、迷你条封面、歌单/专辑/歌手页头图）及可选页面/播放页容器均从左上角原点 `(0, 0)` 先沿 `OutExpo` 横向极速拉出顶边光束线，再沿 `OutQuint` 垂直向下扫面展开并伴随轻微落位缩放，支持切歌/收起反向「面 → 线 → 点」缩回左上顶点与三套预设（PRTS 标准 / 锐利极速 / 仪式慢展）热切换
+- **播放历史按天划分并移除 100 条上限**：
+  - `Store` 新增带本地日期与播放时间戳的 `RecentEntry` 与按天分组器 `RecentDayGroup`，彻底移除原先 100 条截断限制；改为异步防抖原子落盘（兼容旧版无时间戳记录平滑归入「更早记录」并支持加密/明文备份完整往返），同日重复听同一首歌置顶刷新时间、跨天记录各自完整保留
+  - 「最近播放」详情页升级为按本地日期分组展示（今天 / 昨天 / 日期 + 星期 / 更早记录），支持点击日期头折叠或展开当天记录、每行右侧展示 `HH:mm` 播放时间、支持单日「播放当天」以及精确定位当前播放行；3D 封面墙同步按曲目去重避免跨天历史产生重复条目
+
 ## [0.6.8-nightly.20261126.6] - 2026-11-26
 
 预发布构建（全五端：Android / Windows / macOS / Linux / iOS）：新增独立**源点空间动效（`origin_motion.js`）**插件底座（点哪个就从哪展开、多级栈原路回缩、点击邻近波纹与多级方向继承），并彻底修复播放页内切歌左上角闪出小封面重影的问题。

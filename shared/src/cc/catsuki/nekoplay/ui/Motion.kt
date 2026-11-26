@@ -61,6 +61,7 @@ data class MotionPluginProfile(
     val listStaggerMs: Int? = null, val listSlideDp: Float? = null,
     val originExpand: Boolean? = null, val originRipple: Boolean? = null, val originInherit: Boolean? = null,
     val originCornerDp: Float? = null, val selectCoverScale: Float? = null, val selectFontScale: Float? = null,
+    val geom: GeomRevealConfig? = null,
 ) {
     val displayName: String get() = if (presetLabel.isNotBlank()) "$pluginName · $presetLabel" else pluginName
 }
@@ -94,6 +95,9 @@ object MotionEffects {
     val selectCoverScale: Float get() = AnimStyle.pluginProfile?.selectCoverScale ?: 1.09f
     val selectFontScale: Float get() = AnimStyle.pluginProfile?.selectFontScale ?: 1.05f
     val originActive: Boolean get() = originExpand || originRipple || originInherit
+    val geom: GeomRevealConfig? get() = if (AnimStyle.off) null else AnimStyle.pluginProfile?.geom
+    val geomReveal: Boolean get() = geom != null
+    val geomContainer: Boolean get() = geom?.container == true
 
     private val k get() = Plat.prefs("ui")
     fun load() {
@@ -192,6 +196,7 @@ object AnimStyle {
             originCornerDp = fx?.takeIf { it.has("originCornerDp") }?.optDouble("originCornerDp", 18.0)?.toFloat()?.coerceIn(0f, 36f),
             selectCoverScale = fx?.takeIf { it.has("selectCoverScale") }?.optDouble("selectCoverScale", 1.09)?.toFloat()?.coerceIn(1f, 1.25f),
             selectFontScale = fx?.takeIf { it.has("selectFontScale") }?.optDouble("selectFontScale", 1.05)?.toFloat()?.coerceIn(1f, 1.18f),
+            geom = parseGeomReveal(fx),
         )
     }
 

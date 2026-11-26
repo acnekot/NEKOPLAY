@@ -61,7 +61,7 @@ import androidx.compose.runtime.withFrameMillis
     Box(Modifier.fillMaxWidth().height(60.dp).onSizeChanged { barW = it.width.toFloat().coerceAtLeast(1f) }) {
         Row(Modifier.fillMaxSize().background(barBg()).drawBehind { if (!Look.flat) drawRect(p.l2, size = Size(size.width, 1.dp.toPx())) }
             .press { SharedHero.capture("now:${t.id}", t.cover, t.title, tag = "mini"); nav.lyrics = false; nav.player = true }.padding(start = 14.dp, end = 6.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Cover(t.cover, 40.dp, t.title, modifier = Modifier.heroAnchor("now:${t.id}", t.cover, t.title, tag = "mini", priority = 2))
+            Cover(t.cover, 40.dp, t.title, modifier = Modifier.heroAnchor("now:${t.id}", t.cover, t.title, tag = "mini", priority = 2).geomReveal(t.cover))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) { T(t.title, 15, w = 700, lh = 1.3f); T(t.artist, 12, p.s, lh = 1.3f) }
             Box(Modifier.size(40.dp, 48.dp).holdScrub(-1, enabled = !st.fm, haptic = true) { if (st.fm) { Engine.fmTrash(); nav.toast = "不再推荐这首" } else Engine.prev() }, contentAlignment = Alignment.Center) { NIcon(if (st.fm) NIcons.trash else NIcons.prev, 19.dp, if (ScrubController.dir < 0) p.p else p.k) }
@@ -92,18 +92,20 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     val copy = rememberCopy()
     var wasOpen by remember { mutableStateOf(nav.player) }
     val originExp = MotionEffects.originExpand
+    val geomExp = MotionEffects.geomContainer
+    val customExp = originExp || geomExp
     val originProg = remember { Animatable(if (nav.player) 1f else 0f) }
-    LaunchedEffect(nav.player, originExp) {
+    LaunchedEffect(nav.player, customExp) {
         if (wasOpen != nav.player) OriginBus.onPlayerToggle(nav.player)
         if (wasOpen && !nav.player && drag.value < 24f) Engine.state.value.current?.let { SharedHero.flyBack("now:${it.id}") }
         wasOpen = nav.player
-        if (originExp) originProg.animateTo(if (nav.player) 1f else 0f, if (nav.player) Motion.page() else Motion.standard())
+        if (customExp) originProg.animateTo(if (nav.player) 1f else 0f, if (geomExp) tween(Motion.pageMs, easing = androidx.compose.animation.core.LinearEasing) else if (nav.player) Motion.page() else Motion.standard())
         else originProg.snapTo(if (nav.player) 1f else 0f)
     }
-    val showOriginPlayer by remember { derivedStateOf { originExp && (nav.player || originProg.value > 0.002f) } }
-    AnimatedVisibility(if (originExp) showOriginPlayer else nav.player,
-        enter = if (originExp) fadeIn(androidx.compose.animation.core.snap()) else if (MotionEffects.pageScale && !AnimStyle.off) slideInVertically(Motion.page()) { it / 4 } + fadeIn(Motion.page()) + scaleIn(Motion.page(), initialScale = .96f) else slideInVertically(sp) { it },
-        exit = if (originExp) fadeOut(androidx.compose.animation.core.snap()) else if (MotionEffects.pageScale && !AnimStyle.off) slideOutVertically(Motion.standard()) { it / 4 } + fadeOut(Motion.quick()) + scaleOut(Motion.standard(), targetScale = .97f) else slideOutVertically(sp) { it }) {
+    val showOriginPlayer by remember { derivedStateOf { customExp && (nav.player || originProg.value > 0.002f) } }
+    AnimatedVisibility(if (customExp) showOriginPlayer else nav.player,
+        enter = if (customExp) fadeIn(androidx.compose.animation.core.snap()) else if (MotionEffects.pageScale && !AnimStyle.off) slideInVertically(Motion.page()) { it / 4 } + fadeIn(Motion.page()) + scaleIn(Motion.page(), initialScale = .96f) else slideInVertically(sp) { it },
+        exit = if (customExp) fadeOut(androidx.compose.animation.core.snap()) else if (MotionEffects.pageScale && !AnimStyle.off) slideOutVertically(Motion.standard()) { it / 4 } + fadeOut(Motion.quick()) + scaleOut(Motion.standard(), targetScale = .97f) else slideOutVertically(sp) { it }) {
         LaunchedEffect(Unit) { drag.snapTo(0f) }
         val st by Engine.state.collectAsState()
         val t = st.current
@@ -122,11 +124,11 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             if (dv > 0.5f) {
                 val remain = (1f - dv / (rootH * 0.7f)).coerceIn(0f, 1f)
                 drawRect(Color.Black.copy(alpha = 0.22f * remain))
-            } else if (originExp && originProg.value < 0.999f) {
+            } else if (customExp && originProg.value < 0.999f) {
                 drawRect(Color.Black.copy(alpha = 0.20f * originProg.value))
             }
         }) {
-        Box(Modifier.fillMaxSize().then(if (originExp) Modifier.originContainerExpand({ originProg.value }, { OriginBus.activePlayerOrigin() }) else Modifier).graphicsLayer {
+        Box(Modifier.fillMaxSize().then(when { geomExp -> Modifier.geomContainerReveal { originProg.value }; originExp -> Modifier.originContainerExpand({ originProg.value }, { OriginBus.activePlayerOrigin() }); else -> Modifier }).graphicsLayer {
             val dv = drag.value
             translationY = dv
             if (dv > 0.5f && MotionEffects.pageScale) {
@@ -207,7 +209,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                             }
                         }
                     }.then(Modifier.clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null) { nav.lyrics = !nav.lyrics })) {
-                        androidx.compose.animation.Crossfade(t.cover, animationSpec = tween(Motion.crossfadeMs), label = "pCover") { url -> Cover(url, coverDp, t.title) }
+                        CoverRevealSwitch(t.cover, coverDp, t.title)
                     }
                     // 标题：两套各在自己的位置淡入淡出
                     // 信息块：和封面左边对齐，宽度等于封面；爱心在歌名同一行最右，对齐封面右边缘
@@ -317,7 +319,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             Column(Modifier.width(cover + 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 // 解码尺寸固定 560dp；接入 heroAnchor 支持从底部播放条直飞大封面
                 Box(Modifier.onPlaced { val ny = it.positionInRoot().y; if (kotlin.math.abs(ny - coverY) > 1f) coverY = ny }.heroAnchor("now:${t.id}", t.cover, t.title, isTarget = true)) {
-                    androidx.compose.animation.Crossfade(t.cover, animationSpec = tween(Motion.crossfadeMs), label = "wCover") { url -> Cover(url, cover, t.title, decodeSize = 560.dp) }
+                    CoverRevealSwitch(t.cover, cover, t.title, decodeSize = 560.dp)
                 }
                 Spacer(Modifier.height(22.dp))
                 Row(Modifier.width(cover), verticalAlignment = Alignment.Top) {

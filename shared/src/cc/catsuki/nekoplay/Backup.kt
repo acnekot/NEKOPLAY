@@ -130,7 +130,7 @@ object Backup {
             }
             root.put(name, o)
         }
-        root.put("recents", JSONArray(Store.recents.value.filter { !it.id.startsWith("local:") }.map { it.toJson() }))
+        root.put("recents", JSONArray(Store.recentEntries.value.filter { !it.track.id.startsWith("local:") }.map { it.toJson() }))
         root.put("scripts", JSONObject().apply { Plugins.list.value.forEach { put(it.id, it.file.readText()) } })
         root.put("locallib", LocalLib.dump())
         root.put("stats", Stats.dump())
@@ -170,7 +170,7 @@ object Backup {
             }
             e.apply()
         }
-        root.optJSONArray("recents")?.let { a -> val l = (0 until a.length()).map { Track.fromJson(a.getJSONObject(it)) }; withContext(Dispatchers.Main) { Store.restoreRecents(l) } }
+        root.optJSONArray("recents")?.let { a -> val l = (0 until a.length()).map { RecentEntry.fromJson(a.getJSONObject(it)) }; withContext(Dispatchers.Main) { Store.restoreRecentEntries(l) } }
         if (listOf("ncm", "qq", "kugou").any { root.has(it) }) { Plat.prefs("plugins").edit().putBoolean("migrated", false).apply(); LegacyLogin.migrate() }
         root.optString("locallib").takeIf { it.isNotEmpty() }?.let { LocalLib.restore(it) }
         root.optString("stats").takeIf { it.isNotEmpty() }?.let { Stats.restore(it) }

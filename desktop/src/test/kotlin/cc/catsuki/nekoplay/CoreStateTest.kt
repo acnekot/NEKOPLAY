@@ -371,4 +371,115 @@ class CoreStateTest {
             AnimStyle.style = prevStyle
         }
     }
+
+    @Test fun geomMotionPluginParsesRevealParametersAndDisablesCleanly() = runBlocking {
+        TestEnv.init()
+        val prevStyle = AnimStyle.style
+        AnimStyle.style = 0
+        AnimStyle.applyPlugin(null)
+        assertFalse(MotionEffects.geomReveal)
+        assertFalse(MotionEffects.geomContainer)
+        val script = """
+            // @id _test_geom_motion
+            // @name Geom Test
+            // @type motion
+            // @permissions motion.profile, storage
+            // @version 1.0.0
+            // @api 2
+            nk.registerMotion({
+              profile() {
+                return {
+                  name: '点线面测试',
+                  presetLabel: 'PRTS 标准',
+                  crossfade: { easing: 'outQuint', ms: 480 },
+                  effects: {
+                    geomReveal: true, geomLineRatio: 0.36, geomLineDp: 2.6,
+                    geomReverse: true, geomContainer: true, geomAccent: false
+                  }
+                };
+              }
+            });
+        """.trimIndent()
+        val s = Plugins.import(script)
+        try {
+            val prof = Plugins.activeMotionProfile()
+            assertNotNull(prof)
+            AnimStyle.applyPlugin(prof)
+            assertTrue(MotionEffects.geomReveal)
+            assertTrue(MotionEffects.geomContainer)
+            val cfg = MotionEffects.geom
+            assertNotNull(cfg)
+            assertEquals(0.36f, cfg.lineRatio, 0.001f)
+            assertEquals(2.6f, cfg.lineDp, 0.001f)
+            assertTrue(cfg.reverse)
+            assertTrue(cfg.container)
+            assertFalse(cfg.accent)
+        } finally {
+            AnimStyle.applyPlugin(null)
+            Plugins.delete(s.id)
+            AnimStyle.style = prevStyle
+        }
+        assertFalse(MotionEffects.geomReveal)
+    }
+
+    @Test fun recentHistoryHasNo100CapGroupsByDayAndPreservesCrossDayAndLegacy() {
+        TestEnv.init()
+        Store.init()
+        Store.clearRecents()
+        try {
+            val cal = java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.HOUR_OF_DAY, 14)
+                set(java.util.Calendar.MINUTE, 30)
+                set(java.util.Calendar.SECOND, 0)
+            }
+            val dayTodayMs = cal.timeInMillis
+            cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
+            val dayYesterdayMs = cal.timeInMillis
+            cal.add(java.util.Calendar.DAY_OF_YEAR, -2)
+            val dayEarlierMs = cal.timeInMillis
+
+            // 写入超过 100 首（135 首）跨越 3 天，验证无 100 条截断
+            for (i in 1..45) {
+                Store.addRecent(Track("e$i", "Early $i", "A", "Al", 180_000L, null), dayEarlierMs + i * 1000L)
+            }
+            for (i in 1..45) {
+                Store.addRecent(Track("y$i", "Yest $i", "A", "Al", 180_000L, null), dayYesterdayMs + i * 1000L)
+            }
+            for (i in 1..45) {
+                Store.addRecent(Track("t$i", "Today $i", "A", "Al", 180_000L, null), dayTodayMs + i * 1000L)
+            }
+            assertEquals(135, Store.recentEntries.value.size)
+            assertEquals(135, Store.recents.value.size)
+
+            // 同一首歌在不同天播放应分别保留；同一天重复播放应置顶去重
+            val shared = Track("shared_1", "Cross Day Song", "A", "Al", 200_000L, null)
+            Store.addRecent(shared, dayYesterdayMs + 90_000L)
+            Store.addRecent(shared, dayTodayMs + 90_000L)
+            Store.addRecent(shared, dayTodayMs + 120_000L)
+            assertEquals(137, Store.recentEntries.value.size)
+            assertEquals(2, Store.recentEntries.value.count { it.track.id == "shared_1" })
+            assertEquals(dayTodayMs + 120_000L, Store.recentEntries.value.first().playedAt)
+
+            // 按天分组且日期降序排列 + 无时间戳旧记录放最末「更早记录」
+            val legacy = RecentEntry(Track("old_1", "Legacy Song", "A", "Al", 150_000L, null), 0L, "")
+            val groups = Store.groupRecentByDay(Store.recentEntries.value + legacy)
+            assertEquals(4, groups.size)
+            assertEquals(Store.dayKey(dayTodayMs), groups[0].day)
+            assertEquals(Store.dayKey(dayYesterdayMs), groups[1].day)
+            assertEquals(Store.dayKey(dayEarlierMs), groups[2].day)
+            assertEquals("", groups[3].day)
+            assertEquals("更早记录", Store.dayLabel("", dayTodayMs))
+            assertTrue(Store.dayLabel(groups[0].day, dayTodayMs).startsWith("今天"))
+            assertTrue(Store.dayLabel(groups[1].day, dayTodayMs).startsWith("昨天"))
+
+            // 持久化往返（含 >100 条记录与时间戳）
+            Store.flushRecentsSync()
+            Store.init()
+            assertEquals(137, Store.recentEntries.value.size)
+            assertEquals(dayTodayMs + 120_000L, Store.recentEntries.value.first().playedAt)
+        } finally {
+            Store.clearRecents()
+            Store.flushRecentsSync()
+        }
+    }
 }

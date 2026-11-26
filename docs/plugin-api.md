@@ -101,12 +101,15 @@ NEKOPLAY 本体完全中立，不内置任何在线音源与重型特色扩展�
     "hoverShiftDp": 5, "hoverTint": true, "pressScale": 0.985, "pageScale": true,
     "listStaggerMs": 24, "listSlideDp": 36,
     "originExpand": true, "originRipple": true, "originInherit": true,
-    "originCornerDp": 18, "selectCoverScale": 1.10, "selectFontScale": 1.06
+    "originCornerDp": 18, "selectCoverScale": 1.10, "selectFontScale": 1.06,
+    "geomReveal": true, "geomLineRatio": 0.34, "geomLineDp": 2.4,
+    "geomReverse": true, "geomContainer": false, "geomAccent": true
   }
 }
 ```
 支持缓动名称：`outQuad` / `outCubic` / `outQuart` / `outQuint` / `outExpo` / `outExpoTail` / `outPow10` / `outCirc` / `outBack` / `outElasticHalf` / `outElasticQuarter` / `bezier`（配 `x1,y1,x2,y2`） / `spring`（配 `damping,stiffness`）。
 `effects` 可选源点空间字段：`originExpand`（源点容器展开与原路回缩）、`originRipple`（列表点击邻近物理波纹联动）、`originInherit`（多级跳转与目标页内容动量继承）、`originCornerDp`（展开圆角变形 0–36dp）、`selectCoverScale` / `selectFontScale`（选中项封面与字体微放大倍率）。
+`effects` 可选点线面几何展开字段：`geomReveal`（启用封面从左上角原点先拉顶边光束线再向下扫面展开）、`geomLineRatio`（拉线阶段时长占比 `0.18–0.55`，默认 `0.34`）、`geomLineDp`（光束线宽 `1–6dp`，默认 `2.4`）、`geomReverse`（切歌与收起时是否先反向「面 → 线 → 点」缩回左上顶点）、`geomContainer`（是否同步作用于子页面与播放页容器展开/收起）、`geomAccent`（扫描光束跟随主题强调色或前景色）。
 
 ---
 

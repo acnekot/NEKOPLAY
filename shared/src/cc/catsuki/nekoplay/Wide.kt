@@ -282,8 +282,9 @@ import kotlinx.coroutines.launch
             }
         }
         val originExp = MotionEffects.originExpand
+        val geomExp = MotionEffects.geomContainer
         AnimatedContent(top, Modifier.fillMaxSize(), transitionSpec = {
-            if (AnimStyle.off) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
+            if (AnimStyle.off || geomExp) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
             else if (originExp) {
                 val to = OriginBus.originTransformOrigin(useClosing = !forward)
                 if (forward) (scaleIn(Motion.page(), 0.84f, to) + fadeIn(Motion.page())) togetherWith (scaleOut(Motion.standard(), 0.96f) + fadeOut(Motion.quick()))
@@ -300,7 +301,7 @@ import kotlinx.coroutines.launch
                 }
             } else fadeIn(Motion.standard()) togetherWith fadeOut(Motion.quick())
         }, label = "widePage") { k ->
-            if (k != null) Box(Modifier.fillMaxSize()) { PageContent(k) }
+            if (k != null) Box(Modifier.fillMaxSize().then(if (geomExp) Modifier.geomReveal(k, innerScale = false) else Modifier)) { PageContent(k) }
         }
     }
 }

@@ -202,7 +202,7 @@ import java.util.Calendar
     val tracks by produceState<List<Track>?>(null, p, ver) {
         when (p.kind) {
             "daily" -> Store.daily.collect { value = it }
-            "recent" -> Store.recents.collect { value = it }
+            "recent" -> value = emptyList()
             "llike" -> LocalLib.liked.collect { value = it }
             "lpl" -> LocalLib.lists.collect { l -> value = l.firstOrNull { it.id == p.id }?.tracks ?: emptyList() }
             "simi" -> try { value = Ncm.simiSongs(p.id) } catch (e: Exception) { err = e.message }
@@ -216,17 +216,21 @@ import java.util.Calendar
             }
         }
     }
-    val list = tracks ?: emptyList()
+    val isRecent = p.kind == "recent"
+    val recentEntries by Store.recentEntries.collectAsState()
+    val dayGroups = remember(isRecent, recentEntries) { if (isRecent) Store.groupRecentByDay(recentEntries) else emptyList() }
+    var collapsedDays by remember(p.id) { mutableStateOf(emptySet<String>()) }
+    val list = if (isRecent) remember(dayGroups) { dayGroups.flatMap { g -> g.entries.map { it.track } } } else (tracks ?: emptyList())
     val dls = rememberLazyListState()
     Box(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize(), dls, contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 18.dp)) {
         item {
             Column {
-                Tag(when (p.kind) { "daily" -> "DAILY MIX"; "pl" -> "PLAYLIST"; "simi" -> "SIMILAR"; "newsong" -> "NEW SONGS"; "hist" -> "DAILY MIX"; "cloud" -> "CLOUD"; "radio" -> "PODCAST"; else -> "COLLECTION" })
+                Tag(when (p.kind) { "daily" -> "DAILY MIX"; "pl" -> "PLAYLIST"; "recent" -> "RECENT HISTORY"; "simi" -> "SIMILAR"; "newsong" -> "NEW SONGS"; "hist" -> "DAILY MIX"; "cloud" -> "CLOUD"; "radio" -> "PODCAST"; else -> "COLLECTION" })
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.height(112.dp)) {
                     val heroUrl = p.cover ?: list.firstOrNull()?.cover
-                    val heroMod = Modifier.heroAnchor("pl:${p.id}", heroUrl, p.title, isTarget = true)
+                    val heroMod = Modifier.heroAnchor("pl:${p.id}", heroUrl, p.title, isTarget = true).geomReveal("pl:${p.id}")
                     when {
                         p.kind == "liked" -> LikedCover(heroUrl, 112.dp, heroMod)
                         p.kind == "recent" -> RecentCover(list.firstOrNull()?.cover, 112.dp, heroMod)
@@ -236,16 +240,21 @@ import java.util.Calendar
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         T(trKnown(p.title), 24, w = 800, lines = 2, lh = 1.25f)
                         Spacer(Modifier.height(4.dp))
-                        T(if (tracks == null) "LOADING" else trKnown(listMeta(list)), 12, c.s, mono = true, ls = .04f)
+                        val metaText = when {
+                            isRecent -> if (recentEntries.isEmpty()) "00 条" else "${two(recentEntries.size)} 条 · ${dayGroups.size} 天 · ${fmt(recentEntries.sumOf { it.track.durationMs })}"
+                            tracks == null -> "LOADING"
+                            else -> listMeta(list)
+                        }
+                        T(trKnown(metaText), 12, c.s, mono = true, ls = .04f)
                         Spacer(Modifier.weight(1f))
-                        T(trKnown(when (p.kind) { "daily" -> "每日更新"; "recent" -> "本机记录"; "simi" -> "相似推荐"; "newsong" -> "新歌速递"; "hist" -> "历史日推"; "cloud" -> "音乐云盘"; "radio" -> "播客电台"; "llike", "lpl" -> "本机"; else -> Plugins.sourceName(p.id) ?: "在线歌单" }), 13, c.s)
+                        T(trKnown(when (p.kind) { "daily" -> "每日更新"; "recent" -> "本机记录 · 按天划分"; "simi" -> "相似推荐"; "newsong" -> "新歌速递"; "hist" -> "历史日推"; "cloud" -> "音乐云盘"; "radio" -> "播客电台"; "llike", "lpl" -> "本机"; else -> Plugins.sourceName(p.id) ?: "在线歌单" }), 13, c.s)
                     }
                 }
                 Spacer(Modifier.height(16.dp))
                 ActionRow {
                     PrimaryBar("播放", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(list, 0, shuffle = true) }
-                    if (p.kind != "recent" && list.isNotEmpty() && Features.on("dl")) {
+                    if (!isRecent && list.isNotEmpty() && Features.on("dl")) {
                         Spacer(Modifier.width(10.dp))
                         Box(Modifier.size(48.dp).press(.96f, true) {
                             downloadSheet(nav, list)
@@ -260,16 +269,72 @@ import java.util.Calendar
                 }
                 Spacer(Modifier.height(12.dp)); Rule()
                 if (err != null) T("加载失败：$err", 13, c.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 28.dp))
-                else if (tracks == null) T("LOADING", 13, c.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 28.dp))
+                else if (!isRecent && tracks == null) T("LOADING", 13, c.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 28.dp))
                 else if (list.isEmpty()) T("NO TRACKS", 13, c.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 28.dp))
             }
         }
-        itemsIndexed(list, key = { i, t -> "$i-${t.id}" }, contentType = { _, _ -> "track" }) { i, t ->
-            TrackRow(t, st.current?.id == t.id, onLong = { trackActions(nav, t, if (mine) p.id else null) }) { Engine.playList(list, i) }
+        if (isRecent) {
+            dayGroups.forEach { grp ->
+                val collapsed = grp.day in collapsedDays
+                item(key = "day_hdr_${grp.day.ifEmpty { "legacy" }}", contentType = "dayHeader") {
+                    RecentDayHeader(
+                        grp = grp,
+                        collapsed = collapsed,
+                        onToggle = { collapsedDays = if (collapsed) collapsedDays - grp.day else collapsedDays + grp.day },
+                        onPlayDay = { Engine.playList(grp.entries.map { it.track }, 0) },
+                    )
+                }
+                if (!collapsed) {
+                    itemsIndexed(
+                        grp.entries,
+                        key = { i, e -> "rec_${grp.day}_${i}_${e.track.id}_${e.playedAt}" },
+                        contentType = { _, _ -> "track" },
+                    ) { i, e ->
+                        TrackRow(e.track, st.current?.id == e.track.id, label = Store.timeLabel(e.playedAt), onLong = { trackActions(nav, e.track) }) {
+                            Engine.playList(list, grp.startIndex + i)
+                        }
+                    }
+                }
+            }
+        } else {
+            itemsIndexed(list, key = { i, t -> "$i-${t.id}" }, contentType = { _, _ -> "track" }) { i, t ->
+                TrackRow(t, st.current?.id == t.id, onLong = { trackActions(nav, t, if (mine) p.id else null) }) { Engine.playList(list, i) }
+            }
         }
     }
-    val targetIdx = remember(list, st.current?.id) { list.indexOfFirst { it.id == st.current?.id }.let { if (it < 0) -1 else it + 1 } }
+    val targetIdx = remember(isRecent, dayGroups, collapsedDays, list, st.current?.id) {
+        val curId = st.current?.id ?: return@remember -1
+        if (!isRecent) list.indexOfFirst { it.id == curId }.let { if (it < 0) -1 else it + 1 }
+        else {
+            var pos = 1
+            var found = -1
+            for (g in dayGroups) {
+                pos++ // day header
+                if (g.day !in collapsedDays) {
+                    val idx = g.entries.indexOfFirst { it.track.id == curId }
+                    if (idx >= 0) { found = pos + idx; break }
+                    pos += g.entries.size
+                }
+            }
+            found
+        }
+    }
     LocateBtn(dls, targetIdx)
+    }
+}
+
+@Composable private fun RecentDayHeader(grp: RecentDayGroup, collapsed: Boolean, onToggle: () -> Unit, onPlayDay: () -> Unit) {
+    val label = remember(grp.day) { Store.dayLabel(grp.day) }
+    Column(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 4.dp)) {
+        Row(Modifier.fillMaxWidth().press(onClick = onToggle).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Tag(trKnown(label))
+            Spacer(Modifier.width(8.dp))
+            T(if (collapsed) "▸" else "▾", 12, c.s, mono = true)
+            Box(Modifier.weight(1f).padding(horizontal = 8.dp).height(1.dp).background(if (Look.flat) Color.Transparent else c.l3))
+            T(trKnown("${two(grp.entries.size)} 首"), 12, c.s, mono = true)
+            Spacer(Modifier.width(8.dp))
+            LinkBtn("播放当天", 12, onClick = onPlayDay)
+        }
     }
 }
 
