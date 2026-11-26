@@ -136,12 +136,12 @@ import kotlinx.coroutines.launch
         Box(Modifier.padding(horizontal = 18.dp)) { TagRow("PLAYLISTS", 0.dp) }
         Spacer(Modifier.height(6.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-            if (liked != null) item { SideList(tr("我喜欢"), (top as? Page.Detail)?.id == liked.id, { LikedCover(liked.cover, 32.dp, Modifier.heroAnchor("pl:${liked.id}", liked.cover, "我喜欢")) }) { SharedHero.capture("pl:${liked.id}", liked.cover, "我喜欢"); nav.stack.clear(); nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
-            item { SideList(tr("最近播放"), (top as? Page.Detail)?.kind == "recent", { RecentCover(rec.firstOrNull()?.cover, 32.dp, Modifier.heroAnchor("pl:recent", rec.firstOrNull()?.cover, "最近播放")) }) { SharedHero.capture("pl:recent", rec.firstOrNull()?.cover, "最近播放"); nav.stack.clear(); nav.push(Page.Detail("recent", "recent", "最近播放")) } }
+            if (liked != null) item { SideList(tr("我喜欢"), (top as? Page.Detail)?.id == liked.id, { LikedCover(liked.cover, 32.dp, Modifier.heroAnchor("pl:${liked.id}", liked.cover, "我喜欢", tag = "side")) }) { SharedHero.capture("pl:${liked.id}", liked.cover, "我喜欢", tag = "side"); nav.stack.clear(); nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
+            item { SideList(tr("最近播放"), (top as? Page.Detail)?.kind == "recent", { RecentCover(rec.firstOrNull()?.cover, 32.dp, Modifier.heroAnchor("pl:recent", rec.firstOrNull()?.cover, "最近播放", tag = "side")) }) { SharedHero.capture("pl:recent", rec.firstOrNull()?.cover, "最近播放", tag = "side"); nav.stack.clear(); nav.push(Page.Detail("recent", "recent", "最近播放")) } }
             if (Features.on("local")) item { SideList(tr("本地音乐"), top == Page.Local, { IconCover(NIcons.disc, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.Local) } }
             if (Features.on("dl")) item { SideList(tr("本地下载"), top == Page.DlList, { IconCover(NIcons.download, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.DlList) } }
             items(pls.filter { !it.liked }, key = { "sp" + it.id }, contentType = { "pl" }) { pl ->
-                SideList(pl.name, (top as? Page.Detail)?.id == pl.id, { Cover(pl.cover, 32.dp, pl.name, decodeSize = 64.dp, modifier = Modifier.heroAnchor("pl:${pl.id}", pl.cover, pl.name)) }) { SharedHero.capture("pl:${pl.id}", pl.cover, pl.name); nav.stack.clear(); nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
+                SideList(pl.name, (top as? Page.Detail)?.id == pl.id, { Cover(pl.cover, 32.dp, pl.name, decodeSize = 64.dp, modifier = Modifier.heroAnchor("pl:${pl.id}", pl.cover, pl.name, tag = "side")) }) { SharedHero.capture("pl:${pl.id}", pl.cover, pl.name, tag = "side"); nav.stack.clear(); nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
             }
         }
         }

@@ -250,4 +250,53 @@ class CoreStateTest {
             Plugins.delete(s.id)
         }
     }
+
+    @Test fun sharedHeroNeverFiresWithoutExplicitIntentAndRespectsTagAndPriority() {
+        TestEnv.init()
+        val prevStyle = AnimStyle.style
+        AnimStyle.style = 0
+        SharedHero.resetForTest()
+        try {
+            val homeRect = androidx.compose.ui.geometry.Rect(18f, 108f, 146f, 236f)
+            val miniRect = androidx.compose.ui.geometry.Rect(14f, 700f, 54f, 740f)
+            val playerRect = androidx.compose.ui.geometry.Rect(28f, 165f, 358f, 495f)
+            val homeTok = SharedHero.allocToken()
+            val miniTok = SharedHero.allocToken()
+            val playerTok = SharedHero.allocToken()
+
+            SharedHero.register(HeroAnchorEntry(homeTok, "now:t1", "u1", "Song", true, isTarget = false, tag = "home", priority = 1) { homeRect })
+            SharedHero.register(HeroAnchorEntry(miniTok, "now:t1", "u1", "Song", true, isTarget = false, tag = "mini", priority = 2) { miniRect })
+            SharedHero.register(HeroAnchorEntry(playerTok, "now:t1", "u1", "Song", true, isTarget = true, tag = "", priority = 0) { playerRect })
+
+            // 1. 在播放页内切歌（未显式武装 capture）：绝不能误触发任何飞行
+            SharedHero.onAnchorFirstPlaced(homeTok, "now:t1", "u1", "Song", true, isTarget = false, destRect = homeRect)
+            SharedHero.onAnchorFirstPlaced(playerTok, "now:t1", "u1", "Song", true, isTarget = true, destRect = playerRect)
+            assertNull(SharedHero.flight)
+
+            // 2. 锚点卸载（如滚动离屏或切歌换 key）：绝不能误触发任何飞行
+            SharedHero.unregister(playerTok)
+            assertNull(SharedHero.flight)
+
+            // 3. 点击 MiniBar 显式武装后打开播放页：精准从 MiniBar 飞向播放页大封面，且背景 Home 不能抢消费
+            SharedHero.capture("now:t1", "u1", "Song", tag = "mini")
+            SharedHero.onAnchorFirstPlaced(homeTok, "now:t1", "u1", "Song", true, isTarget = false, destRect = homeRect)
+            assertNull(SharedHero.flight)
+            val playerTok2 = SharedHero.allocToken()
+            SharedHero.register(HeroAnchorEntry(playerTok2, "now:t1", "u1", "Song", true, isTarget = true, tag = "", priority = 0) { playerRect })
+            SharedHero.onAnchorFirstPlaced(playerTok2, "now:t1", "u1", "Song", true, isTarget = true, destRect = playerRect)
+            assertEquals(miniRect, SharedHero.flight?.from)
+            assertEquals(playerTok2, SharedHero.flight?.destToken)
+
+            // 4. 显式关闭播放页回飞：优先飞向高优先级的 MiniBar 而非背景 Home
+            SharedHero.finish(SharedHero.flight!!.seq)
+            SharedHero.flyBack("now:t1")
+            assertEquals(playerRect, SharedHero.flight?.from)
+            assertEquals(miniTok, SharedHero.flight?.destToken)
+            assertTrue(SharedHero.isHidden(playerTok2))
+            assertTrue(SharedHero.isHidden(miniTok))
+        } finally {
+            SharedHero.resetForTest()
+            AnimStyle.style = prevStyle
+        }
+    }
 }

@@ -87,7 +87,7 @@ import java.util.Calendar
                     Column(Modifier.padding(top = if (mi > 0) 32.dp else 0.dp)) {
                         Tag("CONTINUE LISTENING"); Spacer(Modifier.height(12.dp))
                         Row(verticalAlignment = Alignment.Bottom) {
-                            Box(Modifier.press { if (st.current != null) { SharedHero.capture("now:${st.current!!.id}", st.current!!.cover, st.current!!.title); nav.lyrics = false; nav.player = true } else if (daily.isNotEmpty()) Engine.playList(daily, 0) }) { Cover(cur?.cover, 128.dp, cur?.title ?: "", modifier = Modifier.heroAnchor(st.current?.let { "now:${it.id}" }, cur?.cover, cur?.title ?: "")) }
+                            Box(Modifier.press { if (st.current != null) { SharedHero.capture("now:${st.current!!.id}", st.current!!.cover, st.current!!.title, tag = "home"); nav.lyrics = false; nav.player = true } else if (daily.isNotEmpty()) Engine.playList(daily, 0) }) { Cover(cur?.cover, 128.dp, cur?.title ?: "", modifier = Modifier.heroAnchor(st.current?.let { "now:${it.id}" }, cur?.cover, cur?.title ?: "", tag = "home", priority = 1)) }
                             Spacer(Modifier.width(16.dp))
                             Column(Modifier.weight(1f)) {
                                 T(cur?.title ?: tr("还没有曲目"), Fs.PAGE, w = 800, lines = 3, lh = 1.1f)

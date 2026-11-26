@@ -60,8 +60,8 @@ import androidx.compose.runtime.withFrameMillis
     val dens = LocalDensity.current
     Box(Modifier.fillMaxWidth().height(60.dp).onSizeChanged { barW = it.width.toFloat().coerceAtLeast(1f) }) {
         Row(Modifier.fillMaxSize().background(barBg()).drawBehind { if (!Look.flat) drawRect(p.l2, size = Size(size.width, 1.dp.toPx())) }
-            .press { SharedHero.capture("now:${t.id}", t.cover, t.title); nav.lyrics = false; nav.player = true }.padding(start = 14.dp, end = 6.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Cover(t.cover, 40.dp, t.title, modifier = Modifier.heroAnchor("now:${t.id}", t.cover, t.title))
+            .press { SharedHero.capture("now:${t.id}", t.cover, t.title, tag = "mini"); nav.lyrics = false; nav.player = true }.padding(start = 14.dp, end = 6.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Cover(t.cover, 40.dp, t.title, modifier = Modifier.heroAnchor("now:${t.id}", t.cover, t.title, tag = "mini", priority = 2))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) { T(t.title, 15, w = 700, lh = 1.3f); T(t.artist, 12, p.s, lh = 1.3f) }
             Box(Modifier.size(40.dp, 48.dp).holdScrub(-1, enabled = !st.fm, haptic = true) { if (st.fm) { Engine.fmTrash(); nav.toast = "不再推荐这首" } else Engine.prev() }, contentAlignment = Alignment.Center) { NIcon(if (st.fm) NIcons.trash else NIcons.prev, 19.dp, if (ScrubController.dir < 0) p.p else p.k) }
@@ -184,7 +184,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                         translationX = lerp((w - coverNow) / 2, 18 * dp, lt)
                         translationY = lerp(nowTop, 8 * dp, lt)
                         scaleX = cs / coverNow; scaleY = cs / coverNow
-                    }.heroAnchor("now:${t.id}", t.cover, t.title).pointerInput(nav.lyrics) {
+                    }.heroAnchor("now:${t.id}", t.cover, t.title, isTarget = true).pointerInput(nav.lyrics) {
                         // 封面视图下往下拖封面或快速向下甩动 = 收起播放页；歌词模式不拦，留给歌词滚动
                         if (!nav.lyrics) {
                             val vt = androidx.compose.ui.input.pointer.util.VelocityTracker()
@@ -310,7 +310,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
             Row(Modifier.padding(start = 56.dp), verticalAlignment = Alignment.Bottom) {
             Column(Modifier.width(cover + 44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 // 解码尺寸固定 560dp；接入 heroAnchor 支持从底部播放条直飞大封面
-                Box(Modifier.onPlaced { val ny = it.positionInRoot().y; if (kotlin.math.abs(ny - coverY) > 1f) coverY = ny }.heroAnchor("now:${t.id}", t.cover, t.title)) {
+                Box(Modifier.onPlaced { val ny = it.positionInRoot().y; if (kotlin.math.abs(ny - coverY) > 1f) coverY = ny }.heroAnchor("now:${t.id}", t.cover, t.title, isTarget = true)) {
                     androidx.compose.animation.Crossfade(t.cover, animationSpec = tween(Motion.crossfadeMs), label = "wCover") { url -> Cover(url, cover, t.title, decodeSize = 560.dp) }
                 }
                 Spacer(Modifier.height(22.dp))

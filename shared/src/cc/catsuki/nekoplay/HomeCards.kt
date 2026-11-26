@@ -39,7 +39,7 @@ private var recCache: List<Playlist>? = null
             "continue" -> {
                 val cur = st.current ?: daily.firstOrNull() ?: rec.firstOrNull()
                 Tag("CONTINUE"); Spacer(Modifier.height(10.dp))
-                Box(Modifier.press { if (st.current != null) { SharedHero.capture("now:${st.current!!.id}", st.current!!.cover, st.current!!.title); nav.lyrics = false; nav.player = true } }) { Cover(cur?.cover, 64.dp, cur?.title ?: "", modifier = Modifier.heroAnchor(st.current?.let { "now:${it.id}" }, cur?.cover, cur?.title ?: "")) }
+                Box(Modifier.press { if (st.current != null) { SharedHero.capture("now:${st.current!!.id}", st.current!!.cover, st.current!!.title, tag = "home"); nav.lyrics = false; nav.player = true } }) { Cover(cur?.cover, 64.dp, cur?.title ?: "", modifier = Modifier.heroAnchor(st.current?.let { "now:${it.id}" }, cur?.cover, cur?.title ?: "", tag = "home", priority = 1)) }
                 Spacer(Modifier.height(8.dp))
                 T(cur?.title ?: "还没有曲目", 15, w = 800, lines = 2, lh = 1.2f); T(cur?.artist ?: "", 12, p.s)
                 Spacer(Modifier.weight(1f).heightIn(min = 8.dp))

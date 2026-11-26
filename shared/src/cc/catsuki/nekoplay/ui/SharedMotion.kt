@@ -101,6 +101,9 @@ internal data class HeroAnchorEntry(
     val url: String?,
     val title: String,
     val border: Boolean,
+    val isTarget: Boolean,
+    val tag: String,
+    val priority: Int,
     val getRect: () -> Rect?,
 )
 
@@ -126,16 +129,16 @@ internal data class HeroFlight(
 )
 
 /**
- * 轻量跨页共享元素飞行控制器：
- * - 平常无飞行时零协程、零绘制、零重组；
- * - 切换页面或开关播放页时，相同内容（如封面）直接从源位置丝滑飞向目标位置，并在飞行中实时追踪目标坐标以精准落位；
- * - 飞行期间自动隐藏目标槽位，着陆同一帧无缝交接，杜绝双影与闪跳。
+ * 轻量跨页共享元素飞行控制器（严格意图驱动，杜绝切歌/滚动误触）：
+ * - 仅在点击进入目标页/播放页显式调用 capture(...) 后，才允许对应 isTarget=true 锚点消费触发直飞；
+ * - 切歌、滚动列表、背景页更新等未武装场景绝不产生任何误飞或重影；
+ * - 支持按 tag 精准锁定被点击的源卡片/播放条，以及按 priority 精准回飞至前台播控栏。
  */
 object SharedHero {
     private var nextToken = 1
     private var nextSeq = 1
     private val anchors = LinkedHashMap<Int, HeroAnchorEntry>()
-    private val pending = HashMap<String, PendingHero>()
+    private var pendingOpen: PendingHero? = null
     internal var flight by mutableStateOf<HeroFlight?>(null)
     internal var hostOrigin by mutableStateOf(Offset.Zero)
 
@@ -146,52 +149,38 @@ object SharedHero {
     }
 
     internal fun unregister(token: Int) {
-        val old = anchors.remove(token)
-        if (old != null && !AnimStyle.off) {
-            old.getRect()?.takeIf { it.width > 4f && it.height > 4f }?.let { rect ->
-                // 若离开的是大元素（如播放页封面、详情页头图），且屏幕上仍有同 key 的归宿锚点，自动触发回飞
-                val backTarget = anchors.values.lastOrNull { it.key == old.key && it.token != token }
-                val toRect = backTarget?.getRect()?.takeIf { it.width > 4f && it.height > 4f }
-                if (backTarget != null && toRect != null && isDistinct(rect, toRect)) {
-                    startFlight(old.key, old.url ?: backTarget.url, old.title.ifEmpty { backTarget.title }, backTarget.border, rect, backTarget.token, toRect)
-                } else {
-                    pending[old.key] = PendingHero(old.key, old.url, old.title, old.border, rect, System.currentTimeMillis())
-                }
-            }
-        }
+        anchors.remove(token)
         if (flight?.destToken == token) flight = null
     }
 
-    /** 点击源条目或切换前主动捕获源位置（可选调用；即便不调，相同 key 新锚点出现时也会自动匹配仍在屏上的源锚点） */
-    fun capture(key: String, url: String? = null, title: String = "", border: Boolean = true) {
-        if (AnimStyle.off || key.isEmpty()) return
-        val src = anchors.values.lastOrNull { it.key == key } ?: return
-        val rect = src.getRect()?.takeIf { it.width > 4f && it.height > 4f } ?: return
-        pending[key] = PendingHero(key, url ?: src.url, title.ifEmpty { src.title }, border, rect, System.currentTimeMillis())
+    /** 供测试或重置状态清理使用 */
+    internal fun resetForTest() {
+        anchors.clear()
+        pendingOpen = null
+        flight = null
     }
 
-    /** 新锚点首次落位时尝试与刚捕获或同屏已存在的同 key 源锚点建立直飞 */
-    internal fun onAnchorFirstPlaced(token: Int, key: String, url: String?, title: String, border: Boolean, destRect: Rect) {
-        if (AnimStyle.off || key.isEmpty() || destRect.width <= 4f || destRect.height <= 4f) return
-        val now = System.currentTimeMillis()
-        val p = pending[key]?.takeIf { now - it.atMs <= 420L }
-        val fromRect: Rect
-        val u: String?
-        val t: String
-        if (p != null && isDistinct(p.from, destRect)) {
-            pending.remove(key)
-            fromRect = p.from
-            u = url ?: p.url
-            t = title.ifEmpty { p.title }
-        } else {
-            val other = anchors.values.lastOrNull { it.key == key && it.token != token }
-            val otherRect = other?.getRect()?.takeIf { it.width > 4f && it.height > 4f } ?: return
-            if (!isDistinct(otherRect, destRect)) return
-            fromRect = otherRect
-            u = url ?: other.url
-            t = title.ifEmpty { other.title }
+    /** 点击源条目或播放条打开目标前武装直飞；传 tag 可在同屏存在多个同 key 封面时精准定位被点击项 */
+    fun capture(key: String, url: String? = null, title: String = "", border: Boolean = true, tag: String = "") {
+        if (AnimStyle.off || key.isEmpty()) return
+        val candidates = anchors.values.filter { it.key == key && !it.isTarget }
+        val src = (if (tag.isNotEmpty()) candidates.lastOrNull { it.tag == tag } else null) ?: candidates.lastOrNull() ?: return
+        val rect = src.getRect()?.takeIf { it.width > 4f && it.height > 4f } ?: return
+        pendingOpen = PendingHero(key, url ?: src.url, title.ifEmpty { src.title }, border, rect, System.currentTimeMillis())
+    }
+
+    /** 仅当目标锚点（isTarget=true）首次落位且命中刚武装的同 key 打开意图时启动直飞 */
+    internal fun onAnchorFirstPlaced(token: Int, key: String, url: String?, title: String, border: Boolean, isTarget: Boolean, destRect: Rect) {
+        if (!isTarget || AnimStyle.off || key.isEmpty() || destRect.width <= 4f || destRect.height <= 4f) return
+        val p = pendingOpen ?: return
+        if (p.key != key) return
+        if (System.currentTimeMillis() - p.atMs > 450L) {
+            pendingOpen = null
+            return
         }
-        startFlight(key, u, t, border, fromRect, token, destRect)
+        pendingOpen = null
+        if (!isDistinct(p.from, destRect)) return
+        startFlight(key, url ?: p.url, title.ifEmpty { p.title }, border, p.from, token, destRect)
     }
 
     private fun isDistinct(a: Rect, b: Rect): Boolean {
@@ -200,15 +189,17 @@ object SharedHero {
         return dx > 16f || ds > 12f
     }
 
-    /** 主动从最新锚点回飞到同屏最早的同 key 归宿锚点（如关闭播放页时大封面立刻直飞回底部播放条） */
+    /** 主动从关闭中的目标锚点（如播放页大封面）回飞至前台优先级最高的源锚点（优先底栏 MiniBar/PlayerBar） */
     fun flyBack(key: String) {
         if (AnimStyle.off || key.isEmpty()) return
-        val matched = anchors.values.filter { it.key == key }
-        if (matched.size < 2) return
-        val src = matched.last()
-        val dst = matched.first()
+        val src = anchors.values.lastOrNull { it.key == key && it.isTarget } ?: return
         val fromRect = src.getRect()?.takeIf { it.width > 4f && it.height > 4f } ?: return
-        val toRect = dst.getRect()?.takeIf { it.width > 4f && it.height > 4f } ?: return
+        val dstList = anchors.values.filter { it.key == key && !it.isTarget }.mapNotNull { entry ->
+            entry.getRect()?.takeIf { it.width > 4f && it.height > 4f && it.right > 0f && it.bottom > 0f }?.let { entry to it }
+        }
+        if (dstList.isEmpty()) return
+        val maxPrio = dstList.maxOf { it.first.priority }
+        val (dst, toRect) = dstList.last { it.first.priority == maxPrio }
         if (!isDistinct(fromRect, toRect)) return
         startFlight(key, src.url ?: dst.url, src.title.ifEmpty { dst.title }, dst.border, fromRect, dst.token, toRect, hideSrcToken = src.token)
     }
@@ -233,9 +224,17 @@ object SharedHero {
     }
 }
 
-/** 标记共享内容锚点：相同 key 在页面或播放页切换时自动平滑直飞，无飞行时零开销 */
+/** 标记共享内容锚点：源条目用 isTarget=false + tag，目标页/播放页大封面用 isTarget=true；未武装时零飞行、零误触 */
 @Composable
-fun Modifier.heroAnchor(key: String?, url: String?, title: String = "", border: Boolean = true): Modifier {
+fun Modifier.heroAnchor(
+    key: String?,
+    url: String?,
+    title: String = "",
+    border: Boolean = true,
+    isTarget: Boolean = false,
+    tag: String = "",
+    priority: Int = 0,
+): Modifier {
     if (key.isNullOrEmpty()) return this
     val token = remember { SharedHero.allocToken() }
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -244,13 +243,13 @@ fun Modifier.heroAnchor(key: String?, url: String?, title: String = "", border: 
     val curTitle by rememberUpdatedState(title)
 
     DisposableEffect(token, key) {
-        SharedHero.register(HeroAnchorEntry(token, key, curUrl, curTitle, border) {
+        SharedHero.register(HeroAnchorEntry(token, key, curUrl, curTitle, border, isTarget, tag, priority) {
             coords?.takeIf { it.isAttached }?.boundsInRoot()
         })
         onDispose { SharedHero.unregister(token) }
     }
     SideEffect {
-        SharedHero.register(HeroAnchorEntry(token, key, curUrl, curTitle, border) {
+        SharedHero.register(HeroAnchorEntry(token, key, curUrl, curTitle, border, isTarget, tag, priority) {
             coords?.takeIf { it.isAttached }?.boundsInRoot()
         })
     }
@@ -260,7 +259,7 @@ fun Modifier.heroAnchor(key: String?, url: String?, title: String = "", border: 
             coords = lc
             if (!firstPlaced && lc.isAttached) {
                 firstPlaced = true
-                SharedHero.onAnchorFirstPlaced(token, key, curUrl, curTitle, border, lc.boundsInRoot())
+                SharedHero.onAnchorFirstPlaced(token, key, curUrl, curTitle, border, isTarget, lc.boundsInRoot())
             }
         }
         .graphicsLayer {

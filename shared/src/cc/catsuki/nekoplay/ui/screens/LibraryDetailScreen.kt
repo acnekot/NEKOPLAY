@@ -226,7 +226,7 @@ import java.util.Calendar
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.height(112.dp)) {
                     val heroUrl = p.cover ?: list.firstOrNull()?.cover
-                    val heroMod = Modifier.heroAnchor("pl:${p.id}", heroUrl, p.title)
+                    val heroMod = Modifier.heroAnchor("pl:${p.id}", heroUrl, p.title, isTarget = true)
                     when {
                         p.kind == "liked" -> LikedCover(heroUrl, 112.dp, heroMod)
                         p.kind == "recent" -> RecentCover(list.firstOrNull()?.cover, 112.dp, heroMod)
