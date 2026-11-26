@@ -355,39 +355,26 @@ import kotlin.math.sign
 
         // 底部专辑信息（手机横屏单行紧凑排布，不挡封面）+ 操作 + 底部快滑条
         if (curItem != null) {
-            fun playCurrent() {
-                if (curItem.presetTracks != null && curItem.presetTracks.isNotEmpty()) { Engine.playList(curItem.presetTracks, 0); nav.player = true }
-                else scope.launch {
-                    val ts = runCatching { when (curItem.kind) { "album" -> Ncm.album(curItem.id).second; "pl" -> Ncm.playlistTracks(curItem.id); else -> emptyList() } }.getOrDefault(emptyList())
-                    if (ts.isNotEmpty()) { Engine.playList(ts, 0); nav.player = true } else nav.toast = "暂无可播曲目"
-                }
-            }
-            if (ls) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-                Column(Modifier.align(Alignment.Center).padding(horizontal = 112.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    T(curItem.title, 14, p.k, 800, lines = 1, align = TextAlign.Center)
-                    T(curItem.sub, 11, p.s, lines = 1, align = TextAlign.Center)
-                }
-                Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Box(Modifier.press { playCurrent() }.background(p.p).padding(horizontal = 12.dp, vertical = 5.dp)) { T("播放", 11, Color.White, 700) }
-                    Box(Modifier.press { expandedKey = if (expandedKey == curItem.key) null else curItem.key }.nbf(1.dp, p.k).padding(horizontal = 10.dp, vertical = 5.dp)) { T(if (isExpanded) "合上" else "翻开", 11, p.k, 600) }
-                }
-            } else Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                AnimatedContent(curItem, contentKey = { it.key }, transitionSpec = { fadeIn(Motion.quick()) togetherWith fadeOut(Motion.quick()) }, label = "cfMeta") { it ->
-                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                        T(it.title, 18, p.k, 800, lines = 1, align = TextAlign.Center); Spacer(Modifier.height(2.dp)); T(it.sub, 12, p.s, 500, lines = 1, align = TextAlign.Center)
+            CoverFlowFooter(
+                curItem = curItem,
+                ls = ls,
+                canExpand = canExpand,
+                isExpanded = isExpanded,
+                itemCount = items.size,
+                sliderValue = pos.value,
+                onPlay = {
+                    if (curItem.presetTracks != null && curItem.presetTracks.isNotEmpty()) { Engine.playList(curItem.presetTracks, 0); nav.player = true }
+                    else scope.launch {
+                        val ts = runCatching { when (curItem.kind) { "album" -> Ncm.album(curItem.id).second; "pl" -> Ncm.playlistTracks(curItem.id); else -> emptyList() } }.getOrDefault(emptyList())
+                        if (ts.isNotEmpty()) { Engine.playList(ts, 0); nav.player = true } else nav.toast = "暂无可播曲目"
                     }
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.press { playCurrent() }.background(p.p).padding(horizontal = 16.dp, vertical = 7.dp)) { T("立即播放", 12, Color.White, 700) }
-                    if (canExpand) Box(Modifier.press { onCenterTap(curItem) }.nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 7.dp)) { T(if (isExpanded) "合上 CD 盒" else "翻开 CD 盒", 12, p.k, 600) }
-                    if (curItem.kind != "tracks") Box(Modifier.press { openDetail(curItem) }.nbf(1.dp, p.l2).padding(horizontal = 14.dp, vertical = 7.dp)) { T("进入详情", 12, p.k, 600) }
-                }
-                if (items.size > 1) {
-                    Spacer(Modifier.height(10.dp))
-                    NSlider(pos.value.coerceIn(0f, items.lastIndex.toFloat()), 0f..items.lastIndex.toFloat(), onDone = { snapTo(pos.value.roundToInt()) }) { v -> snapJob?.cancel(); expandedKey = null; scope.launch { pos.snapTo(v) } }
-                }
-            }
+                },
+                onToggleExpand = { onCenterTap(curItem) },
+                onToggleLandscapeExpand = { expandedKey = if (expandedKey == curItem.key) null else curItem.key },
+                onOpenDetail = { openDetail(curItem) },
+                onSlide = { v -> snapJob?.cancel(); expandedKey = null; scope.launch { pos.snapTo(v) } },
+                onSlideEnd = { snapTo(pos.value.roundToInt()) },
+            )
         }
     }
 }

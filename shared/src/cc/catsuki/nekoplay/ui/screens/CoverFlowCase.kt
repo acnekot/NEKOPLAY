@@ -1,5 +1,9 @@
 package cc.catsuki.nekoplay
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -18,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
@@ -183,6 +188,50 @@ internal fun Modifier.cdThicknessEdge(dist: () -> Float, tiltX: () -> Float, til
                     }
                 }
             }
+        }
+    }
+}
+
+/** 封面墙底部专辑信息、操作按钮与快滑条（支持手机横屏超紧凑单行与常规两行排布） */
+@Composable internal fun CoverFlowFooter(
+    curItem: FlowItem,
+    ls: Boolean,
+    canExpand: Boolean,
+    isExpanded: Boolean,
+    itemCount: Int,
+    sliderValue: Float,
+    onPlay: () -> Unit,
+    onToggleExpand: () -> Unit,
+    onToggleLandscapeExpand: () -> Unit,
+    onOpenDetail: () -> Unit,
+    onSlide: (Float) -> Unit,
+    onSlideEnd: () -> Unit,
+) {
+    val p = c
+    if (ls) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Column(Modifier.align(Alignment.Center).padding(horizontal = 112.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            T(curItem.title, 14, p.k, 800, lines = 1, align = TextAlign.Center)
+            T(curItem.sub, 11, p.s, lines = 1, align = TextAlign.Center)
+        }
+        Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.press(onClick = onPlay).background(p.p).padding(horizontal = 12.dp, vertical = 5.dp)) { T("播放", 11, Color.White, 700) }
+            Box(Modifier.press(onClick = onToggleLandscapeExpand).nbf(1.dp, p.k).padding(horizontal = 10.dp, vertical = 5.dp)) { T(if (isExpanded) "合上" else "翻开", 11, p.k, 600) }
+        }
+    } else Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        AnimatedContent(curItem, contentKey = { it.key }, transitionSpec = { fadeIn(Motion.quick()) togetherWith fadeOut(Motion.quick()) }, label = "cfMeta") { it ->
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                T(it.title, 18, p.k, 800, lines = 1, align = TextAlign.Center); Spacer(Modifier.height(2.dp)); T(it.sub, 12, p.s, 500, lines = 1, align = TextAlign.Center)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.press(onClick = onPlay).background(p.p).padding(horizontal = 16.dp, vertical = 7.dp)) { T("立即播放", 12, Color.White, 700) }
+            if (canExpand) Box(Modifier.press(onClick = onToggleExpand).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 7.dp)) { T(if (isExpanded) "合上 CD 盒" else "翻开 CD 盒", 12, p.k, 600) }
+            if (curItem.kind != "tracks") Box(Modifier.press(onClick = onOpenDetail).nbf(1.dp, p.l2).padding(horizontal = 14.dp, vertical = 7.dp)) { T("进入详情", 12, p.k, 600) }
+        }
+        if (itemCount > 1) {
+            Spacer(Modifier.height(10.dp))
+            NSlider(sliderValue.coerceIn(0f, (itemCount - 1).toFloat()), 0f..(itemCount - 1).toFloat(), onDone = onSlideEnd, onChange = onSlide)
         }
     }
 }

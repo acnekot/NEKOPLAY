@@ -26,16 +26,27 @@ object Plugins {
     var rev by mutableIntStateOf(0); private set
     fun bump() { rev++ }
 
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Default)
     private var idleJob: kotlinx.coroutines.Job? = null
+    private var refreshJob: kotlinx.coroutines.Job? = null
     @Volatile private var loaded = false
+    private fun scheduleRefresh(before: suspend () -> Unit = {}) {
+        refreshJob?.cancel()
+        refreshJob = scope.launch {
+            before()
+            PluginStore.refresh().join()
+            Store.refreshAll()
+            bump()
+        }
+    }
     fun load() = synchronized(this) {
         off = prefs.getStringSet("off", null) ?: emptySet()
         list.value = (dir.listFiles() ?: emptyArray()).filter { it.extension == "js" }.sortedBy { it.name }.map { JsSource(it) }
         loaded = true; bump()
         // 按需启动：已有 caps 缓存的插件不立即创建 QuickJS；首次安装的插件后台跑一次拿 caps；5 分钟未用自动释放
         val needWarm = enabled.filter { it.caps.isEmpty() }
-        if (needWarm.isNotEmpty()) kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { needWarm.forEach { it.start() }; bump() }
-        if (idleJob == null) idleJob = kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
+        if (needWarm.isNotEmpty()) scope.launch { needWarm.forEach { it.start() }; bump() }
+        if (idleJob == null) idleJob = scope.launch {
             while (true) {
                 kotlinx.coroutines.delay(60_000L)
                 val now = System.currentTimeMillis()
@@ -90,7 +101,7 @@ object Plugins {
     fun emitEvent(fn: String, payload: JSONObject) {
         val targets = enabledFeatures.filter { it.caps.isEmpty() || it.has(fn) }
         if (targets.isEmpty()) return
-        kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
+        scope.launch {
             targets.forEach { s -> runCatching { if (s.start() && s.has(fn)) s.call(fn, payload) } }
         }
     }
@@ -137,12 +148,14 @@ object Plugins {
         off = nextOff
         prefs.edit().putStringSet("off", off).apply()
         bump()
-        kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
-            if (v) target?.start() else target?.close()?.join()
-            bump()
-            if (target == null || target.isSource) {
-                PluginStore.refresh().join()
-                Store.refreshAll()
+        if (target == null || target.isSource) {
+            scheduleRefresh {
+                if (v) target?.start() else target?.close()?.join()
+                bump()
+            }
+        } else {
+            scope.launch {
+                if (v) target.start() else target.close().join()
                 bump()
             }
         }
@@ -153,7 +166,7 @@ object Plugins {
         val id = Regex("""^\s*//\s*@id\s+([A-Za-z0-9_\-]+)\s*$""", RegexOption.MULTILINE).find(text.take(4000))?.groupValues?.get(1)
             ?: throw NcmError("不是 NEKOPLAY 插件：脚本开头要有「// @id 名字」")
         get(id)?.close()?.join()
-        val f = File(dir, "$id.js"); f.writeText(text)
+        val f = File(dir, "$id.js"); f.writeTextAtomic(text)
         val s = JsSource(f)
         if (!s.hostCompatible) { f.delete(); throw NcmError("插件需要 NEKOPLAY v${s.minHost} 或更高版本（当前 v$APP_VERSION）") }
         if (!s.start()) { f.delete(); throw NcmError("脚本运行出错：${s.error}") }
@@ -162,7 +175,7 @@ object Plugins {
         off = if (s.isMotion) baseOff + list.value.filter { it.isMotion && it.id != id }.map { it.id } else baseOff
         prefs.edit().putStringSet("off", off).apply()
         bump()
-        if (s.isSource) kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { PluginStore.refresh().join(); Store.refreshAll(); bump() }
+        if (s.isSource) scheduleRefresh()
         s
     }
     suspend fun importUrl(url: String): JsSource {
@@ -170,12 +183,13 @@ object Plugins {
         return import(text)
     }
     fun delete(id: String) {
+        val wasSource = get(id)?.isSource != false
         get(id)?.close()
         File(dir, "$id.js").delete()
         list.value = list.value.filter { it.id != id }
         off = off - id; prefs.edit().putStringSet("off", off).apply()
         bump()
-        kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch { PluginStore.refresh().join(); Store.refreshAll(); bump() }
+        if (wasSource) scheduleRefresh()
     }
 
     // ---------- 本体调用插件 ----------

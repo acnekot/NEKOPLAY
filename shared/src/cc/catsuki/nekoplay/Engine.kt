@@ -77,7 +77,7 @@ object Engine {
         val cur = s.current ?: return
         if (cur.durationMs <= 0 || cur.durationMs - audio.position > 12_000) return
         if (s.fm && s.index + 1 >= s.queue.size) return
-        val ni = if (s.mode == Mode.SHUFFLE && !s.fm) s.queue.indices.filter { it != s.index }.random() else (s.index + 1) % s.queue.size
+        val ni = if (s.mode == Mode.SHUFFLE && !s.fm) EngineHistory.pickNextShuffle(s.queue.size, s.index) else (s.index + 1) % s.queue.size
         val nt = s.queue[ni]
         queuing = true
         queuedTrial = null
@@ -101,6 +101,7 @@ object Engine {
         val ni = queuedIndex; queuedIndex = -1
         val s = state.value
         if (ni !in s.queue.indices) return
+        if (s.mode == Mode.SHUFFLE && s.index >= 0) EngineHistory.push(s.index)
         reportPrev()
         val t = s.queue[ni]
         reportId = t.id
@@ -195,12 +196,19 @@ object Engine {
     fun playList(list: List<Track>, start: Int, shuffle: Boolean = false) {
         if (list.isEmpty()) return
         errStreak = 0
+        EngineHistory.clear()
         val q = if (shuffle) list.shuffled() else list
         state.value = state.value.copy(fm = false, queue = q, index = if (shuffle) 0 else start, mode = if (shuffle) Mode.SHUFFLE else state.value.mode.let { if (it == Mode.SHUFFLE) Mode.LOOP_ALL else it })
         load(state.value.index, true)
     }
 
-    fun playAt(i: Int) { if (i in state.value.queue.indices) { errStreak = 0; load(i, true) } }
+    fun playAt(i: Int) {
+        val s = state.value
+        if (i in s.queue.indices) {
+            if (s.mode == Mode.SHUFFLE && s.index >= 0 && s.index != i) EngineHistory.push(s.index)
+            errStreak = 0; load(i, true)
+        }
+    }
 
     /** 上一首听了多久：切歌时回传给网易云（听满 30 秒或播完才算一次） */
     private var reportId: String? = null
@@ -290,37 +298,15 @@ object Engine {
     }
 
     // ---------- 私人 FM ----------
-    private var fmJob: Job? = null
-    fun startFm(onError: (String) -> Unit = {}) {
-        scope.launch {
-            try {
-                val l = Ncm.fm()
-                if (l.isEmpty()) { onError("私人 FM 暂时没有歌曲"); return@launch }
-                state.value = state.value.copy(queue = l, index = 0, fm = true, mode = Mode.LOOP_ALL)
-                load(0, true)
-            } catch (e: Exception) { onError("私人 FM 加载失败：${e.message}") }
-        }
-    }
-    /** FM 队列快到底时补货 */
-    private fun fmFill(then: (() -> Unit)? = null) {
-        if (fmJob?.isActive == true) { if (then != null) scope.launch { fmJob?.join(); then() }; return }
-        fmJob = scope.launch {
-            runCatching { Ncm.fm() }.onSuccess { more ->
-                val s = state.value
-                if (s.fm) state.value = s.copy(queue = s.queue + more.filter { m -> s.queue.none { it.id == m.id } })
-            }
-            then?.invoke()
-        }
-    }
-    /** FM 页：下一首不够了就先要一批 */
+    fun startFm(onError: (String) -> Unit = {}) = EngineFm.start(
+        scope,
+        setState = { l -> EngineHistory.clear(); state.value = state.value.copy(queue = l, index = 0, fm = true, mode = Mode.LOOP_ALL) },
+        onReady = { load(0, true) },
+        onError = onError,
+    )
+    private fun fmFill(then: (() -> Unit)? = null) = EngineFm.fill(scope, { state.value }, { more -> state.value = state.value.copy(queue = state.value.queue + more) }, then)
     fun fmEnsureNext() { val s = state.value; if (s.fm && s.index + 2 >= s.queue.size) fmFill() }
-
-    /** FM 里「不喜欢」：告诉网易云并跳到下一首 */
-    fun fmTrash() {
-        val t = state.value.current ?: return
-        scope.launch { runCatching { Ncm.fmTrash(t.id) } }
-        next()
-    }
+    fun fmTrash() { val t = state.value.current ?: return; scope.launch { runCatching { Ncm.fmTrash(t.id) } }; next() }
 
     fun next() { errStreak = 0; nextInternal() }
     private fun nextInternal() {
@@ -330,14 +316,20 @@ object Engine {
             else fmFill { val n = state.value; if (n.index + 1 < n.queue.size) load(n.index + 1, true) }
             return
         }
-        load(if (s.mode == Mode.SHUFFLE) (s.queue.indices).random() else (s.index + 1) % s.queue.size, true)
+        val target = if (s.mode == Mode.SHUFFLE) {
+            if (s.index >= 0) EngineHistory.push(s.index)
+            EngineHistory.pickNextShuffle(s.queue.size, s.index)
+        } else (s.index + 1) % s.queue.size
+        load(target, true)
     }
 
     fun prev() {
         val s = state.value; if (s.queue.isEmpty()) return
         errStreak = 0
         if (audio.position > 3000) { seek(0); return }
-        load((s.index - 1 + s.queue.size) % s.queue.size, true)
+        val target = if (s.mode == Mode.SHUFFLE) EngineHistory.popValid(s.queue.size, s.index) ?: ((s.index - 1 + s.queue.size) % s.queue.size)
+        else (s.index - 1 + s.queue.size) % s.queue.size
+        load(target, true)
     }
 
     private fun onEnded() {
@@ -346,11 +338,17 @@ object Engine {
         if (state.value.mode == Mode.LOOP_ONE) { seek(0); audio.play() } else next()
     }
 
-    fun cycleMode() { dropNext(); state.value = state.value.copy(mode = Mode.entries[(state.value.mode.ordinal + 1) % 3]) }
+    fun cycleMode() {
+        dropNext()
+        val nextMode = Mode.entries[(state.value.mode.ordinal + 1) % 3]
+        if (nextMode != Mode.SHUFFLE) EngineHistory.clear()
+        state.value = state.value.copy(mode = nextMode)
+    }
 
     fun removeAt(i: Int) { dropNext();
         val s = state.value
         if (i == s.index || i !in s.queue.indices) return
+        EngineHistory.onRemove(i)
         val q = s.queue.toMutableList().apply { removeAt(i) }
         state.value = s.copy(queue = q, index = if (i < s.index) s.index - 1 else s.index)
     }
@@ -370,17 +368,8 @@ object Engine {
     }
 
     private var prefs: KV? = null
-    private fun cacheKey(id: String, level: String) = "${id}_$level"
-    private fun cachedLevel(id: String): Pair<String, String>? {
-        val q = q
-        val order = Ncm.LEVELS.reversed().sortedBy { kotlin.math.abs(Ncm.LEVELS.indexOf(it) - q) }
-        for (lv in order) {
-            if (Ncm.LEVELS.indexOf(lv) > q + 1) continue
-            val key = cacheKey(id, lv)
-            if (audio.isCached(key)) return lv to (prefs?.getString("fmt_$key", "") ?: "")
-        }
-        return null
-    }
+    private fun cacheKey(id: String, level: String) = EngineCache.key(id, level)
+    private fun cachedLevel(id: String): Pair<String, String>? = EngineCache.cachedLevel(id, q, audio, prefs)
     private fun prefetchNext() {
         val s = state.value
         if (s.mode == Mode.SHUFFLE || s.queue.size < 2) return
@@ -391,6 +380,6 @@ object Engine {
     fun clearCache() { runCatching { audio.clearCache() } }
     fun changeQuality(q: Int) { quality = q; prefs?.edit()?.putInt("q2", q)?.apply(); if (state.value.current != null) load(state.value.index, audio.isPlaying, audio.position) }
     fun changeCellQuality(v: Int) { qualityCell = v; prefs?.edit()?.putInt("qCell", v)?.apply(); if (state.value.current != null && Plat.impl.metered()) load(state.value.index, audio.isPlaying, audio.position) }
-    fun clearUpcoming() { dropNext(); val s = state.value; s.current?.let { state.value = s.copy(queue = listOf(it), index = 0) } }
+    fun clearUpcoming() { dropNext(); EngineHistory.clear(); val s = state.value; s.current?.let { state.value = s.copy(queue = listOf(it), index = 0) } }
     fun savePosition() { val s = state.value; if (s.index >= 0) Store.saveQueue(s.queue, s.index, if (opened) audio.position else position.value) }
 }

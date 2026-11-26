@@ -34,11 +34,11 @@ object LocalLib {
     private fun save() {
         val o = JSONObject().put("liked", JSONArray(liked.value.map { it.toJson() }))
             .put("lists", JSONArray(lists.value.map { JSONObject().put("id", it.id).put("name", it.name).put("at", it.created).put("tracks", JSONArray(it.tracks.map { t -> t.toJson() })) }))
-        io.launch { runCatching { file.writeText(o.toString()) } }
+        io.launch { runCatching { file.writeTextAtomic(o.toString()) } }
     }
     /** 备份 / 恢复用 */
     fun dump(): String = if (file.exists()) file.readText() else "{}"
-    fun restore(text: String) { runCatching { JSONObject(text); file.writeText(text); load() } }
+    fun restore(text: String) { runCatching { JSONObject(text); file.writeTextAtomic(text); load() } }
 
     fun isLiked(id: String) = liked.value.any { it.id == id }
     /** 返回切换后是否喜欢 */

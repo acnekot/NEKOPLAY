@@ -50,7 +50,7 @@ object Store {
     /** 备份恢复用：直接换掉最近播放 */
     fun restoreRecents(l: List<Track>) { recents.value = l; writeTracks("recents", l) }
     private fun writeTracks(name: String, l: List<Track>) = io.launch {
-        runCatching { File(dir, "$name.json").writeText(JSONArray(l.map { it.toJson() }).toString()) }
+        runCatching { File(dir, "$name.json").writeTextAtomic(JSONArray(l.map { it.toJson() }).toString()) }
     }
 
     /** 启动后调用：读缓存 → 联网刷新账号、歌单、每日推荐 */
@@ -73,7 +73,7 @@ object Store {
         runCatching { Ncm.daily() }.onSuccess { daily.value = it; writeTracks("daily", it) }
         if (Ncm.loggedIn) runCatching { Ncm.playlists() }.onSuccess { l ->
             playlists.value = l
-            runCatching { File(dir, "playlists.json").writeText(JSONArray(l.map { JSONObject().put("id", it.id).put("n", it.name).put("c", it.count).put("cv", it.cover ?: "").put("l", it.liked).put("m", it.mine) }).toString()) }
+            runCatching { File(dir, "playlists.json").writeTextAtomic(JSONArray(l.map { JSONObject().put("id", it.id).put("n", it.name).put("c", it.count).put("cv", it.cover ?: "").put("l", it.liked).put("m", it.mine) }).toString()) }
             l.firstOrNull { it.liked }?.let { lp -> runCatching { tracksOf(lp.id, refresh = true) } }
         }
         loading.value = false
@@ -95,7 +95,7 @@ object Store {
     fun refreshPlaylists(changed: String? = null) = io.launch {
         runCatching { Ncm.playlists() }.onSuccess { l ->
             playlists.value = l
-            runCatching { File(dir, "playlists.json").writeText(JSONArray(l.map { JSONObject().put("id", it.id).put("n", it.name).put("c", it.count).put("cv", it.cover ?: "").put("l", it.liked).put("m", it.mine) }).toString()) }
+            runCatching { File(dir, "playlists.json").writeTextAtomic(JSONArray(l.map { JSONObject().put("id", it.id).put("n", it.name).put("c", it.count).put("cv", it.cover ?: "").put("l", it.liked).put("m", it.mine) }).toString()) }
         }
         if (changed != null) runCatching { tracksOf(changed, refresh = true) }
         plVersion.value++

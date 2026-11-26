@@ -1,17 +1,25 @@
 package cc.catsuki.nekoplay
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-/** 本机听歌统计：每首歌听了几次、多久，每天听了多久（只存在本机） */
+/** 本机听歌统计：每首歌听了几次、多久，每天听了多久（异步防抖 + 原子落盘，不阻塞主线程切歌） */
 object Stats {
     data class Song(val t: Track, val plays: Int, val sec: Long)
     val songs = MutableStateFlow<Map<String, Song>>(emptyMap())
     val days = MutableStateFlow<Map<String, Long>>(emptyMap())
     private val file get() = File(Plat.impl.filesDir, "stats.json")
+    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var saveJob: Job? = null
     private val df get() = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     fun today(): String = df.format(Date())
 
@@ -29,18 +37,30 @@ object Stats {
         val old = songs.value[t.id]
         songs.value = songs.value + (t.id to Song(t, (old?.plays ?: 0) + if (counted) 1 else 0, (old?.sec ?: 0) + sec))
         val d = today(); days.value = days.value + (d to (days.value[d] ?: 0) + sec)
-        save()
+        scheduleSave()
     }
 
-    private fun save() = runCatching {
+    private fun serialize(): String {
         // 只留听得最多的 800 首，文件不会无限变大
         val keep = songs.value.values.sortedByDescending { it.sec }.take(800)
         val s = JSONObject(); keep.forEach { s.put(it.t.id, JSONObject().put("t", it.t.toJson()).put("n", it.plays).put("s", it.sec)) }
         val d = JSONObject(); days.value.forEach { (k, v) -> d.put(k, v) }
-        file.writeText(JSONObject().put("songs", s).put("days", d).toString())
+        return JSONObject().put("songs", s).put("days", d).toString()
     }
 
-    fun clear() { songs.value = emptyMap(); days.value = emptyMap(); file.delete() }
+    private fun scheduleSave() {
+        saveJob?.cancel()
+        saveJob = io.launch {
+            delay(250L)
+            runCatching { file.writeTextAtomic(serialize()) }
+        }
+    }
+
+    fun flushSync() = runCatching { saveJob?.cancel(); file.writeTextAtomic(serialize()) }
+    fun dump(): String = serialize()
+    fun restore(text: String) { runCatching { JSONObject(text); file.writeTextAtomic(text); load() } }
+
+    fun clear() { saveJob?.cancel(); songs.value = emptyMap(); days.value = emptyMap(); file.delete() }
 
     /** 最近 n 天（含今天）每天的秒数，从早到晚 */
     fun lastDays(n: Int): List<Pair<String, Long>> {

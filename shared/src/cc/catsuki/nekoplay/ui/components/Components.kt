@@ -221,101 +221,6 @@ val LocalCompactAction = compositionLocalOf { false }
     Box(Modifier.padding(end = 6.dp).border(1.dp, c.l2).padding(horizontal = 4.dp)) { T(name, 9, c.s, 700, lh = 1.4f) }
 }
 
-@Composable fun TrackRow(t: Track, current: Boolean, label: String? = null, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
-    val p = c
-    val fg = if (current) p.p else p.k
-    val hSrc = remember { MutableInteractionSource() }
-    val hovered by hSrc.collectIsHoveredAsState()
-    val curAnim = animateFloatAsState(if (current) 1f else 0f, Motion.standard(), label = "trc")
-    val hovAnim = animateFloatAsState(if (hovered && !current && MotionEffects.hoverTint) 1f else 0f, Motion.quick(), label = "trh")
-    val hovShift = if (MotionEffects.hoverShiftDp > 0.1f && !AnimStyle.off) animateFloatAsState(if (hovered) MotionEffects.hoverShiftDp * 0.55f else 0f, Motion.standard(), label = "trs") else null
-    Row(Modifier.fillMaxWidth().height(64.dp).cascadeEnter().then(if (hovShift != null) Modifier.graphicsLayer { translationX = hovShift.value.dp.toPx() } else Modifier).hoverable(hSrc).press(onLong = onLong, onClick = onClick).drawBehind {
-        val ext = 10.dp.toPx()
-        val ca = curAnim.value
-        val ha = hovAnim.value
-        if (ha > 0.01f) drawRect(p.k.copy(alpha = .045f * ha), Offset(-ext, 0f), Size(size.width + ext * 2, size.height))
-        if (ca > 0.01f) {
-            drawRect(p.hl.copy(alpha = p.hl.alpha * ca), Offset(-ext, 0f), Size(size.width + ext * 2, size.height))
-            val barH = size.height * ca
-            drawRect(p.p.copy(alpha = ca), Offset(-ext, (size.height - barH) / 2f), Size(3.dp.toPx(), barH))
-        }
-        if (!Look.flat) drawRect(p.l1, Offset(if (current) -ext else 0f, size.height - 1.dp.toPx()), Size(size.width + if (current) ext * 2 else 0f, 1.dp.toPx()))
-    }, verticalAlignment = Alignment.CenterVertically) {
-        Cover(t.cover, 44.dp, t.title)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                T(t.title, 16, fg, if (current) 700 else 600, lh = 1.4f, modifier = Modifier.weight(1f, fill = false))
-                if (t.vip) { Spacer(Modifier.width(6.dp)); VipTag() }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                SourceTag(t)
-                T(t.artist, 13, p.s, lh = 1.4f)
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            T(if (t.durationMs > 0) fmt(t.durationMs) else "--:--", 12, fg, mono = true)
-            TrackDownloadLabel(t.id, label)
-        }
-    }
-}
-
-@Composable private fun TrackDownloadLabel(id: String, label: String?) {
-    val lab = if (label != null) label else {
-        val act by Downloads.active.collectAsState()
-        val dls by Downloads.items.collectAsState()
-        act[id]?.let { if (it < 0) "等待下载" else "%.0f%%".format(it * 100) } ?: if (dls.any { it.track.id == id }) "已下载" else null
-    }
-    if (lab != null) T(lab, 11, c.s, mono = true, ls = .06f)
-}
-
-/** 进度条：热区 16，线 4（拖动时 6），拖动时出现方形滑块 */
-@Composable fun ScrubBar(durMs: Long, hit: Dp = 16.dp, interactive: Boolean = true, onScrub: (Float?) -> Unit = {}) {
-    val pos by Engine.position.collectAsState()
-    val buf by Engine.buffered.collectAsState()
-    val dur = durMs.coerceAtLeast(1)
-    var drag by remember(dur) { mutableStateOf<Float?>(null) }
-    val curScrub by rememberUpdatedState(onScrub)
-    // 和 Flutter 版 ScrubBar 完全一致：
-    // 进度线宽度永远用 150ms 匀速动画追到新位置（拖动、播放、跳转都一样，这就是拖尾）；
-    // 方块滑块直接在手指位置，只做 150ms 的缩放（0.4→1）和淡入淡出
-    val frac = drag ?: (pos.toFloat() / dur).coerceIn(0f, 1f)
-    val fill = animateFloatAsState(frac, tween(150, easing = androidx.compose.animation.core.LinearEasing), label = "fill")
-    val thumbAt = frac
-    val h = animateDpAsState(if (drag != null) 6.dp else 4.dp, tween(150, easing = androidx.compose.animation.core.LinearEasing), label = "h")
-    val th = animateFloatAsState(if (drag != null) 1f else 0f, tween(150, easing = androidx.compose.animation.core.LinearEasing), label = "t")
-    val ts = animateFloatAsState(if (drag != null) 1f else .4f, tween(150, easing = androidx.compose.animation.core.LinearEasing), label = "ts")
-    val p = c
-    Box(Modifier.fillMaxWidth().height(hit).then(if (!interactive) Modifier else Modifier.pointerInput(dur) {
-        awaitPointerEventScope {
-            while (true) {
-                val e = awaitPointerEvent()
-                val ch = e.changes.firstOrNull() ?: continue
-                val f = (ch.position.x / size.width).coerceIn(0f, 1f)
-                if (ch.pressed) { drag = f; curScrub(f); ch.consume() }
-                else if (drag != null) { Engine.seek((drag!! * dur).toLong()); drag = null; curScrub(null) }
-            }
-        }
-    }).drawBehind {
-        val y = size.height / 2; val hp = h.value.toPx()
-        drawRect(p.l3, Offset(0f, y - hp / 2), Size(size.width, hp))
-        // 已缓存的部分：比底色深一点
-        if (UiPref.showBuffer && interactive) drawRect(p.k.copy(alpha = .22f), Offset(0f, y - hp / 2), Size(size.width * (buf.toFloat() / dur).coerceIn(0f, 1f), hp))
-        drawRect(p.p, Offset(0f, y - hp / 2), Size(size.width * fill.value, hp))
-        val thv = th.value
-        if (thv > 0f) { val s = 12.dp.toPx() * ts.value; drawRect(p.p.copy(alpha = thv), Offset(size.width * thumbAt - s / 2, y - s / 2), Size(s, s)) }
-    })
-}
-
-@Composable fun TimeRow(durMs: Long, scrub: Float? = null, size: Int = 12) {
-    val sec by remember { Engine.position.map { it / 1000L }.distinctUntilChanged() }.collectAsState(Engine.position.value / 1000L)
-    Row(Modifier.fillMaxWidth()) {
-        T(fmt(if (scrub != null) (scrub * durMs).toLong() else sec * 1000L), size, c.p, mono = true, modifier = Modifier.weight(1f))
-        T(fmt(durMs), size, c.s, mono = true)
-    }
-}
-
 fun two(n: Int) = n.toString().padStart(2, '0')
 fun fmt(ms: Long): String { val t = (ms / 1000).coerceAtLeast(0); val h = t / 3600; return if (h > 0) "$h:${two((t % 3600 / 60).toInt())}:${two((t % 60).toInt())}" else "${two((t / 60).toInt())}:${two((t % 60).toInt())}" }
 fun listMeta(l: List<Track>) = "${two(l.size)} 首 · ${fmt(l.sumOf { it.durationMs })}"
@@ -330,8 +235,6 @@ fun listMeta(l: List<Track>) = "${two(l.size)} 首 · ${fmt(l.sumOf { it.duratio
 
 @Suppress("unused") private fun Float.r() = roundToInt()
 
-/** 当前是不是宽屏（PC）布局，由 Root 按窗口宽度更新 */
-
 @Composable fun ActionRow(content: @Composable RowScope.() -> Unit) {
     if (Screen.wide) Row(Modifier.fillMaxWidth()) {
         Spacer(Modifier.weight(1f))
@@ -339,8 +242,6 @@ fun listMeta(l: List<Track>) = "${two(l.size)} 首 · ${fmt(l.sumOf { it.duratio
     }
     else Row(Modifier.fillMaxWidth(), content = content)
 }
-
-/** 顶栏 / 侧边栏 / 播放条的底色：有自定义背景时半透明，让背景连成一片 */
 
 @Composable fun BadgeCover(url: String?, size: Dp, icon: String, filledFallback: Boolean) {
     if (url == null) { IconCover(icon, size, filledFallback, if (size > 80.dp) 44.dp else 24.dp); return }
@@ -358,36 +259,3 @@ fun listMeta(l: List<Track>) = "${two(l.size)} 首 · ${fmt(l.sumOf { it.duratio
 
 /** 「最近播放」：最后播放那首的封面 + 时钟角标 */
 @Composable fun RecentCover(url: String?, size: Dp) = BadgeCover(url, size, NIcons.clock, false)
-
-/** 网易云图片按显示尺寸取小图 */
-fun img(url: String?, px: Int): String? {
-    if (url == null) return null
-    if (url.startsWith("http://") && !url.contains("music.126.net")) return img("https://" + url.removePrefix("http://"), px)
-    val b = when { px <= 160 -> 160; px <= 256 -> 256; px <= 512 -> 512; else -> 768 }
-    val base = url.substringBefore('?')
-    // QQ 音乐的图：尺寸写在文件名里（T002R500x500M000…），只有 150 / 300 / 500 / 800 几档
-    if (base.contains("kugou.com") && base.contains("/480/")) { val q = when { px <= 160 -> 150; px <= 256 -> 240; else -> 480 }; return base.replace("/480/", "/$q/") }
-    if (base.contains("gtimg.cn") && base.contains("R500x500")) { val q = when { px <= 160 -> 150; px <= 300 -> 300; px <= 512 -> 500; else -> 800 }; return base.replace("R500x500", "R${q}x$q") }
-    if (!base.contains("music.126.net")) return url   // QQ（qpic）/ 酷狗等其它站：参数是它们自己的，不能乱加
-    return if (base.contains("/obj/")) "$base?imageView=1&thumbnail=${b}x$b&type=webp" else "$base?param=${b}y$b"
-}
-
-
-
-/**
- * 定位到正在播放：当前歌在列表里、但不在屏幕上时，右下角出现一个方块按钮，点一下滚过去（停在偏上的位置）。
- * target = 正在播放那一行在 LazyColumn 里的序号（含前面的标题项），-1 = 列表里没有。
- */
-@Composable fun BoxScope.LocateBtn(ls: androidx.compose.foundation.lazy.LazyListState, target: Int, bottom: Dp = 16.dp) {
-    val scope = rememberCoroutineScope()
-    val show by remember(target) { derivedStateOf {
-        target >= 0 && ls.layoutInfo.visibleItemsInfo.let { v -> v.isEmpty() || v.none { it.index == target } || v.first { it.index == target }.let { it.offset < 0 || it.offset + it.size > ls.layoutInfo.viewportEndOffset } }
-    } }
-    androidx.compose.animation.AnimatedVisibility(show, Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = bottom),
-        enter = androidx.compose.animation.fadeIn(Motion.quick()) + androidx.compose.animation.scaleIn(Motion.quick(), if (MotionEffects.pageScale) .8f else 1f),
-        exit = androidx.compose.animation.fadeOut(Motion.quick()) + androidx.compose.animation.scaleOut(Motion.quick(), if (MotionEffects.pageScale) .8f else 1f)) {
-        Box(Modifier.size(44.dp).press(.92f, true) {
-            scope.launch { ls.animateScrollToItem(target, -(ls.layoutInfo.viewportEndOffset / 3)) }
-        }.background(c.sheet).border(if (Look.flat) 0.dp else 1.dp, c.k), contentAlignment = Alignment.Center) { NIcon(NIcons.locate, 20.dp, c.p) }
-    }
-}

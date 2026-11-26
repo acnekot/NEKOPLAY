@@ -34,3 +34,17 @@ object Hash {
         return buildString { for (v in intArrayOf(a0, b0, c0, d0)) for (i in 0 until 4) { val x = (v ushr (8 * i)) and 0xff; append("0123456789abcdef"[x shr 4]); append("0123456789abcdef"[x and 15]) } }
     }
 }
+
+/** 原子写入文本（先写同目录 .tmp 再替换目标，兼容 Desktop / Windows / Android / iOS，避免强杀截断损坏 JSON） */
+fun java.io.File.writeTextAtomic(text: String) {
+    parentFile?.let { if (!it.exists()) it.mkdirs() }
+    val tmp = java.io.File(parentFile, "$name.tmp")
+    tmp.writeText(text)
+    if (!tmp.renameTo(this)) {
+        if (exists()) delete()
+        if (!tmp.renameTo(this)) {
+            writeText(text)
+            tmp.delete()
+        }
+    }
+}
