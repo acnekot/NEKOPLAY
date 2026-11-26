@@ -160,4 +160,39 @@ class CoreStateTest {
             Plugins.delete(s.id)
         }
     }
+
+    @Test fun i18nResolvesSystemAndTranslatesWithoutTouchingMetadata() {
+        TestEnv.init()
+        val prev = I18n.code
+        try {
+            assertEquals(I18n.EN, I18n.resolveSystem("en-US"))
+            assertEquals(I18n.JA, I18n.resolveSystem("ja_JP"))
+            assertEquals(I18n.ZH_TW, I18n.resolveSystem("zh-Hant-TW"))
+            assertEquals(I18n.ZH_TW, I18n.resolveSystem("zh-HK"))
+            assertEquals(I18n.ZH_CN, I18n.resolveSystem("zh-Hans-CN"))
+
+            I18n.set(I18n.EN)
+            assertEquals("Settings", tr("设置"))
+            assertEquals("Beta", tr("测试版"))
+            assertEquals("✓  Stable", trKnown("✓  正式版"))
+            assertEquals("12 tracks", trKnown("12 首"))
+            assertEquals("Update available: v0.6.9", trKnown("有新版本：v0.6.9"))
+            assertEquals("普通中文歌名", trKnown("普通中文歌名"))
+
+            I18n.set(I18n.JA)
+            assertEquals("設定", tr("设置"))
+            assertEquals("テスト版", tr("测试版"))
+            assertEquals("12 曲", trKnown("12 首"))
+
+            I18n.set(I18n.ZH_TW)
+            assertEquals("設定", tr("设置"))
+            assertEquals("音樂庫", tr("曲库"))
+            assertEquals("測試版", tr("测试版"))
+            assertEquals("語言與介面切換立即生效", tr("语言与界面切换立即生效"))
+            // trKnown 不应盲目将未收录的普通歌名做简繁转换
+            assertEquals("普通中文歌名", trKnown("普通中文歌名"))
+        } finally {
+            I18n.set(prev)
+        }
+    }
 }

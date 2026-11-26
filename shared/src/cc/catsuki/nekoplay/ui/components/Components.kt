@@ -196,11 +196,12 @@ private fun vector(spec: String): ImageVector = iconCache.getOrPut(spec) {
 @Composable fun PrimaryBar(label: String, icon: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     // 宽屏按钮行里：和「随机播放」一样大的方块按钮
     val compact = LocalCompactAction.current
+    val txt = tr(label)
     Row(modifier.then(if (compact) Modifier.width(ACTION_W) else Modifier).press(.96f, true, onClick = onClick).height(48.dp).background(c.p).padding(horizontal = if (compact) 14.dp else if (Screen.narrow) 8.dp else 18.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (compact) Arrangement.Center else Arrangement.Start) {
-        if (compact) { NIcon(icon, 16.dp, Color.White); Spacer(Modifier.width(6.dp)); T(label, 15, Color.White, 700) }
-        else if (Screen.narrow) { Spacer(Modifier.weight(1f)); NIcon(icon, 15.dp, Color.White); Spacer(Modifier.width(5.dp)); T(label, 14, Color.White, 700, lines = 1); Spacer(Modifier.weight(1f)) }
-        else { T(label, 16, Color.White, 700, modifier = Modifier.weight(1f)); NIcon(icon, 22.dp, Color.White) }
+        if (compact) { NIcon(icon, 16.dp, Color.White); Spacer(Modifier.width(6.dp)); T(txt, 15, Color.White, 700) }
+        else if (Screen.narrow) { Spacer(Modifier.weight(1f)); NIcon(icon, 15.dp, Color.White); Spacer(Modifier.width(5.dp)); T(txt, 14, Color.White, 700, lines = 1); Spacer(Modifier.weight(1f)) }
+        else { T(txt, 16, Color.White, 700, modifier = Modifier.weight(1f)); NIcon(icon, 22.dp, Color.White) }
     }
 }
 
@@ -209,12 +210,12 @@ val ACTION_W = 124.dp
 val LocalCompactAction = compositionLocalOf { false }
 
 @Composable fun OutlineBtn(label: String, height: Dp = 48.dp, size: Int = 15, pad: Dp = 18.dp, color: Color = c.k, onClick: () -> Unit) =
-    Box(Modifier.then(if (LocalCompactAction.current) Modifier.width(ACTION_W) else Modifier).press(.96f, true, onClick = onClick).height(height).nbf(1.dp, color).padding(horizontal = pad), contentAlignment = Alignment.Center) { T(label, size, color) }
+    Box(Modifier.then(if (LocalCompactAction.current) Modifier.width(ACTION_W) else Modifier).press(.96f, true, onClick = onClick).height(height).nbf(1.dp, color).padding(horizontal = pad), contentAlignment = Alignment.Center) { T(tr(label), size, color) }
 
 /** 小号文字按钮：细黑框方块（不再用下划线），外面留出 44 的点击热区 */
 @Composable fun LinkBtn(text: String, size: Int = 13, color: Color = c.k, onClick: () -> Unit) =
     Box(Modifier.press(.96f, onClick = onClick).defaultMinSize(44.dp, 44.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.height(28.dp).nbf(1.dp, color).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) { T(text, 12, color, 700, ls = .04f) }
+        Box(Modifier.height(28.dp).nbf(1.dp, color).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) { T(tr(text), 12, color, 700, ls = .04f) }
     }
 
 @Composable fun NSwitch(on: Boolean, onChange: (Boolean) -> Unit) {
@@ -256,7 +257,7 @@ val LocalCompactAction = compositionLocalOf { false }
 /** 来源小标签：开着不止一个音源时，在歌手前面标出这首歌来自哪里 */
 @Composable fun SourceTag(t: Track) {
     if (Plugins.enabledSourceCount < 2) return
-    val name = when { t.id.startsWith("dav:") -> "WebDAV"; t.local -> "本地"; else -> Plugins.sourceName(t.id) ?: return }
+    val name = when { t.id.startsWith("dav:") -> "WebDAV"; t.local -> tr("本地"); else -> Plugins.sourceName(t.id) ?: return }
     Box(Modifier.padding(end = 6.dp).border(1.dp, c.l2).padding(horizontal = 4.dp)) { T(name, 9, c.s, 700, lh = 1.4f) }
 }
 

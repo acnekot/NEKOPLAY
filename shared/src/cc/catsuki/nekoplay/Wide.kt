@@ -113,12 +113,12 @@ import kotlinx.coroutines.launch
                 alpha = indA.value
             }.background(p.p))
             Column(Modifier.fillMaxWidth()) {
-                SideItem(NIcons.home, "主页", navIdx == 0, sliding) { nav.player = false; nav.stack.clear(); nav.tab = 0 }
-                SideItem(NIcons.library, "曲库", navIdx == 1, sliding) { nav.player = false; nav.stack.clear(); nav.tab = 1 }
-                SideItem(NIcons.search, "搜索", navIdx == 2, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Search) }
-                SideItem(NIcons.radio, "私人 FM", navIdx == 3, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Fm) }
-                SideItem(NIcons.chart, "发现 · 排行榜", navIdx == 4, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Playlists("top", "", "排行榜")) }
-                if (cfOn) SideItem(NIcons.disc, "封面墙", navIdx == 5, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.CoverFlow) }
+                SideItem(NIcons.home, tr("主页"), navIdx == 0, sliding) { nav.player = false; nav.stack.clear(); nav.tab = 0 }
+                SideItem(NIcons.library, tr("曲库"), navIdx == 1, sliding) { nav.player = false; nav.stack.clear(); nav.tab = 1 }
+                SideItem(NIcons.search, tr("搜索"), navIdx == 2, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Search) }
+                SideItem(NIcons.radio, tr("私人 FM"), navIdx == 3, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Fm) }
+                SideItem(NIcons.chart, tr("发现 · 排行榜"), navIdx == 4, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.Playlists("top", "", "排行榜")) }
+                if (cfOn) SideItem(NIcons.disc, tr("封面墙"), navIdx == 5, sliding) { nav.player = false; nav.stack.clear(); nav.push(Page.CoverFlow) }
             }
         }
         Spacer(Modifier.height(14.dp))
@@ -128,10 +128,10 @@ import kotlinx.coroutines.launch
         Box(Modifier.padding(horizontal = 18.dp)) { TagRow("PLAYLISTS", 0.dp) }
         Spacer(Modifier.height(6.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-            if (liked != null) item { SideList("我喜欢", (top as? Page.Detail)?.id == liked.id, { LikedCover(liked.cover, 32.dp) }) { nav.stack.clear(); nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
-            item { SideList("最近播放", (top as? Page.Detail)?.kind == "recent", { RecentCover(rec.firstOrNull()?.cover, 32.dp) }) { nav.stack.clear(); nav.push(Page.Detail("recent", "recent", "最近播放")) } }
-            if (Features.on("local")) item { SideList("本地音乐", top == Page.Local, { IconCover(NIcons.disc, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.Local) } }
-            if (Features.on("dl")) item { SideList("本地下载", top == Page.DlList, { IconCover(NIcons.download, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.DlList) } }
+            if (liked != null) item { SideList(tr("我喜欢"), (top as? Page.Detail)?.id == liked.id, { LikedCover(liked.cover, 32.dp) }) { nav.stack.clear(); nav.push(Page.Detail("liked", liked.id, "我喜欢", liked.cover)) } }
+            item { SideList(tr("最近播放"), (top as? Page.Detail)?.kind == "recent", { RecentCover(rec.firstOrNull()?.cover, 32.dp) }) { nav.stack.clear(); nav.push(Page.Detail("recent", "recent", "最近播放")) } }
+            if (Features.on("local")) item { SideList(tr("本地音乐"), top == Page.Local, { IconCover(NIcons.disc, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.Local) } }
+            if (Features.on("dl")) item { SideList(tr("本地下载"), top == Page.DlList, { IconCover(NIcons.download, 32.dp, iconSize = 16.dp) }) { nav.stack.clear(); nav.push(Page.DlList) } }
             items(pls.filter { !it.liked }, key = { "sp" + it.id }, contentType = { "pl" }) { pl ->
                 SideList(pl.name, (top as? Page.Detail)?.id == pl.id, { Cover(pl.cover, 32.dp, pl.name, decodeSize = 64.dp) }) { nav.stack.clear(); nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
             }
@@ -142,7 +142,7 @@ import kotlinx.coroutines.launch
         if (!Plat.isDesktop) Row(Modifier.fillMaxWidth().height(64.dp).press { nav.stack.clear(); nav.push(if (prof != null) Page.User(prof!!.uid, prof!!.name) else Page.Login) }.padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Avatar(36.dp, 16); Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) { T(prof?.name ?: "本地用户", 14, w = 700); T(if (prof == null) "点击登录" else (Plugins.main()?.name ?: "ACCOUNT").uppercase(), 11, p.s, mono = true) }
+            Column(Modifier.weight(1f)) { T(prof?.name ?: tr("本地用户"), 14, w = 700); T(if (prof == null) tr("点击登录") else (Plugins.main()?.name ?: "ACCOUNT").uppercase(), 11, p.s, mono = true) }
             Box(Modifier.size(36.dp).press { nav.stack.clear(); nav.push(Page.Settings) }, contentAlignment = Alignment.Center) { NIcon(NIcons.gear, 18.dp, p.s) }
         }
     }
@@ -316,7 +316,7 @@ import kotlinx.coroutines.launch
     Column(Modifier.fillMaxSize()) {
         val ls = rememberLazyListState((st.index - 2).coerceAtLeast(0))
         Row(Modifier.padding(horizontal = 18.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            T("${st.queue.size} 首", 12, p.s, mono = true, modifier = Modifier.weight(1f)); LinkBtn("清空待播") { Engine.clearUpcoming() }
+            T(tr("${st.queue.size} 首"), 12, p.s, mono = true, modifier = Modifier.weight(1f)); LinkBtn("清空待播") { Engine.clearUpcoming() }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
         LazyColumn(Modifier.fillMaxSize(), ls, contentPadding = PaddingValues(start = 18.dp, end = 10.dp, bottom = 12.dp)) {

@@ -87,6 +87,8 @@ interface Audio {
 
 interface PlatImpl {
     val name: String               // "android" / "desktop" / "ios"
+    /** 系统当前首选语言标签（如 zh-CN / zh-TW / en-US / ja-JP） */
+    fun systemLang(): String = "zh-CN"
     /** 本平台音频内核是否已实现内置效果器/均衡器 */
     val supportsFx: Boolean get() = true
     val filesDir: File

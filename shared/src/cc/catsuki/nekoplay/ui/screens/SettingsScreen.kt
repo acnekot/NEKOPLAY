@@ -68,7 +68,7 @@ import java.util.Calendar
         item {
             Row(Modifier.fillMaxWidth().bottomLine(p.k, 2.dp).press { prof?.let { nav.push(Page.User(it.uid, it.name)) } }.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(54.dp, 24); Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) { T(prof?.name ?: "本地用户", 20, w = 800); T(if (prof == null) "LOCAL ACCOUNT" else (Plugins.main()?.name ?: "").uppercase(), 11, p.s, mono = true, ls = .08f) }
+                Column(Modifier.weight(1f)) { T(prof?.name ?: tr("本地用户"), 20, w = 800); T(if (prof == null) "LOCAL ACCOUNT" else (Plugins.main()?.name ?: "").uppercase(), 11, p.s, mono = true, ls = .08f) }
                 if (prof != null) NIcon(NIcons.chevronRight, 16.dp, p.s)
             }
         }
@@ -88,6 +88,16 @@ import java.util.Calendar
         }
         item { Group("SETTINGS") }
         item { SecRow("外观", "主题、深色、字体、取色、背景、动效") { nav.push(Page.SetSub("look")) } }
+        item {
+            NavRow("语言", "跟随系统 / 简体中文 / 繁體中文 / English / 日本語", I18n.currentLabel) {
+                nav.sheet = SheetSpec("选择语言", "立即生效，无需重启应用", I18n.options.map { opt ->
+                    SheetItem((if (opt.code == I18n.code) "✓  " else "    ") + I18n.optionLabel(opt)) {
+                        I18n.set(opt.code)
+                        nav.toast = "已切换语言：${I18n.currentLabel}"
+                    }
+                })
+            }
+        }
         item { SecRow("布局", "首页模块、播放页按钮的位置") { nav.push(Page.SetSub("layout")) } }
         item { SecRow("歌词", "字号、当前句位置、逐字高亮" + if (Plat.isDesktop) "、桌面歌词" else "、通知栏歌词") { nav.push(Page.SetSub("lyric")) } }
         item { SecRow("播放", "音质、效果器、淡入淡出、无缝播放") { nav.push(Page.SetSub("play")) } }
@@ -118,11 +128,20 @@ import java.util.Calendar
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { NSlider(draft.toFloat(), 60f..150f, onDone = { UiPref.scale = draft; UiPref.save() }) { draft = (it / 5f).roundToInt() * 5 } }
                     Spacer(Modifier.width(10.dp)); T("$draft%", 14, p.p, 700, mono = true)
-                    if (draft != 100) { Spacer(Modifier.width(8.dp)); T("重置", 13, p.s, modifier = Modifier.press { draft = 100; UiPref.scale = 100; UiPref.save() }) }
+                    if (draft != 100) { Spacer(Modifier.width(8.dp)); T(tr("重置"), 13, p.s, modifier = Modifier.press { draft = 100; UiPref.scale = 100; UiPref.save() }) }
                 }
             }
         }
         item { NavRow("字体", "默认 Inter 无衬线；也可以改用系统字体", if (Typo.sans == 0) "系统字体" else "Inter") { Typo.set(1 - Typo.sans) } }
+        item {
+            SetLine("界面语言", "立即生效，无需重启应用") {
+                ChipRow(I18n.options.map { it.nativeName }, I18n.options.indexOfFirst { it.code == I18n.code }.coerceAtLeast(0)) { idx ->
+                    val opt = I18n.options[idx]
+                    I18n.set(opt.code)
+                    nav.toast = "已切换语言：${I18n.currentLabel}"
+                }
+            }
+        }
         if (Features.on("monet")) item { MonetSettings() }
         if (Features.on("bg")) item { NavRow("自定义背景", "选一张图片，可调模糊、透明度、位置和大小", if (Bg.on) "已设置" else "未设置") { nav.push(Page.Background) } }
         if (Features.on("bg") && Bg.on) item {
@@ -254,7 +273,7 @@ import java.util.Calendar
         item {
             Row(Modifier.fillMaxWidth().padding(vertical = 10.dp).bottomLine().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    T("内存占用", 16)
+                    T(tr("内存占用"), 16)
                     T(mem, 13, p.s, lines = 3, lh = 1.4f)
                     if (analysis.isNotEmpty()) T(analysis, 11, p.k, mono = true, lines = 8, lh = 1.4f)
                 }
@@ -273,9 +292,9 @@ import java.util.Calendar
         item { SwitchRow("启动时检查更新", "打开应用时自动检查新版本并弹窗提醒", Updater.autoOn) { Updater.setAuto(it) } }
         item {
             Column(Modifier.fillMaxWidth().padding(vertical = 10.dp).bottomLine().padding(bottom = 12.dp)) {
-                T("更新通道", 16); T("正式版：GitHub Release；测试版：GitHub Pre-release 预发布包", 13, p.s, lines = 2, lh = 1.4f)
+                T(tr("更新通道"), 16); T(tr("正式版：GitHub Release；测试版：GitHub Pre-release 预发布包"), 13, p.s, lines = 2, lh = 1.4f)
                 Spacer(Modifier.height(10.dp))
-                ChipRow(listOf("正式版", "测试版 nightly"), if (Updater.nightly) 1 else 0) { Updater.useNightly(it == 1) }
+                ChipRow(listOf("正式版", "测试版"), if (Updater.nightly) 1 else 0) { Updater.useNightly(it == 1) }
             }
         }
         item {
@@ -284,14 +303,14 @@ import java.util.Calendar
             Column(Modifier.fillMaxWidth().padding(vertical = 10.dp).bottomLine().padding(bottom = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        T("检查更新", 16)
-                        T(when {
+                        T(tr("检查更新"), 16)
+                        T(trKnown(when {
                             Updater.checking -> "正在检查…"
                             Updater.error != null -> "检查失败：${Updater.error}"
                             info == null -> "还没检查"
                             info.found -> "有新版本：${info.title}"
                             else -> "已经是最新（${info.title}）"
-                        }, 13, if (info?.found == true) p.p else p.s, lines = 2, lh = 1.4f)
+                        }), 13, if (info?.found == true) p.p else p.s, lines = 2, lh = 1.4f)
                     }
                     LinkBtn("检查", 14) { if (!Updater.checking) scope.launch { runCatching { Updater.check() }.onSuccess { if (it.found) Updater.dialog = it } } }
                 }
@@ -301,7 +320,7 @@ import java.util.Calendar
                         info.url?.let { u -> PrimaryBar("下载", NIcons.download, Modifier.weight(1f)) { runCatching { uri.openUri(u) }.onFailure { nav.toast = "打不开浏览器" } }; Spacer(Modifier.width(8.dp)) }
                         OutlineBtn("查看页面", pad = 14.dp) { runCatching { uri.openUri(info.page) } }
                     }
-                    if (Updater.nightly) T("预发布包包含最新修复与试验功能，直接下载对应平台安装包即可", 11, p.s, modifier = Modifier.padding(top = 6.dp))
+                    if (Updater.nightly) T(tr("预发布包包含最新修复与试验功能，直接下载对应平台安装包即可"), 11, p.s, modifier = Modifier.padding(top = 6.dp))
                 }
             }
         }
@@ -318,7 +337,7 @@ import java.util.Calendar
 
 @Composable fun SwitchRow(title: String, sub: String?, on: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) =
     Row(Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).cascadeEnter().bottomLine().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { T(title, 16, if (enabled) c.k else c.s); if (sub != null) T(sub, 13, c.s, lh = 1.4f, lines = 3) }
+        Column(Modifier.weight(1f)) { T(tr(title), 16, if (enabled) c.k else c.s); if (sub != null) T(tr(sub), 13, c.s, lh = 1.4f, lines = 3) }
         Box(Modifier.graphicsAlpha(if (enabled) 1f else .45f)) { NSwitch(on) { if (enabled) onChange(it) } }
     }
 
@@ -326,8 +345,8 @@ private fun Modifier.graphicsAlpha(a: Float) = this.graphicsLayer { alpha = a }
 
 @Composable private fun NavRow(title: String, sub: String?, value: String?, clickable: Boolean = true, onClick: () -> Unit) =
     Row(Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).cascadeEnter().then(if (clickable) Modifier.press(onClick = onClick) else Modifier).bottomLine().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { T(title, 16); if (sub != null) T(sub, 13, c.s, lh = 1.4f, lines = 3) }
-        if (value != null) T(value, 13, c.s)
+        Column(Modifier.weight(1f)) { T(tr(title), 16); if (sub != null) T(tr(sub), 13, c.s, lh = 1.4f, lines = 3) }
+        if (value != null) T(trKnown(value), 13, c.s)
         if (clickable) { Spacer(Modifier.width(6.dp)); NIcon(NIcons.chevronRight, 16.dp, c.s) }
     }
 

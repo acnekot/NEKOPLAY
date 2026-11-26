@@ -25,6 +25,7 @@ class DesktopPlat : PlatImpl {
     }
 
     override val name = "desktop"
+    override fun systemLang(): String = java.util.Locale.getDefault().toLanguageTag()
     private val home: File = File(System.getProperty("user.home"), if (System.getProperty("os.name").lowercase().contains("win")) "AppData/Roaming/NEKOPLAY" else ".nekoplay").apply { mkdirs() }
     override val filesDir: File = File(home, "files").apply { mkdirs() }
     override val cacheDir: File = File(home, "cache").apply { mkdirs() }

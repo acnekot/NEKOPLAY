@@ -185,7 +185,7 @@ fun LazyListScope.deskLyricSettings(p: Pal) {
             // 控制条：正常悬停显示完整工具栏；锁定后悬停 3 秒显示解锁与回正，悬停计时期间显示柔和倒计时条
             Row(Modifier.height(30.dp).align(Alignment.CenterHorizontally).graphicsLayer { alpha = if (showUnlockHint) .9f else panel.value }, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 @Composable fun I(icon: String, on: Boolean = false, act: () -> Unit) = Box(Modifier.size(30.dp).press(.92f) { act() }.background(if (on) p.p else Color.Transparent).nbf(1.dp, p.k), contentAlignment = Alignment.Center) { NIcon(icon, 15.dp, if (on) Color.White else p.k) }
-                @Composable fun L(label: String, on: Boolean = false, act: () -> Unit) = Box(Modifier.height(30.dp).defaultMinSize(minWidth = 30.dp).press(.92f) { act() }.background(if (on) p.p else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) { T(label, 12, if (on) Color.White else p.k, 700, mono = true) }
+                @Composable fun L(label: String, on: Boolean = false, act: () -> Unit) = Box(Modifier.height(30.dp).defaultMinSize(minWidth = 30.dp).press(.92f) { act() }.background(if (on) p.p else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) { T(trKnown(label), 12, if (on) Color.White else p.k, 700, mono = true) }
                 when {
                     showUnlock -> {
                         L("解锁桌面歌词", true) { DeskLyric.locked = false; DeskLyric.save() }
@@ -194,7 +194,7 @@ fun LazyListScope.deskLyricSettings(p: Pal) {
                     showUnlockHint -> {
                         val remain = kotlin.math.ceil((1f - unlockProgress) * 3f).toInt().coerceIn(1, 3)
                         Column(Modifier.background(p.page.copy(alpha = .85f)).nbf(1.dp, p.k).padding(horizontal = 10.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            T("保持悬停 ${remain}s 解锁", 11, p.k, 700, mono = true)
+                            T(tr("保持悬停 ${remain}s 解锁"), 11, p.k, 700, mono = true)
                             Spacer(Modifier.height(2.dp))
                             Box(Modifier.width(96.dp).height(2.dp).background(p.l2)) {
                                 Box(Modifier.fillMaxWidth(unlockProgress.coerceIn(0f, 1f)).fillMaxHeight().background(p.p))

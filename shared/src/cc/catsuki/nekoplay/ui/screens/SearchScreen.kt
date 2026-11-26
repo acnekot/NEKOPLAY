@@ -118,7 +118,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { go() }))
             }
             Spacer(Modifier.width(12.dp))
-            Box(Modifier.defaultMinSize(44.dp, 44.dp).press { fm.clearFocus(); nav.back() }, contentAlignment = Alignment.Center) { T("取消", 15) }
+            Box(Modifier.defaultMinSize(44.dp, 44.dp).press { fm.clearFocus(); nav.back() }, contentAlignment = Alignment.Center) { T(tr("取消"), 15) }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(if (Look.flat) Color.Transparent else p.l2))
         val r = res
@@ -138,7 +138,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
             items(SEARCH_TYPES.indices.filter { SEARCH_KINDS[it] in kinds }) { i ->
                 val l = SEARCH_TYPES[i]
                 val on = i == type
-                Box(Modifier.press { if (!on) run(q.trim(), i) }.background(if (on) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(l, 13, if (on) p.tagFg else p.k, 700) }
+                Box(Modifier.press { if (!on) run(q.trim(), i) }.background(if (on) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(tr(l), 13, if (on) p.tagFg else p.k, 700) }
             }
         }
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = if (searching) 8.dp else 18.dp, bottom = 24.dp)) {

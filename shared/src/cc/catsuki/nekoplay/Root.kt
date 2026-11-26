@@ -126,7 +126,7 @@ object Boot {
     fun init() { initFast(); initDeferred() }
     /** 重新读一遍设置（启动时、从备份恢复后） */
     fun reloadPrefs() {
-        ThemePref.load(); ThemeStore.load(); Typo.load(); Look.load(); LyricPref.load(); AnimStyle.load(); UiPref.load(); Vol.load(); Monet.load(); Sleep.load(); DeskLyric.load(); DiscordPref.load(); Debug.load(); Features.load(); PlayerLayout.load(); SidePref.load(); DlPref.load()
+        I18n.load(); ThemePref.load(); ThemeStore.load(); Typo.load(); Look.load(); LyricPref.load(); AnimStyle.load(); UiPref.load(); Vol.load(); Monet.load(); Sleep.load(); DeskLyric.load(); DiscordPref.load(); Debug.load(); Features.load(); PlayerLayout.load(); SidePref.load(); DlPref.load()
         Perf.overlay.value = Plat.prefs("ui").getBoolean("perf", false)
         Store.reloadLiked(); FxStore.init(); HomeLayout.init()
     }
@@ -236,7 +236,7 @@ object Boot {
             AnimatedVisibility(nav.toast != null, Modifier.align(Alignment.BottomCenter).padding(bottom = if (hasTrack) 150.dp else 90.dp, start = 24.dp, end = 24.dp).navigationBarsPadding(),
                 enter = fadeIn(Motion.standard()) + slideInVertically(Motion.standard()) { it / 2 } + scaleIn(Motion.standard(), initialScale = if (MotionEffects.pageScale) .95f else 1f),
                 exit = fadeOut(Motion.quick()) + slideOutVertically(Motion.quick()) { it / 3 }) {
-                Box(Modifier.background(c.k).padding(horizontal = 16.dp, vertical = 11.dp)) { T(nav.toast ?: "", 14, c.tagFg, lines = 3, lh = 1.4f, align = TextAlign.Center) }
+                Box(Modifier.background(c.k).padding(horizontal = 16.dp, vertical = 11.dp)) { T(trKnown(nav.toast ?: ""), 14, c.tagFg, lines = 3, lh = 1.4f, align = TextAlign.Center) }
             }
             PerfOverlay(Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 6.dp, bottom = 140.dp))
             if (showSplash) MobileLaunchCover(splashReveal) { showSplash = false }

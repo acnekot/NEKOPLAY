@@ -90,8 +90,8 @@ import java.util.Calendar
                             Box(Modifier.press { if (st.current != null) { nav.lyrics = false; nav.player = true } else if (daily.isNotEmpty()) Engine.playList(daily, 0) }) { Cover(cur?.cover, 128.dp, cur?.title ?: "") }
                             Spacer(Modifier.width(16.dp))
                             Column(Modifier.weight(1f)) {
-                                T(cur?.title ?: "还没有曲目", Fs.PAGE, w = 800, lines = 3, lh = 1.1f)
-                                Spacer(Modifier.height(4.dp)); T(cur?.artist ?: "选择一首歌开始播放", 14, c.s2)
+                                T(cur?.title ?: tr("还没有曲目"), Fs.PAGE, w = 800, lines = 3, lh = 1.1f)
+                                Spacer(Modifier.height(4.dp)); T(cur?.artist ?: tr("选择一首歌开始播放"), 14, c.s2)
                                 Spacer(Modifier.height(16.dp))
                                 if (st.current != null) { TimeRow(st.current!!.durationMs); Spacer(Modifier.height(8.dp)); ScrubBar(st.current!!.durationMs, 4.dp, interactive = false) }
                                 else { Row { T("00:00", 12, c.p, mono = true, modifier = Modifier.weight(1f)); T(fmt(cur?.durationMs ?: 0), 12, c.s, mono = true) }; Spacer(Modifier.height(8.dp)); Box(Modifier.fillMaxWidth().height(4.dp).background(c.l3)) }
@@ -117,9 +117,9 @@ import java.util.Calendar
                             // 可点的标题块：50% 灰色细框，一看就知道能点进去
                             Row(Modifier.weight(1f)) {
                                 Column(Modifier.border(1.dp, Color.Gray.copy(alpha = .5f)).press { nav.push(Page.Detail("daily", "daily", "每日推荐", daily.firstOrNull()?.cover)) }.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) { T("每日推荐", Fs.PAGE, w = 800, ls = .08f, lh = 1.15f); Spacer(Modifier.width(6.dp)); NIcon(NIcons.chevronRight, 20.dp, c.s) }
+                                    Row(verticalAlignment = Alignment.CenterVertically) { T(tr("每日推荐"), Fs.PAGE, w = 800, ls = .08f, lh = 1.15f); Spacer(Modifier.width(6.dp)); NIcon(NIcons.chevronRight, 20.dp, c.s) }
                                     Spacer(Modifier.height(4.dp))
-                                    T(if (daily.isNotEmpty()) "${daily.size} 首 · 点开查看全部" else "DAILY RECOMMENDATION", 11, c.s, mono = true, ls = .08f)
+                                    T(if (daily.isNotEmpty()) "${tr("${daily.size} 首")} · ${tr("查看全部")}" else "DAILY RECOMMENDATION", 11, c.s, mono = true, ls = .08f)
                                 }
                             }
                             Spacer(Modifier.width(14.dp))
@@ -147,9 +147,9 @@ import java.util.Calendar
                             if (st.fm && st.current != null) Cover(st.current!!.cover, 56.dp, st.current!!.title) else IconCover(NIcons.radio, 56.dp, true)
                             Spacer(Modifier.width(14.dp))
                             Column(Modifier.weight(1f)) {
-                                T("私人 FM", Fs.PAGE, w = 800, ls = .08f, lh = 1.15f)
+                                T(tr("私人 FM"), Fs.PAGE, w = 800, ls = .08f, lh = 1.15f)
                                 Spacer(Modifier.height(4.dp))
-                                T(if (st.fm && st.current != null) "正在播放 · ${st.current!!.title}" else "按你的口味无限连播", 11, c.s, mono = true, ls = .06f)
+                                T(if (st.fm && st.current != null) trKnown("正在播放 · ${st.current!!.title}") else tr("按你的口味无限连播"), 11, c.s, mono = true, ls = .06f)
                             }
                             SquareBtn(if (st.fm && st.playing) NIcons.pause else NIcons.play, filled = true) { if (st.fm) Engine.toggle() else Engine.startFm { nav.toast = it } }
                         }
@@ -161,7 +161,7 @@ import java.util.Calendar
                 if (HomeSrc.has("square") || HomeSrc.has("toplists")) item {
                     Column(Modifier.padding(top = 32.dp)) {
                         TagRow("DISCOVER"); Spacer(Modifier.height(2.dp))
-                        T("发现", 24, w = 800, lh = 1.4f); Spacer(Modifier.height(10.dp))
+                        T(tr("发现"), 24, w = 800, lh = 1.4f); Spacer(Modifier.height(10.dp))
                         val tiles = buildList {
                             if (HomeSrc.has("toplists")) add(Triple("排行榜", "TOP CHARTS") { nav.push(Page.Playlists("top", "", "排行榜")) })
                             if (HomeSrc.has("square")) add(Triple("歌单广场", "PLAYLISTS") { nav.push(Page.Square) })
@@ -176,7 +176,7 @@ import java.util.Calendar
                                 row.forEach { (t, en, go) ->
                                     Column(Modifier.weight(1f).press(.97f, onClick = go).nbf(1.dp, c.k).padding(horizontal = 14.dp, vertical = 12.dp)) {
                                         T(en, 11, c.s, 700, mono = true, ls = .08f); Spacer(Modifier.height(4.dp))
-                                        Row(verticalAlignment = Alignment.CenterVertically) { T(t, 17, w = 800, modifier = Modifier.weight(1f)); NIcon(NIcons.chevronRight, 16.dp, c.s) }
+                                        Row(verticalAlignment = Alignment.CenterVertically) { T(tr(t), 17, w = 800, modifier = Modifier.weight(1f)); NIcon(NIcons.chevronRight, 16.dp, c.s) }
                                     }
                                 }
                                 if (row.size == 1) Spacer(Modifier.weight(1f))
@@ -201,7 +201,7 @@ import java.util.Calendar
                 item {
                     Column(Modifier.padding(top = 32.dp)) {
                         TagRow("RECOMMENDED COLLECTIONS"); Spacer(Modifier.height(2.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) { T("推荐合集", 24, w = 800, lh = 1.4f, modifier = Modifier.weight(1f)); LinkBtn("查看全部") { nav.tab = 1 } }
+                        Row(verticalAlignment = Alignment.CenterVertically) { T(tr("推荐合集"), 24, w = 800, lh = 1.4f, modifier = Modifier.weight(1f)); LinkBtn("查看全部") { nav.tab = 1 } }
                         Spacer(Modifier.height(12.dp))
                     }
                 }
@@ -297,21 +297,21 @@ fun Modifier.layoutNoPad(pad: Dp) = this.layout { m, cons ->
 }
 
 @Composable fun CardItem(cover: @Composable () -> Unit, title: String, meta: String, onClick: () -> Unit) =
-    Column(Modifier.width(132.dp).press(onClick = onClick)) { cover(); Spacer(Modifier.height(8.dp)); T(title, 15, w = 700, lh = 1.35f); T(meta, 12, c.s, mono = true, ls = .04f) }
+    Column(Modifier.width(132.dp).press(onClick = onClick)) { cover(); Spacer(Modifier.height(8.dp)); T(trKnown(title), 15, w = 700, lh = 1.35f); T(trKnown(meta), 12, c.s, mono = true, ls = .04f) }
 
 @Composable internal fun RowScope.Stat(k: String, v: String, left: Boolean, top: Boolean) {
     val p = c
     Column(Modifier.weight(1f).drawBehind {
         if (left) if (!Look.flat) drawRect(p.l2, size = Size(1.dp.toPx(), size.height))
         if (top) if (!Look.flat) drawRect(p.l2, size = Size(size.width, 1.dp.toPx()))
-    }.padding(start = if (left) 16.dp else 0.dp, top = 12.dp, bottom = 12.dp)) { T(k, 11, c.s, mono = true, ls = .08f); T(v, 24, mono = true) }
+    }.padding(start = if (left) 16.dp else 0.dp, top = 12.dp, bottom = 12.dp)) { T(tr(k), 11, c.s, mono = true, ls = .08f); T(trKnown(v), 24, mono = true) }
 }
 
 // ======================= 曲库 =======================
 @Composable fun ListRow(cover: @Composable () -> Unit, title: String, meta: String, onLong: (() -> Unit)? = null, onClick: () -> Unit) =
     Row(Modifier.fillMaxWidth().height(76.dp).cascadeEnter().press(onLong = onLong, onClick = onClick).bottomLine(), verticalAlignment = Alignment.CenterVertically) {
         cover(); Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) { T(title, 16, w = 700, lh = 1.35f); T(meta, 12, c.s, mono = true, ls = .04f) }
+        Column(Modifier.weight(1f)) { T(trKnown(title), 16, w = 700, lh = 1.35f); T(trKnown(meta), 12, c.s, mono = true, ls = .04f) }
         NIcon(NIcons.chevronRight, 16.dp)
     }
 

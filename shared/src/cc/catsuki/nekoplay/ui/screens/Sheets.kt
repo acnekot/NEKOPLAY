@@ -147,9 +147,9 @@ data class InputSpec(val title: String, val hint: String, val onDone: (String) -
     fun done() { val v = text.trim(); if (v.isEmpty()) return; nav.input = null; spec.onDone(v) }
     Box(Modifier.fillMaxSize().background(Color(0x80000000)).pointerInput(Unit) { detectTapGestures { nav.input = null } }.imePadding(), contentAlignment = Alignment.Center) {
         Column(Modifier.padding(horizontal = 28.dp).fillMaxWidth().background(p.sheet).nb(1.dp, p.k).topLine().pointerInput(Unit) { detectTapGestures { } }.padding(18.dp)) {
-            T(spec.title, 17, w = 800); Spacer(Modifier.height(14.dp))
+            T(tr(spec.title), 17, w = 800); Spacer(Modifier.height(14.dp))
             Box(Modifier.fillMaxWidth().nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 12.dp)) {
-                if (text.isEmpty()) T(spec.hint, 15, p.s)
+                if (text.isEmpty()) T(trKnown(spec.hint), 15, p.s)
                 androidx.compose.foundation.text.BasicTextField(text, { text = it }, Modifier.fillMaxWidth().focusRequester(fr), singleLine = true,
                     textStyle = androidx.compose.ui.text.TextStyle(color = p.k, fontSize = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp), fontFamily = Typo.family),
                     cursorBrush = androidx.compose.ui.graphics.SolidColor(p.p),
@@ -157,7 +157,7 @@ data class InputSpec(val title: String, val hint: String, val onDone: (String) -
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { done() }))
             }
             Spacer(Modifier.height(16.dp))
-            Row { Box(Modifier.weight(1f)) { OutlineBtn("取消", 44.dp) { nav.input = null } }; Spacer(Modifier.width(10.dp)); Box(Modifier.weight(1f).press(.96f) { done() }.height(44.dp).background(p.p), contentAlignment = Alignment.Center) { T("确定", 15, Color.White, 700) } }
+            Row { Box(Modifier.weight(1f)) { OutlineBtn("取消", 44.dp) { nav.input = null } }; Spacer(Modifier.width(10.dp)); Box(Modifier.weight(1f).press(.96f) { done() }.height(44.dp).background(p.p), contentAlignment = Alignment.Center) { T(tr("确定"), 15, Color.White, 700) } }
         }
     }
 }
@@ -188,11 +188,11 @@ fun openArtists(nav: Nav, t: Track) {
             Column(Modifier.width(380.dp).heightIn(max = 620.dp).background(p.sheet).nb(1.dp, p.k).topLine().pointerInput(Unit) { detectTapGestures { } }
                 .verticalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
                 Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 8.dp)) {
-                    T(s.title, 16, w = 800, lines = 2); if (s.sub != null) T(s.sub, 12, p.s, lines = 2)
+                    T(trKnown(s.title), 16, w = 800, lines = 2); if (s.sub != null) T(trKnown(s.sub), 12, p.s, lines = 2)
                 }
                 s.items.forEach { it ->
                     Box(Modifier.fillMaxWidth().height(42.dp).press { nav.sheet = null; it.run() }.padding(horizontal = 18.dp).topLine(p.l1, 1.dp), contentAlignment = Alignment.CenterStart) {
-                        T(it.label, 14, if (it.danger) p.bad else p.k)
+                        T(trKnown(it.label), 14, if (it.danger) p.bad else p.k)
                     }
                 }
             }
@@ -204,12 +204,12 @@ fun openArtists(nav: Nav, t: Track) {
             // 最多占半屏：标题和「取消」固定，中间的选项可以滚动
             Column(Modifier.fillMaxWidth().heightIn(max = maxHeight * .5f).background(p.sheet).topLine().pointerInput(Unit) { detectTapGestures { } }.navigationBarsPadding().padding(bottom = 8.dp)) {
                 Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 10.dp)) {
-                    T(s.title, 17, w = 800); if (s.sub != null) T(s.sub, 13, p.s)
+                    T(trKnown(s.title), 17, w = 800); if (s.sub != null) T(trKnown(s.sub), 13, p.s)
                 }
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                     s.items.forEach { it ->
                         Box(Modifier.fillMaxWidth().height(52.dp).press { nav.sheet = null; it.run() }.padding(horizontal = 18.dp).topLine(p.l1, 1.dp), contentAlignment = Alignment.CenterStart) {
-                            T(it.label, 16, if (it.danger) p.bad else p.k)
+                            T(trKnown(it.label), 16, if (it.danger) p.bad else p.k)
                         }
                     }
                 }
@@ -240,7 +240,7 @@ fun qualitySheet(nav: Nav) {
     LazyRow(Modifier.fillMaxWidth().layoutNoPad(18.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         itemsIndexed(items) { i, l ->
             val o = on(i)
-            Box(Modifier.press { onToggle(i) }.background(if (o) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(l, 13, if (o) p.tagFg else p.k, 700) }
+            Box(Modifier.press { onToggle(i) }.background(if (o) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(trKnown(l), 13, if (o) p.tagFg else p.k, 700) }
         }
     }
 }
@@ -252,7 +252,7 @@ fun qualitySheet(nav: Nav) {
             val on = i == sel
             val bg by androidx.compose.animation.animateColorAsState(if (on) p.k else Color.Transparent, Motion.standard(), label = "chb")
             val fg by androidx.compose.animation.animateColorAsState(if (on) p.tagFg else p.k, Motion.standard(), label = "chf")
-            Box(Modifier.press { if (!on) onSel(i) }.background(bg).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(l, 13, fg, 700) }
+            Box(Modifier.press { if (!on) onSel(i) }.background(bg).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(trKnown(l), 13, fg, 700) }
         }
     }
 }
@@ -337,10 +337,10 @@ fun qualitySheet(nav: Nav) {
                         Row(Modifier.background(p.p).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(6.dp).background(Color.White.copy(alpha = pulse), androidx.compose.foundation.shape.CircleShape))
                             Spacer(Modifier.width(6.dp))
-                            T(if (Updater.nightly) "NIGHTLY" else "UPDATE", 11, Color.White, 800, mono = true, ls = .06f)
+                            T(if (Updater.nightly) "BETA" else "UPDATE", 11, Color.White, 800, mono = true, ls = .06f)
                         }
                         Spacer(Modifier.width(10.dp))
-                        T("发现新版本", 18, p.k, 800, modifier = Modifier.weight(1f))
+                        T(tr("发现新版本"), 18, p.k, 800, modifier = Modifier.weight(1f))
                         Box(Modifier.size(32.dp).press { Updater.dialog = null }, contentAlignment = Alignment.Center) {
                             NIcon(NIcons.close, 16.dp, p.s)
                         }
@@ -354,10 +354,10 @@ fun qualitySheet(nav: Nav) {
                     Box(Modifier.padding(top = 14.dp).fillMaxWidth().heightIn(min = 64.dp, max = 210.dp)
                         .graphicsLayer { alpha = s2; translationY = (1f - s2) * 12f }
                         .background(p.page).border(1.dp, p.l2).verticalScroll(rememberScrollState()).padding(12.dp)) {
-                        T(info.notes.ifBlank { "包含新功能与稳定性修复，建议更新体验。" }, 13, p.k, lines = 40, lh = 1.55f)
+                        T(info.notes.ifBlank { tr("包含新功能与稳定性修复，建议更新体验。") }, 13, p.k, lines = 40, lh = 1.55f)
                     }
                     if (Updater.nightly) {
-                        T("当前为预发布测试通道，直接下载对应平台安装包覆盖安装即可。", 11, p.s, modifier = Modifier.padding(top = 6.dp).graphicsLayer { alpha = s2 })
+                        T(tr("当前为预发布测试通道，直接下载对应平台安装包覆盖安装即可。"), 11, p.s, modifier = Modifier.padding(top = 6.dp).graphicsLayer { alpha = s2 })
                     }
                     // 操作按钮区
                     Column(Modifier.padding(top = 16.dp).graphicsLayer { alpha = s3; translationY = (1f - s3) * 12f }, verticalArrangement = Arrangement.spacedBy(8.dp)) {

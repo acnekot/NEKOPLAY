@@ -213,9 +213,9 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                 val lbl = when {
                     ScrubController.dir > 0 -> "快进 >> %.1f×".format(ScrubController.rate)
                     ScrubController.dir < 0 -> "快退 << %.1f×".format(ScrubController.rate)
-                    st.loading && st.want && !st.playing -> "加载中"
-                    st.playing -> "暂停"
-                    else -> "播放"
+                    st.loading && st.want && !st.playing -> tr("加载中")
+                    st.playing -> tr("暂停")
+                    else -> tr("播放")
                 }
                 T(lbl, 15, Color.White, 700, modifier = Modifier.weight(1f))
                 if (st.loading && st.want && !st.playing) LoadingDots() else NIcon(if (st.playing) NIcons.pause else NIcons.play, 20.dp, Color.White)

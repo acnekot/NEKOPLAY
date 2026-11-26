@@ -334,5 +334,5 @@ private val CURVE_PRESETS = listOf(
 /** 设置里带控件的一行：标题 + 说明 + 下面放滑条 / 选项 */
 @Composable fun SetLine(title: String, sub: String, content: @Composable ColumnScope.() -> Unit) =
     Column(Modifier.fillMaxWidth().cascadeEnter().bottomLine().padding(vertical = 12.dp)) {
-        T(title, 16); T(sub, 13, c.s, lines = 2); Spacer(Modifier.height(10.dp)); content()
+        T(tr(title), 16); T(tr(sub), 13, c.s, lines = 2); Spacer(Modifier.height(10.dp)); content()
     }

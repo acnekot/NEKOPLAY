@@ -66,8 +66,8 @@ import kotlinx.coroutines.flow.map
                 Cover(cur?.cover, 56.dp, cur?.title ?: "")
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    T(cur?.title ?: "还没有曲目", 15, w = 800, lh = 1.3f)
-                    T(cur?.artist ?: "选一首歌开始播放", 12, p.s, lh = 1.3f, modifier = Modifier.press { if (cur != null) openArtists(nav, cur) })
+                    T(cur?.title ?: tr("还没有曲目"), 15, w = 800, lh = 1.3f)
+                    T(cur?.artist ?: tr("选一首歌开始播放"), 12, p.s, lh = 1.3f, modifier = Modifier.press { if (cur != null) openArtists(nav, cur) })
                 }
             }
         }

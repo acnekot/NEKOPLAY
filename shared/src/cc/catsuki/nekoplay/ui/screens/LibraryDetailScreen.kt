@@ -68,16 +68,16 @@ import java.util.Calendar
                 val allPlugs by Plugins.list.collectAsState()
                 val cfOn = remember(allPlugs, Plugins.off) { Plugins.hasFeature("coverflow") }
                 Row(verticalAlignment = Alignment.Bottom) {
-                    T("曲库", Fs.HERO, w = 800, lh = 1.3f, modifier = Modifier.weight(1f))
+                    T(tr("曲库"), Fs.HERO, w = 800, lh = 1.3f, modifier = Modifier.weight(1f))
                     if (cfOn) { LinkBtn("封面墙", 14) { nav.push(Page.CoverFlow) }; Spacer(Modifier.width(6.dp)) }
                     if (prof != null && main != null) {
                         val signed by Store.signedToday.collectAsState()
                         if (!main.has("signin")) Unit
-                        else if (signed) Box(Modifier.defaultMinSize(44.dp, 44.dp), contentAlignment = Alignment.Center) { Box(Modifier.height(28.dp).background(c.l3).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) { T("已签到", 12, c.s, 700) } }
+                        else if (signed) Box(Modifier.defaultMinSize(44.dp, 44.dp), contentAlignment = Alignment.Center) { Box(Modifier.height(28.dp).background(c.l3).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) { T(tr("已签到"), 12, c.s, 700) } }
                         else LinkBtn("签到", 14) { Store.run { nav.toast = runCatching { Ncm.signin().also { (ok, _) -> if (ok) Store.markSigned() }.second }.getOrElse { "签到失败：${it.message}" } } }
                         if (main.has("createPlaylist")) { Spacer(Modifier.width(6.dp)); LinkBtn("新建歌单", 14) { newPlaylist(nav) } }
                     }
-                    else T("${two(others.size)} 个歌单", 13, c.s, mono = true, ls = .06f, modifier = Modifier.padding(bottom = 6.dp))
+                    else T(tr("${two(others.size)} 个歌单"), 13, c.s, mono = true, ls = .06f, modifier = Modifier.padding(bottom = 6.dp))
                 }
                 Spacer(Modifier.height(10.dp)); Rule()
             }
@@ -237,11 +237,11 @@ import java.util.Calendar
                     }
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f).fillMaxHeight()) {
-                        T(p.title, 24, w = 800, lines = 2, lh = 1.25f)
+                        T(trKnown(p.title), 24, w = 800, lines = 2, lh = 1.25f)
                         Spacer(Modifier.height(4.dp))
-                        T(if (tracks == null) "LOADING" else listMeta(list), 12, c.s, mono = true, ls = .04f)
+                        T(if (tracks == null) "LOADING" else trKnown(listMeta(list)), 12, c.s, mono = true, ls = .04f)
                         Spacer(Modifier.weight(1f))
-                        T(when (p.kind) { "daily" -> "每日更新"; "recent" -> "本机记录"; "simi" -> "相似推荐"; "newsong" -> "新歌速递"; "hist" -> "历史日推"; "cloud" -> "音乐云盘"; "radio" -> "播客电台"; "llike", "lpl" -> "本机"; else -> Plugins.sourceName(p.id) ?: "在线歌单" }, 13, c.s)
+                        T(trKnown(when (p.kind) { "daily" -> "每日更新"; "recent" -> "本机记录"; "simi" -> "相似推荐"; "newsong" -> "新歌速递"; "hist" -> "历史日推"; "cloud" -> "音乐云盘"; "radio" -> "播客电台"; "llike", "lpl" -> "本机"; else -> Plugins.sourceName(p.id) ?: "在线歌单" }), 13, c.s)
                     }
                 }
                 Spacer(Modifier.height(16.dp))

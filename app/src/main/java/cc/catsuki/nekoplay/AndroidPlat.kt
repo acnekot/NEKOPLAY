@@ -87,6 +87,7 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
     }
 
     override val name = "android"
+    override fun systemLang(): String = java.util.Locale.getDefault().toLanguageTag()
     override val filesDir: File = ctx.filesDir
     override val cacheDir: File = ctx.cacheDir
     /** 公共「音乐/NEKOPLAY」：Android 10 以下没写权限、或者写不进去时，退回 App 自己的音乐目录 */

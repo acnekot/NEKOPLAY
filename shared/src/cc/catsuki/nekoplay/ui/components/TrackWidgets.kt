@@ -92,7 +92,7 @@ import kotlinx.coroutines.launch
 
 @Composable private fun TrackDownloadLabel(id: String, label: String?) {
     val lab = label ?: remember(id) { Downloads.labelFlow(id) }.collectAsState(Downloads.labelNow(id)).value
-    if (lab != null) T(lab, 11, c.s, mono = true, ls = .06f)
+    if (lab != null) T(trKnown(lab), 11, c.s, mono = true, ls = .06f)
 }
 
 /** 进度条：热区 16，线 4（拖动时 6），拖动时出现方形滑块；全程纯绘制层驱动，播放中 0 重组 */

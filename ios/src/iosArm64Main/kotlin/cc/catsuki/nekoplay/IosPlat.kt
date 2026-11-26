@@ -66,6 +66,7 @@ class IosPlat : PlatImpl {
     override val mono by lazy { FontFamily(font("mono_400", FontWeight.W400), font("mono_500", FontWeight.W500), font("mono_600", FontWeight.W600), font("mono_700", FontWeight.W700)) }
     /** 2GB 内存的老设备（iPhone SE 一代 / 6s）关掉实时模糊，省 GPU */
     override val liveBlur = !lowEnd
+    override fun systemLang(): String = (NSLocale.preferredLanguages.firstOrNull() as? String) ?: "zh-CN"
     override val audio: Audio by lazy { IosAudio(cacheDir) }
 
     /** 下载放「文件」App 里能看到的位置：我的 iPhone / NEKOPLAY / NEKOPLAY */

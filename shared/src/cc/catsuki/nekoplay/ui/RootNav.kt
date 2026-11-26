@@ -42,10 +42,10 @@ import kotlinx.coroutines.launch
     val p = c
     val prof by Store.profile.collectAsState()
     Column(modifier.width(190.dp).background(p.pop).nb(1.dp, p.k)) {
-        T(prof?.name ?: "本地用户", 15, w = 800, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+        T(prof?.name ?: tr("本地用户"), 15, w = 800, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         val acc by PluginStore.accounts.collectAsState()
-        (listOfNotNull(prof?.let { "我的主页" to Page.User(it.uid, it.name) }, "设置" to Page.Settings) +
-            Plugins.enabled.filter { it.has("loginQr") || it.has("loginWeb") }.filter { acc[it.id] == null }.map { "登录${it.name}" to Page.PluginLogin(it.id) }).forEach { (t, pg) ->
+        (listOfNotNull(prof?.let { tr("我的主页") to Page.User(it.uid, it.name) }, tr("设置") to Page.Settings) +
+            Plugins.enabled.filter { it.has("loginQr") || it.has("loginWeb") }.filter { acc[it.id] == null }.map { "${tr("登录")} ${it.name}" to Page.PluginLogin(it.id) }).forEach { (t, pg) ->
             Box(Modifier.fillMaxWidth().height(48.dp).press { nav.menu = false; nav.player = false; nav.push(pg) }.drawBehind { drawRect(p.l1, size = androidx.compose.ui.geometry.Size(size.width, 1f)) }.padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart) { T(t, 15) }
         }
@@ -68,7 +68,7 @@ import kotlinx.coroutines.launch
     val nav = LocalNav.current
     val p = c
     Row(Modifier.fillMaxWidth().background(barBg()).drawBehind { if (!Look.flat) drawRect(p.k, size = androidx.compose.ui.geometry.Size(size.width, 3.dp.toPx())) }.navigationBarsPadding().padding(top = 3.dp).height(56.dp)) {
-        listOf(Triple(NIcons.home, "主页", 0), Triple(NIcons.library, "曲库", 1)).forEach { (i, l, k) ->
+        listOf(Triple(NIcons.home, tr("主页"), 0), Triple(NIcons.library, tr("曲库"), 1)).forEach { (i, l, k) ->
             val on = nav.tab == k && nav.stack.isEmpty()
             val bg by androidx.compose.animation.animateColorAsState(if (on) p.p else Color.Transparent, Motion.standard(), label = "bnb")
             val fg by androidx.compose.animation.animateColorAsState(if (on) Color.White else p.k, Motion.standard(), label = "bnf")
