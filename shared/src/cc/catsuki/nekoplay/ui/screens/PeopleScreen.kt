@@ -152,9 +152,27 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 // ======================= 用户页 =======================
 @Composable fun UserPage(pg: Page.User) {
     val nav = LocalNav.current
-    var err by remember { mutableStateOf<String?>(null) }
-    val u by produceState<User?>(null, pg.uid) { try { value = Ncm.user(pg.uid) } catch (e: Exception) { err = e.message } }
-    val pls by produceState<List<Playlist>?>(null, pg.uid) { runCatching { value = Ncm.userPlaylists(pg.uid) } }
+    val src = remember(pg.uid, Plugins.rev) { Plugins.ofOrNull(pg.uid) }
+    val me = Store.profile.value
+    val isMe = me != null && pg.uid == me.uid
+    val capsReady = src != null && src.caps.isNotEmpty()
+    val canUser = !capsReady || src.has("user")
+    val canPls = !capsReady || src.has("userPlaylists")
+    val canRecord = src?.has("playRecord") == true
+    val canSubArtists = src?.has("subArtists") == true
+    val canFollow = src?.has("followUser") == true
+    var err by remember(pg.uid) { mutableStateOf<String?>(null) }
+    val u by produceState<User?>(null, pg.uid, canUser) {
+        if (!canUser) {
+            value = User(pg.uid, if (isMe) me.name else pg.name, if (isMe) me.avatar.ifEmpty { null } else null, null, "${src?.name ?: "当前音源"}未提供详细主页信息", 0, 0, 0, 0, false)
+            return@produceState
+        }
+        try { value = Ncm.user(pg.uid) } catch (e: Exception) { err = e.message }
+    }
+    val pls by produceState<List<Playlist>?>(null, pg.uid, canPls) {
+        if (!canPls) { value = if (isMe) Store.playlists.value else emptyList(); return@produceState }
+        runCatching { value = Ncm.userPlaylists(pg.uid) }.onFailure { value = if (isMe) Store.playlists.value else emptyList() }
+    }
     val p = c
     val liked = pls?.firstOrNull { it.liked }
     val made = pls?.filter { !it.liked && it.mine } ?: emptyList()
@@ -170,31 +188,34 @@ import androidx.compose.foundation.lazy.rememberLazyListState
         item {
             Column(Modifier.padding(horizontal = 18.dp)) {
                 Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.offset(y = (-44).dp)) {
-                    Box(Modifier.size(88.dp).background(p.p).nb(2.dp, p.k)) { if (u?.avatar != null) AsyncImage(img(u!!.avatar, 256), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop) }
+                    val av = u?.avatar ?: if (isMe) me.avatar.ifEmpty { null } else null
+                    Box(Modifier.size(88.dp).background(p.p).nb(2.dp, p.k)) { if (av != null) AsyncImage(img(av, 256), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop) }
                     Spacer(Modifier.width(14.dp))
-                    Box(Modifier.padding(bottom = 4.dp)) { Tag(if (u == null) "USER" else "LV.${u!!.level}") }
+                    Box(Modifier.padding(bottom = 4.dp)) { Tag(if (u == null || u!!.level <= 0) "USER" else "LV.${u!!.level}") }
                 }
                 Column(Modifier.offset(y = (-32).dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         T(u?.name ?: pg.name, Fs.HERO, w = 800, lh = 1.2f, modifier = Modifier.weight(1f))
-                        if (Ncm.loggedIn && u != null && pg.uid != Store.profile.value?.uid) FollowBtn(u!!.followed, "关注", "已关注") { on -> Ncm.followUser(pg.uid, on) }
+                        if (Ncm.loggedIn && u != null && !isMe && canFollow) FollowBtn(u!!.followed, "关注", "已关注") { on -> Ncm.followUser(pg.uid, on) }
                     }
                     if (!u?.signature.isNullOrBlank()) T(u!!.signature, 13, p.s, lines = 3, lh = 1.6f, modifier = Modifier.padding(top = 6.dp))
                     if (err != null) T("加载失败：$err", 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(top = 10.dp))
-                    Spacer(Modifier.height(16.dp))
-                    Column(Modifier.topLine()) {
-                        Row { UStat("关注", two(u?.follows ?: 0), false, false); UStat("粉丝", two(u?.fans ?: 0), true, false) }
-                        Row { UStat("听歌", "${u?.listened ?: 0} 首", false, true); UStat("歌单", "${two(made.size)} 个", true, true) }
+                    if (canUser) {
+                        Spacer(Modifier.height(16.dp))
+                        Column(Modifier.topLine()) {
+                            Row { UStat("关注", two(u?.follows ?: 0), false, false); UStat("粉丝", two(u?.fans ?: 0), true, false) }
+                            Row { UStat("听歌", "${u?.listened ?: 0} 首", false, true); UStat("歌单", "${two(made.size)} 个", true, true) }
+                        }
                     }
                 }
             }
         }
-        item { Box(Modifier.padding(horizontal = 18.dp)) { ProfileRow({ IconCover(NIcons.chart, 56.dp) }, "听歌排行", "最近一周 / 所有时间") { nav.push(Page.Rank(pg.uid, u?.name ?: pg.name)) } } }
-        if (pg.uid == Store.profile.value?.uid) item { Box(Modifier.padding(horizontal = 18.dp)) { ProfileRow({ IconCover(NIcons.user, 56.dp) }, "关注的歌手", "ARTISTS") { nav.push(Page.Subs("artist")) } } }
+        if (canRecord) item { Box(Modifier.padding(horizontal = 18.dp)) { ProfileRow({ IconCover(NIcons.chart, 56.dp) }, "听歌排行", "最近一周 / 所有时间") { nav.push(Page.Rank(pg.uid, u?.name ?: pg.name)) } } }
+        if (isMe && canSubArtists) item { Box(Modifier.padding(horizontal = 18.dp)) { ProfileRow({ IconCover(NIcons.user, 56.dp) }, "关注的歌手", "ARTISTS") { nav.push(Page.Subs("artist")) } } }
         if (liked != null) item {
             Column(Modifier.padding(horizontal = 18.dp)) {
-                ProfileRow({ LikedCover(liked.cover, 56.dp) }, if (pg.uid == Store.profile.value?.uid) "我喜欢的音乐" else "TA 喜欢的音乐", "${two(liked.count)} 首") {
-                    nav.push(Page.Detail(if (pg.uid == Store.profile.value?.uid) "liked" else "pl", liked.id, liked.name, liked.cover))
+                ProfileRow({ LikedCover(liked.cover, 56.dp) }, if (isMe) "我喜欢的音乐" else "TA 喜欢的音乐", "${two(liked.count)} 首") {
+                    nav.push(Page.Detail(if (isMe) "liked" else "pl", liked.id, liked.name, liked.cover))
                 }
             }
         }
