@@ -182,31 +182,83 @@ fun main() {
 }
 
 
-/** 桌面歌词悬浮窗：透明、置顶、不抢焦点；没锁时可以拖动，锁定后鼠标点击穿透（Windows） */
+private fun defaultDeskLyricPos(ref: java.awt.Point? = null): androidx.compose.ui.window.WindowPosition {
+    val u = if (ref != null) WinFrame.usable(ref) else WinFrame.usable()
+    return androidx.compose.ui.window.WindowPosition((u.x + (u.width - 860) / 2).dp, (u.y + u.height - 140 - 150).dp)
+}
+
+/** 桌面歌词悬浮窗：透明、置顶、不抢焦点；没锁时可拖动与一键回正，锁定后点击穿透且悬停 3 秒自动唤出解锁按钮 */
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @androidx.compose.runtime.Composable
 private fun androidx.compose.ui.window.ApplicationScope.DeskLyricWindow(appIcon: androidx.compose.ui.graphics.painter.Painter) {
     val ws = rememberWindowState(size = DpSize(860.dp, 140.dp),
-        position = if (DeskLyric.x >= 0) androidx.compose.ui.window.WindowPosition(DeskLyric.x.dp, DeskLyric.y.dp) else WinFrame.usable().let { u ->
-            // 默认放在屏幕下方偏上一点，避开最大化窗口底部的播放控制
-            androidx.compose.ui.window.WindowPosition((u.x + (u.width - 860) / 2).dp, (u.y + u.height - 140 - 150).dp)
-        })
+        position = if (DeskLyric.x >= 0) androidx.compose.ui.window.WindowPosition(DeskLyric.x.dp, DeskLyric.y.dp) else defaultDeskLyricPos())
     Window(onCloseRequest = { DeskLyric.on = false; DeskLyric.save() }, state = ws, title = "NEKOPLAY Lyrics", icon = appIcon, undecorated = true, transparent = true,
         alwaysOnTop = true, focusable = false, resizable = false) {
+        var hover by remember { mutableStateOf(false) }
+        var unlockReady by remember { mutableStateOf(false) }
+        var unlockProgress by remember { mutableFloatStateOf(0f) }
+
         androidx.compose.runtime.LaunchedEffect(Unit) { ClickThrough.hideFromTaskbar(window) }
-        androidx.compose.runtime.LaunchedEffect(DeskLyric.locked) { ClickThrough.set(window, DeskLyric.locked) }
+        // 锁定且未触发 3 秒悬停解锁时启用点击穿透；悬停满 3 秒临时关闭穿透以便点击「解锁桌面歌词」
+        androidx.compose.runtime.LaunchedEffect(DeskLyric.locked, unlockReady) {
+            ClickThrough.set(window, DeskLyric.locked && !unlockReady)
+        }
+        // 一键回正：立即把窗口居中归位到当前屏幕底部居中位置
+        androidx.compose.runtime.LaunchedEffect(DeskLyric.resetRev) {
+            if (DeskLyric.resetRev > 0) {
+                val centerPt = runCatching { java.awt.Point(window.x + window.width / 2, window.y + window.height / 2) }.getOrNull()
+                val target = defaultDeskLyricPos(centerPt)
+                ws.position = target
+                if (target is androidx.compose.ui.window.WindowPosition.Absolute) {
+                    runCatching { window.setLocation(target.x.value.toInt(), target.y.value.toInt()) }
+                }
+            }
+        }
+        // 锁定状态下的全局鼠标位置轮询（即使开启 WS_EX_TRANSPARENT 穿透也能稳定检测悬停 3 秒）
+        androidx.compose.runtime.LaunchedEffect(DeskLyric.locked) {
+            if (!DeskLyric.locked) {
+                unlockReady = false; unlockProgress = 0f
+                return@LaunchedEffect
+            }
+            var hoverMs = 0L
+            var leaveMs = 0L
+            while (true) {
+                kotlinx.coroutines.delay(100L)
+                val inside = runCatching {
+                    if (!window.isShowing) return@runCatching false
+                    val pt = java.awt.MouseInfo.getPointerInfo()?.location ?: return@runCatching false
+                    val loc = window.locationOnScreen
+                    pt.x in loc.x..(loc.x + window.width) && pt.y in loc.y..(loc.y + window.height)
+                }.getOrDefault(false)
+                if (inside) {
+                    leaveMs = 0L
+                    if (!unlockReady) {
+                        hoverMs = (hoverMs + 100L).coerceAtMost(3000L)
+                        unlockProgress = hoverMs / 3000f
+                        if (hoverMs >= 3000L) unlockReady = true
+                    }
+                } else {
+                    if (unlockReady) {
+                        leaveMs += 100L
+                        if (leaveMs >= 1200L) { unlockReady = false; hoverMs = 0L; unlockProgress = 0f; leaveMs = 0L }
+                    } else if (hoverMs > 0L) {
+                        hoverMs = 0L; unlockProgress = 0f
+                    }
+                }
+            }
+        }
         androidx.compose.runtime.LaunchedEffect(Unit) {
             androidx.compose.runtime.snapshotFlow { ws.position }.collect { p ->
                 if (p is androidx.compose.ui.window.WindowPosition.Absolute) { DeskLyric.x = p.x.value.toInt(); DeskLyric.y = p.y.value.toInt(); DeskLyric.save() }
             }
         }
-        var hover by remember { mutableStateOf(false) }
         NekoTheme {
             val body = @androidx.compose.runtime.Composable {
                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()
                     .onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Enter) { hover = true }
                     .onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Exit) { hover = false }) {
-                    DeskLyricView(hover) { DeskLyric.on = false; DeskLyric.save() }
+                    DeskLyricView(hover, unlockReady, unlockProgress) { DeskLyric.on = false; DeskLyric.save() }
                 }
             }
             if (DeskLyric.locked) body() else WindowDraggableArea { body() }
@@ -339,6 +391,7 @@ private fun TrayMenu(appIcon: androidx.compose.ui.graphics.painter.Painter, at: 
         add("上一首" to { Engine.prev() }); add("下一首" to { Engine.next() }); add("" to null)
         if (Features.on("desk")) {
             add((if (DeskLyric.on) "关闭桌面歌词" else "打开桌面歌词") to { DeskLyric.on = !DeskLyric.on; DeskLyric.save() })
+            if (DeskLyric.on) add("回正桌面歌词" to { DeskLyric.resetPos() })
             if (DeskLyric.on && DeskLyric.locked) add("解锁桌面歌词" to { DeskLyric.locked = false; DeskLyric.save() })
             add("" to null)
         }

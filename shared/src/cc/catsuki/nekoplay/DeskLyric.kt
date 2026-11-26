@@ -44,6 +44,8 @@ object DeskLyric {
     var karaoke by mutableStateOf(true)      // 逐字染色进度
     var textAlpha by mutableFloatStateOf(1f) // 歌词整体不透明度
     var bgAlpha by mutableFloatStateOf(0f)   // 常驻底板不透明度（0 = 仅悬停显示）
+    /** 每次点击「回正」递增，通知桌面歌词窗口立即居中归位 */
+    var resetRev by mutableIntStateOf(0); private set
 
     private val k get() = Plat.prefs("ui")
     fun load() {
@@ -66,7 +68,7 @@ object DeskLyric {
             .putBoolean("dl_bold", bold).putBoolean("dl_stroke", stroke).putBoolean("dl_kara", karaoke)
             .putFloat("dl_alpha", textAlpha).putFloat("dl_bg", bgAlpha).apply()
     }
-    fun resetPos() { x = -1; y = -1; save() }
+    fun resetPos() { x = -1; y = -1; save(); resetRev++ }
 
     /** 当前一句和下一句（或翻译），给通知栏用 */
     fun lineAt(lines: List<LyricLine>, pos: Long): Pair<String, String>? {
@@ -80,7 +82,7 @@ object DeskLyric {
 
 /** 设置页里的桌面歌词详细配置项 */
 fun LazyListScope.deskLyricSettings(p: Pal) {
-    item { SwitchRow("锁定桌面歌词", "锁定后不能拖动，鼠标点击会穿过歌词（Windows）", DeskLyric.locked) { DeskLyric.locked = it; DeskLyric.save() } }
+    item { SwitchRow("锁定桌面歌词", "锁定后不能拖动且点击穿透；鼠标移到歌词上悬停 3 秒自动弹出解锁按钮", DeskLyric.locked) { DeskLyric.locked = it; DeskLyric.save() } }
     item {
         SetLine("桌面歌词字号", "悬浮歌词主句大小（18–60）") {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -112,8 +114,8 @@ fun LazyListScope.deskLyricSettings(p: Pal) {
     item { SwitchRow("字体加粗", "开启使用 800 粗体，关闭使用 500 常规字重", DeskLyric.bold) { DeskLyric.bold = it; DeskLyric.save() } }
     item { SwitchRow("文字深色描边", "在浅色或复杂壁纸上保持歌词清晰可读", DeskLyric.stroke) { DeskLyric.stroke = it; DeskLyric.save() } }
     item {
-        SetLine("悬浮窗位置", if (DeskLyric.x >= 0) "当前坐标：${DeskLyric.x}, ${DeskLyric.y}（重置后下次开关或重启生效）" else "当前为默认底部居中位置") {
-            Box(Modifier.press { DeskLyric.resetPos() }.nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 6.dp)) { T("重置悬浮窗位置", 12, p.k, 700) }
+        SetLine("悬浮窗位置", if (DeskLyric.x >= 0) "当前坐标：${DeskLyric.x}, ${DeskLyric.y}（点击立即水平居中回正）" else "当前为默认底部居中位置") {
+            Box(Modifier.press { DeskLyric.resetPos() }.nbf(1.dp, p.k).padding(horizontal = 12.dp, vertical = 6.dp)) { T("一键回正", 12, p.k, 700) }
         }
     }
 }
@@ -122,7 +124,7 @@ fun LazyListScope.deskLyricSettings(p: Pal) {
  * 悬浮歌词：当前句（唱过的部分染成主色）+ 下面一行（翻译或下一句）。
  * 字带深色描边，放在任何壁纸上都看得清；换句时新句从下面淡入。没锁时鼠标移上去出现半透明底板和控制条。
  */
-@Composable fun DeskLyricView(hover: Boolean, onClose: () -> Unit) {
+@Composable fun DeskLyricView(hover: Boolean, unlockReady: Boolean = false, unlockProgress: Float = 0f, onClose: () -> Unit) {
     val p = c
     val st by Engine.state.collectAsState()
     val t = st.current
@@ -159,32 +161,51 @@ fun LazyListScope.deskLyricSettings(p: Pal) {
         else -> { val next = l.getOrNull(i + 1)?.t ?: (cur.t + 5000); ((now - cur.t).toFloat() / (next - cur.t).coerceAtLeast(300)).coerceIn(0f, 1f) }
     }
     val showBar = hover && !DeskLyric.locked
-    val panel by androidx.compose.animation.core.animateFloatAsState(if (showBar) 1f else 0f, Motion.standard(), label = "pn")
+    val showUnlock = DeskLyric.locked && unlockReady
+    val showUnlockHint = DeskLyric.locked && !unlockReady && unlockProgress > 0.1f
+    val panel by androidx.compose.animation.core.animateFloatAsState(if (showBar || showUnlock) 1f else 0f, Motion.standard(), label = "pn")
     val ink = Color(0xFF0E1015)
     val accent = DeskLyric.COLORS.getOrNull(DeskLyric.colorIdx) ?: p.p
     val tAlign = when (DeskLyric.align) { 1 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
     val hAlign = when (DeskLyric.align) { 1 -> Alignment.Start; 2 -> Alignment.End; else -> Alignment.CenterHorizontally }
     val main = TextStyle(fontSize = DeskLyric.size.sp, fontWeight = FontWeight(if (DeskLyric.bold) 800 else 500), fontFamily = Typo.family, textAlign = tAlign)
-    // 和 App 一样的风格：悬停时出现底板和控制条；若开启常驻背景底板则始终显示半透明底色
+    // 和 App 一样的风格：悬停时出现底板和控制条；锁定后悬停满 3 秒弹出解锁按钮
     Box(Modifier.fillMaxSize().padding(6.dp)
         .drawBehind {
-            val bgA = maxOf(DeskLyric.bgAlpha, .92f * panel)
+            val bgA = maxOf(DeskLyric.bgAlpha, if (showBar) .92f * panel else .68f * panel)
             if (bgA > 0.005f) drawRect(p.page.copy(alpha = bgA))
             if (panel > 0f && !Look.flat) drawRect(p.k.copy(alpha = panel), style = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx()))
         }) {
         Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 6.dp), horizontalAlignment = hAlign, verticalArrangement = Arrangement.Center) {
-            // 控制条：图标按钮，淡入淡出（不占位置时也不挤歌词）
-            Row(Modifier.height(30.dp).align(Alignment.CenterHorizontally).graphicsLayer { alpha = panel }, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (panel > 0.01f) {
-                    @Composable fun I(icon: String, on: Boolean = false, act: () -> Unit) = Box(Modifier.size(30.dp).press(.92f) { act() }.background(if (on) p.p else Color.Transparent).nbf(1.dp, p.k), contentAlignment = Alignment.Center) { NIcon(icon, 15.dp, if (on) Color.White else p.k) }
-                    @Composable fun L(label: String, on: Boolean = false, act: () -> Unit) = Box(Modifier.height(30.dp).defaultMinSize(minWidth = 30.dp).press(.92f) { act() }.background(if (on) p.p else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) { T(label, 12, if (on) Color.White else p.k, 700, mono = true) }
-                    I(NIcons.prev) { Engine.prev() }; I(if (st.playing) NIcons.pause else NIcons.play) { Engine.toggle() }; I(NIcons.next) { Engine.next() }
-                    Spacer(Modifier.width(8.dp))
-                    L("A−") { DeskLyric.size = (DeskLyric.size - 2).coerceAtLeast(18); DeskLyric.save() }
-                    L("A+") { DeskLyric.size = (DeskLyric.size + 2).coerceAtMost(60); DeskLyric.save() }
-                    L(when (DeskLyric.lineMode) { 0 -> "单"; 1 -> "译"; else -> "双" }, DeskLyric.lineMode != 0) { DeskLyric.lineMode = (DeskLyric.lineMode + 1) % 3; DeskLyric.save() }
-                    Spacer(Modifier.width(8.dp))
-                    I(NIcons.lock) { DeskLyric.locked = true; DeskLyric.save() }; I(NIcons.close) { onClose() }
+            // 控制条：正常悬停显示完整工具栏；锁定后悬停 3 秒显示解锁与回正，悬停计时期间显示柔和倒计时条
+            Row(Modifier.height(30.dp).align(Alignment.CenterHorizontally).graphicsLayer { alpha = if (showUnlockHint) .9f else panel }, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                @Composable fun I(icon: String, on: Boolean = false, act: () -> Unit) = Box(Modifier.size(30.dp).press(.92f) { act() }.background(if (on) p.p else Color.Transparent).nbf(1.dp, p.k), contentAlignment = Alignment.Center) { NIcon(icon, 15.dp, if (on) Color.White else p.k) }
+                @Composable fun L(label: String, on: Boolean = false, act: () -> Unit) = Box(Modifier.height(30.dp).defaultMinSize(minWidth = 30.dp).press(.92f) { act() }.background(if (on) p.p else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) { T(label, 12, if (on) Color.White else p.k, 700, mono = true) }
+                when {
+                    showUnlock -> {
+                        L("解锁桌面歌词", true) { DeskLyric.locked = false; DeskLyric.save() }
+                        L("回正") { DeskLyric.resetPos() }
+                    }
+                    showUnlockHint -> {
+                        val remain = kotlin.math.ceil((1f - unlockProgress) * 3f).toInt().coerceIn(1, 3)
+                        Column(Modifier.background(p.page.copy(alpha = .85f)).nbf(1.dp, p.k).padding(horizontal = 10.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            T("保持悬停 ${remain}s 解锁", 11, p.k, 700, mono = true)
+                            Spacer(Modifier.height(2.dp))
+                            Box(Modifier.width(96.dp).height(2.dp).background(p.l2)) {
+                                Box(Modifier.fillMaxWidth(unlockProgress.coerceIn(0f, 1f)).fillMaxHeight().background(p.p))
+                            }
+                        }
+                    }
+                    panel > 0.01f && !DeskLyric.locked -> {
+                        I(NIcons.prev) { Engine.prev() }; I(if (st.playing) NIcons.pause else NIcons.play) { Engine.toggle() }; I(NIcons.next) { Engine.next() }
+                        Spacer(Modifier.width(8.dp))
+                        L("A−") { DeskLyric.size = (DeskLyric.size - 2).coerceAtLeast(18); DeskLyric.save() }
+                        L("A+") { DeskLyric.size = (DeskLyric.size + 2).coerceAtMost(60); DeskLyric.save() }
+                        L(when (DeskLyric.lineMode) { 0 -> "单"; 1 -> "译"; else -> "双" }, DeskLyric.lineMode != 0) { DeskLyric.lineMode = (DeskLyric.lineMode + 1) % 3; DeskLyric.save() }
+                        L("回正") { DeskLyric.resetPos() }
+                        Spacer(Modifier.width(8.dp))
+                        I(NIcons.lock) { DeskLyric.locked = true; DeskLyric.save() }; I(NIcons.close) { onClose() }
+                    }
                 }
             }
             Spacer(Modifier.height(2.dp))
