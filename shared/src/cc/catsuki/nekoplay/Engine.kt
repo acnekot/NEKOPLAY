@@ -57,10 +57,9 @@ object Engine {
     var fadeMs by androidx.compose.runtime.mutableIntStateOf(0)
     private var fadeJob: Job? = null
     private var rampOnPlay = false
-    /** 这次 load 已经把新歌交给播放器了 */
     private var opened = false
-    /** 正在加载的新歌目标起始进度（防止取地址期间轮询读到上一首的残留进度） */
     private var pendingStartMs = 0L
+    private var errStreak = 0
     fun setFade(ms: Int) { fadeMs = ms; prefs?.edit()?.putInt("fade", ms)?.apply() }
 
     // ---------- 无缝播放 ----------
@@ -146,13 +145,20 @@ object Engine {
         audio.listener = object : Audio.Listener {
             override fun onPlaying(p: Boolean) {
                 state.value = state.value.copy(playing = p)
-                if (p) startRampIn()
+                if (p) { errStreak = 0; startRampIn() }
                 Plugins.emitEvent("onPlayState", org.json.JSONObject().put("playing", p).put("id", state.value.current?.id ?: ""))
             }
             override fun onBuffering(b: Boolean) { state.value = state.value.copy(loading = b) }
             override fun onEnded() = this@Engine.onEnded()
             override fun onAdvanced() = this@Engine.onAdvanced()
-            override fun onError(msg: String) { state.value.current?.let { Plugins.forgetStream(it.id) }; error.value = "播放失败：$msg"; next() }
+            override fun onError(msg: String) {
+                state.value.current?.let { Plugins.forgetStream(it.id) }
+                if (!state.value.want || ++errStreak >= 3) {
+                    loadJob?.cancel(); loadJob = null
+                    state.value = state.value.copy(loading = false, want = false)
+                    error.value = if (errStreak >= 3) "连续播放失败已暂停：$msg" else "播放失败：$msg"
+                } else { error.value = "播放失败：$msg"; nextInternal() }
+            }
         }
         // 播放期定时任务：暂停时挂起等待 playing，避免空闲每秒唤醒多次耗电
         scope.launch {
@@ -185,12 +191,13 @@ object Engine {
 
     fun playList(list: List<Track>, start: Int, shuffle: Boolean = false) {
         if (list.isEmpty()) return
+        errStreak = 0
         val q = if (shuffle) list.shuffled() else list
         state.value = state.value.copy(fm = false, queue = q, index = if (shuffle) 0 else start, mode = if (shuffle) Mode.SHUFFLE else state.value.mode.let { if (it == Mode.SHUFFLE) Mode.LOOP_ALL else it })
         load(state.value.index, true)
     }
 
-    fun playAt(i: Int) { if (i in state.value.queue.indices) load(i, true) }
+    fun playAt(i: Int) { if (i in state.value.queue.indices) { errStreak = 0; load(i, true) } }
 
     /** 上一首听了多久：切歌时回传给网易云（听满 30 秒或播完才算一次） */
     private var reportId: String? = null
@@ -257,11 +264,10 @@ object Engine {
     }
 
     fun toggle() {
-        val s = state.value
-        // 加载中点一下 = 打断：取消「加载完自动播放」，已经在缓冲的也停下；再点一下恢复
+        val s = state.value; errStreak = 0
         if (s.loading) {
-            if (s.want) { state.value = s.copy(want = false); rampOnPlay = false; fadeJob?.cancel(); audio.pause(); audio.volume = Vol.v }
-            else { state.value = s.copy(want = true); if (opened) fadePlay() }   // 还在取地址：等打开时自动播
+            if (s.want) { loadJob?.cancel(); loadJob = null; state.value = s.copy(loading = false, want = false); rampOnPlay = false; fadeJob?.cancel(); audio.pause(); audio.volume = Vol.v }
+            else { state.value = s.copy(want = true); if (opened) fadePlay() else load(s.index, true, position.value) }
             return
         }
         if (audio.idle) load(s.index, true, position.value)
@@ -308,7 +314,8 @@ object Engine {
         next()
     }
 
-    fun next() {
+    fun next() { errStreak = 0; nextInternal() }
+    private fun nextInternal() {
         val s = state.value; if (s.queue.isEmpty()) return
         if (s.fm) {
             if (s.index + 1 < s.queue.size) { load(s.index + 1, true); if (s.index + 3 >= s.queue.size) fmFill() }
@@ -320,6 +327,7 @@ object Engine {
 
     fun prev() {
         val s = state.value; if (s.queue.isEmpty()) return
+        errStreak = 0
         if (audio.position > 3000) { seek(0); return }
         load((s.index - 1 + s.queue.size) % s.queue.size, true)
     }
@@ -378,23 +386,8 @@ object Engine {
 
     fun cacheBytes(): Long = runCatching { audio.cacheBytes() }.getOrDefault(0)
     fun clearCache() { runCatching { audio.clearCache() } }
-
-    /** 换音质：当前这首按新档位重新加载，从原位置继续 */
-    fun changeQuality(q: Int) {
-        quality = q
-        prefs?.edit()?.putInt("q2", q)?.apply()
-        val s = state.value
-        if (s.current != null) load(s.index, audio.isPlaying, audio.position)
-    }
-
-    fun changeCellQuality(v: Int) {
-        qualityCell = v
-        prefs?.edit()?.putInt("qCell", v)?.apply()
-        val s = state.value
-        if (s.current != null && Plat.impl.metered()) load(s.index, audio.isPlaying, audio.position)
-    }
-
+    fun changeQuality(q: Int) { quality = q; prefs?.edit()?.putInt("q2", q)?.apply(); if (state.value.current != null) load(state.value.index, audio.isPlaying, audio.position) }
+    fun changeCellQuality(v: Int) { qualityCell = v; prefs?.edit()?.putInt("qCell", v)?.apply(); if (state.value.current != null && Plat.impl.metered()) load(state.value.index, audio.isPlaying, audio.position) }
     fun clearUpcoming() { dropNext(); val s = state.value; s.current?.let { state.value = s.copy(queue = listOf(it), index = 0) } }
-
     fun savePosition() { val s = state.value; if (s.index >= 0) Store.saveQueue(s.queue, s.index, if (opened) audio.position else position.value) }
 }

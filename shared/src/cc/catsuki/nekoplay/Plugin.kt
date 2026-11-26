@@ -198,6 +198,7 @@ class JsSource(val file: File) {
             o.has("form") -> FormBody.Builder().apply { val f = o.getJSONObject("form"); f.keys().forEach { k -> add(k, f.optString(k)) } }.build()
             o.has("json") -> o.get("json").toString().toRequestBody("application/json".toMediaType())
             o.has("body") -> o.getString("body").toRequestBody((o.optJSONObject("headers")?.optString("Content-Type")?.ifEmpty { null } ?: "text/plain").toMediaType())
+            method == "POST" || method == "PUT" || method == "PATCH" -> "".toRequestBody((o.optJSONObject("headers")?.optString("Content-Type")?.ifEmpty { null } ?: "application/x-www-form-urlencoded").toMediaType())
             else -> null
         }
         b.method(method, body)
