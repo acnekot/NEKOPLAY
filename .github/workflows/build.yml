@@ -3,15 +3,66 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: "打包后发布正式版（标签 v + Version.kt 里的版本号）"
+        description: "打包后发布版本（Pre-release / 正式版）"
         type: boolean
         default: false
+      tag:
+        description: "自定义发布标签（留空则用 v + Version.kt 版本号，如 v0.6.8-nightly.20261126.2）"
+        type: string
+        default: ""
+      android:
+        description: "打包 Android"
+        type: boolean
+        default: true
+      windows:
+        description: "打包 Windows"
+        type: boolean
+        default: true
+      macos:
+        description: "打包 macOS"
+        type: boolean
+        default: true
+      linux:
+        description: "打包 Linux"
+        type: boolean
+        default: true
+      ios:
+        description: "打包 iOS"
+        type: boolean
+        default: true
   push:
     tags: ["v*"]
 permissions:
   contents: write
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      desktop_os: ${{ steps.calc.outputs.desktop_os }}
+      has_desktop: ${{ steps.calc.outputs.has_desktop }}
+    steps:
+      - id: calc
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INC_WIN: ${{ inputs.windows }}
+          INC_MAC: ${{ inputs.macos }}
+          INC_LINUX: ${{ inputs.linux }}
+        run: |
+          OS=()
+          if [ "$EVENT_NAME" != "workflow_dispatch" ] || [ "$INC_WIN" = "true" ]; then OS+=('"windows-latest"'); fi
+          if [ "$EVENT_NAME" != "workflow_dispatch" ] || [ "$INC_MAC" = "true" ]; then OS+=('"macos-latest"'); fi
+          if [ "$EVENT_NAME" != "workflow_dispatch" ] || [ "$INC_LINUX" = "true" ]; then OS+=('"ubuntu-latest"'); fi
+          if [ ${#OS[@]} -eq 0 ]; then
+            echo "desktop_os=[]" >> "$GITHUB_OUTPUT"
+            echo "has_desktop=false" >> "$GITHUB_OUTPUT"
+          else
+            IFS=,
+            echo "desktop_os=[${OS[*]}]" >> "$GITHUB_OUTPUT"
+            echo "has_desktop=true" >> "$GITHUB_OUTPUT"
+          fi
+
   android:
+    if: github.event_name != 'workflow_dispatch' || inputs.android
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,10 +86,12 @@ jobs:
         with: { name: NEKOPLAY-Android, path: out/*.apk }
 
   desktop:
+    needs: plan
+    if: needs.plan.outputs.has_desktop == 'true'
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        os: ${{ fromJSON(needs.plan.outputs.desktop_os) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -127,9 +180,10 @@ jobs:
           if-no-files-found: ignore
 
   ios:
+    if: github.event_name != 'workflow_dispatch' || inputs.ios
     uses: ./.github/workflows/ios.yml
 
-  # 推 v 开头的标签时：把所有已成功构建的平台产物放进同一个 GitHub Release（不因单个平台失败/取消而整包跳过）
+  # 推 v 开头的标签或手动勾选发布时：把所有已成功构建的平台产物放进同一个 GitHub Release（不因单个平台失败/取消而整包跳过）
   release:
     if: always() && (startsWith(github.ref, 'refs/tags/v') || inputs.release) && (needs.android.result == 'success' || needs.desktop.result == 'success' || needs.ios.result == 'success')
     needs: [android, ios, desktop]
@@ -138,8 +192,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: 版本号和这个版本的说明（从 CHANGELOG.md 取）
         id: ver
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"
+          elif [[ -n "$INPUT_TAG" ]]; then v="${INPUT_TAG#v}"
           else v=$(sed -n 's/.*APP_VERSION = "\([^"]*\)".*/\1/p' shared/src/cc/catsuki/nekoplay/Version.kt); fi
           echo "v=$v" >> "$GITHUB_OUTPUT"
           awk -v v="$v" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on' CHANGELOG.md > notes.md
