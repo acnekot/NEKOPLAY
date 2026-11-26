@@ -95,30 +95,32 @@ import kotlinx.coroutines.launch
     val placedMod = if (trackOrigin) Modifier.onPlaced { tapRef[0] = it } else Modifier
     if (AnimStyle.off) return this.then(placedMod).then(clickMod)
     val effScale = if (scale != 1f) scale else MotionEffects.pressScale
-    val prog = remember(src) { androidx.compose.animation.core.Animatable(0f) }
+    var prog by remember(src) { mutableStateOf<androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>?>(null) }
     LaunchedEffect(src) {
         var animJob: kotlinx.coroutines.Job? = null
         src.interactions.collect { ev ->
             when (ev) {
                 is androidx.compose.foundation.interaction.PressInteraction.Press -> {
+                    val p = prog ?: androidx.compose.animation.core.Animatable(0f).also { prog = it }
                     animJob?.cancel()
-                    animJob = launch { prog.animateTo(1f, tween(45, easing = AnimStyle.activeEasing)) }
+                    animJob = launch { p.animateTo(1f, tween(45, easing = AnimStyle.activeEasing)) }
                 }
                 is androidx.compose.foundation.interaction.PressInteraction.Release,
                 is androidx.compose.foundation.interaction.PressInteraction.Cancel -> {
+                    val p = prog ?: return@collect
                     animJob?.cancel()
                     animJob = launch {
                         val spec: androidx.compose.animation.core.AnimationSpec<Float> = if (effScale < 0.999f && AnimStyle.pluginProfile == null && AnimStyle.style == 0)
                             spring(AnimStyle.springDamping, Anim.stiff(AnimStyle.springStiffness))
                         else tween(Motion.standardMs, easing = AnimStyle.activeEasing)
-                        prog.animateTo(0f, spec)
+                        p.animateTo(0f, spec)
                     }
                 }
             }
         }
     }
-    return this.then(placedMod).graphicsLayer {
-        val v = prog.value
+    return this.then(placedMod).then(if (prog != null) Modifier.graphicsLayer {
+        val v = prog?.value ?: 0f
         if (v > 0.001f) {
             alpha = 1f - 0.28f * v
             if (effScale < 0.999f) {
@@ -126,7 +128,7 @@ import kotlinx.coroutines.launch
                 scaleX = sc; scaleY = sc
             }
         }
-    }.then(clickMod)
+    } else Modifier).then(clickMod)
 }
 
 // ---------------- 图标：直接用原型的 SVG 路径 ----------------

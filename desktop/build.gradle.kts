@@ -57,19 +57,17 @@ val installerVersion = appVersion.split('.').let { (_, b, c) -> "1.$b.$c" }
 compose.desktop {
     application {
         mainClass = "cc.catsuki.nekoplay.MainKt"
-        // Windows / Linux 省内存：小堆 + Serial GC + 空闲时把堆还给系统 + 只用 C1 编译 + 小代码缓存 / 线程栈
-        // macOS 保流畅（120fps 基准）：分代 ZGC（亚毫秒停顿）+ C2 编译 + Metal 三缓冲 + 128MB GPU 纹理缓存 + 取消立即重绘 VSync 阻塞
+        // 全桌面端统一低停顿 G1GC + 禁止 AWT 擦白底 + Skiko 三缓冲与 64MB 纹理缓存，彻底消除 Windows 拖窗闪白与 GC 掉帧
         val mac = System.getProperty("os.name").lowercase().contains("mac")
-        jvmArgs += if (mac) listOf("-Xms32m", "-Xmx256m", "-XX:+UseSerialGC",
-            "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=25",
-            "-XX:ReservedCodeCacheSize=64m", "-XX:MaxMetaspaceSize=96m",
+        jvmArgs += listOf(
+            "-Xms48m", "-Xmx384m",
+            "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=10",
+            "-XX:ReservedCodeCacheSize=64m", "-XX:MaxMetaspaceSize=128m",
             "-Dsun.awt.noerasebackground=true",
+            "-Djna.encoding=UTF-8",
             "-Dskiko.vsync.enabled=true", "-Dskiko.buffering=TRIPLE",
-            "-Dskiko.rendering.macos.waitForPreviousFrameVsyncOnRedrawImmediately=false",
-            "-Dskiko.gpu.resourceCacheLimit=67108864")
-        else listOf("-Xms24m", "-Xmx256m", "-XX:+UseSerialGC", "-XX:MinHeapFreeRatio=10", "-XX:MaxHeapFreeRatio=25",
-            "-XX:ReservedCodeCacheSize=48m", "-XX:MaxMetaspaceSize=96m", "-Xss512k",
-            "-Djna.encoding=UTF-8", "-Dskiko.vsync.enabled=true")
+            "-Dskiko.gpu.resourceCacheLimit=67108864",
+        ) + if (mac) listOf("-Dskiko.rendering.macos.waitForPreviousFrameVsyncOnRedrawImmediately=false") else emptyList()
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb) // AppImage 和 dmg 共用输出目录会冲突；免安装版另外打 zip
             packageName = "NEKOPLAY"

@@ -65,7 +65,7 @@ fun main() {
             })
         }.build()
         ImageLoader.Builder(ctx)
-            .memoryCache { MemoryCache.Builder().maxSizeBytes((when { UiPref.lowMem -> 12L; UiPref.isMac -> 64L; else -> 24L }) * 1024 * 1024).build() }
+            .memoryCache { MemoryCache.Builder().maxSizeBytes((if (UiPref.lowMem) 16L else 64L) * 1024 * 1024).build() }
             .diskCache { DiskCache.Builder().directory(Plat.impl.cacheDir.resolve("img").toOkioPath()).maxSizeBytes(300L * 1024 * 1024).build() }
             .components { add(OkHttpNetworkFetcherFactory(callFactory = { client })) }
             .build()
@@ -145,6 +145,12 @@ fun main() {
                 }
             }
             NekoTheme {
+                val winBg = c.page
+                LaunchedEffect(winBg) {
+                    val awtBg = java.awt.Color((winBg.red * 255f + 0.5f).toInt().coerceIn(0, 255), (winBg.green * 255f + 0.5f).toInt().coerceIn(0, 255), (winBg.blue * 255f + 0.5f).toInt().coerceIn(0, 255))
+                    window.background = awtBg
+                    window.contentPane?.background = awtBg
+                }
                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
                     Root(chrome = { TitleBar(state, close) })
                     if (!macNativeRound) ResizeEdges(state)

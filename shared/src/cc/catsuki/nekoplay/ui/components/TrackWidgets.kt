@@ -33,34 +33,44 @@ import kotlinx.coroutines.launch
 @Composable fun TrackRow(t: Track, current: Boolean, label: String? = null, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
     val p = c
     val fg = if (current) p.p else p.k
-    val curAnim = remember { Animatable(if (current) 1f else 0f) }
-    LaunchedEffect(current) {
-        val target = if (current) 1f else 0f
-        if (curAnim.value != target) curAnim.animateTo(target, Motion.standard())
+    // 懒分配选中动效与悬停动效：未选中且未悬停的普通曲目行 0 Animatable / 0 协程，消除切页首帧协程风暴
+    var everCur by remember { mutableStateOf(current) }
+    if (current) everCur = true
+    val curAnim = if (everCur) remember { Animatable(if (current) 1f else 0f) } else null
+    if (curAnim != null) {
+        LaunchedEffect(current) {
+            val target = if (current) 1f else 0f
+            if (curAnim.value != target) curAnim.animateTo(target, Motion.standard())
+        }
     }
     val desktopHover = Plat.isDesktop && !AnimStyle.off && (MotionEffects.hoverTint || MotionEffects.hoverShiftDp > 0.1f)
-    val src = remember { MutableInteractionSource() }
-    val hovAnim = if (desktopHover) remember(src) { Animatable(0f) } else null
-    if (desktopHover && hovAnim != null) {
-        LaunchedEffect(src) {
-            var animJob: kotlinx.coroutines.Job? = null
-            src.interactions.collect { ev ->
-                when (ev) {
-                    is HoverInteraction.Enter -> { animJob?.cancel(); animJob = launch { hovAnim.animateTo(1f, Motion.quick()) } }
-                    is HoverInteraction.Exit -> { animJob?.cancel(); animJob = launch { hovAnim.animateTo(0f, Motion.standard()) } }
-                }
-            }
+    var hovered by remember { mutableStateOf(false) }
+    var everHov by remember { mutableStateOf(false) }
+    val hovAnim = if (desktopHover && everHov) remember { Animatable(0f) } else null
+    if (hovAnim != null) {
+        LaunchedEffect(hovered) {
+            hovAnim.animateTo(if (hovered) 1f else 0f, if (hovered) Motion.quick() else Motion.standard())
         }
     }
     val shiftDp = if (desktopHover && MotionEffects.hoverShiftDp > 0.1f) MotionEffects.hoverShiftDp * 0.55f else 0f
     val showTint = desktopHover && MotionEffects.hoverTint
     Row(Modifier.fillMaxWidth().height(64.dp).cascadeEnter().originRippleItem()
         .then(if (hovAnim != null && shiftDp > 0f) Modifier.graphicsLayer { val h = hovAnim.value; if (h > 0.001f) translationX = (h * shiftDp).dp.toPx() } else Modifier)
-        .then(if (desktopHover) Modifier.hoverable(src) else Modifier)
-        .press(onLong = onLong, interactionSource = src, onClick = onClick)
+        .then(if (desktopHover) Modifier.pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    val e = awaitPointerEvent()
+                    when (e.type) {
+                        androidx.compose.ui.input.pointer.PointerEventType.Enter -> { everHov = true; hovered = true }
+                        androidx.compose.ui.input.pointer.PointerEventType.Exit -> hovered = false
+                    }
+                }
+            }
+        } else Modifier)
+        .press(onLong = onLong, onClick = onClick)
         .drawBehind {
             val ext = 10.dp.toPx()
-            val ca = curAnim.value
+            val ca = curAnim?.value ?: 0f
             val ha = if (showTint && !current && hovAnim != null) hovAnim.value else 0f
             if (ha > 0.01f) drawRect(p.k.copy(alpha = .045f * ha), Offset(-ext, 0f), Size(size.width + ext * 2, size.height))
             if (ca > 0.01f) {
@@ -72,20 +82,20 @@ import kotlinx.coroutines.launch
         }, verticalAlignment = Alignment.CenterVertically) {
         val coverGain = (MotionEffects.selectCoverScale - 1f).coerceAtLeast(0f)
         val fontGain = (MotionEffects.selectFontScale - 1f).coerceAtLeast(0f)
-        Box(Modifier.graphicsLayer {
+        Box(if (curAnim != null) Modifier.graphicsLayer {
             val s = 1f + coverGain * curAnim.value
             scaleX = s; scaleY = s
-        }) { Cover(t.cover, 44.dp, t.title) }
+        } else Modifier) { Cover(t.cover, 44.dp, t.title) }
         Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f).graphicsLayer {
+        Column(Modifier.weight(1f).then(if (curAnim != null) Modifier.graphicsLayer {
             val ca = curAnim.value
             if (ca > 0.001f) translationX = 3.dp.toPx() * ca
-        }) {
-            Row(Modifier.graphicsLayer {
+        } else Modifier)) {
+            Row(if (curAnim != null) Modifier.graphicsLayer {
                 val s = 1f + fontGain * curAnim.value
                 scaleX = s; scaleY = s
                 transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
-            }, verticalAlignment = Alignment.CenterVertically) {
+            } else Modifier, verticalAlignment = Alignment.CenterVertically) {
                 T(t.title, 16, fg, if (current) 700 else 600, lh = 1.4f, modifier = Modifier.weight(1f, fill = false))
                 if (t.vip) { Spacer(Modifier.width(6.dp)); VipTag() }
             }
@@ -103,7 +113,9 @@ import kotlinx.coroutines.launch
 }
 
 @Composable private fun TrackDownloadLabel(id: String, label: String?) {
-    val lab = label ?: remember(id) { Downloads.labelFlow(id) }.collectAsState(Downloads.labelNow(id)).value
+    if (label != null) { T(trKnown(label), 11, c.s, mono = true, ls = .06f); return }
+    if (!Downloads.hasAny) return
+    val lab = remember(id) { Downloads.labelFlow(id) }.collectAsState(Downloads.labelNow(id)).value
     if (lab != null) T(trKnown(lab), 11, c.s, mono = true, ls = .06f)
 }
 

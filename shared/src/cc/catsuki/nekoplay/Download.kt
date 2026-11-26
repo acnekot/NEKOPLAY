@@ -26,6 +26,8 @@ object Downloads {
     val downloadedIds = MutableStateFlow<Set<String>>(emptySet())
     /** 正在下 / 排队中的：id → 进度（0~1，排队中是 -1） */
     val active = MutableStateFlow<Map<String, Float>>(emptyMap())
+    /** 是否存在任何已下载或进行中的任务：供列表行零协程短路 */
+    var hasAny by mutableStateOf(false); private set
     /** 排队和正在下的任务（下载管理器显示用，按加入顺序） */
     val jobs = MutableStateFlow<List<Pair<Track, Int>>>(emptyList())
     /** 下载失败的：id → (歌, 音质, 原因) */
@@ -44,6 +46,7 @@ object Downloads {
     private fun setItems(next: List<DlItem>) {
         items.value = next
         downloadedIds.value = next.mapTo(HashSet(next.size)) { it.track.id }
+        hasAny = next.isNotEmpty() || active.value.isNotEmpty()
     }
 
     fun init() {
@@ -80,6 +83,7 @@ object Downloads {
         if (has(t.id) || t.id in active.value) return
         failed.value = failed.value - t.id
         active.value = active.value + (t.id to -1f)
+        hasAny = true
         jobs.value = jobs.value + (t to quality)
         queue.trySend(t to quality)
     }
@@ -92,6 +96,7 @@ object Downloads {
     fun cancel(id: String) {
         active.value = active.value - id
         jobs.value = jobs.value.filter { it.first.id != id }
+        hasAny = items.value.isNotEmpty() || active.value.isNotEmpty()
         if (runningId == id) running?.cancel()
     }
     fun cancelAll() { jobs.value.map { it.first.id }.forEach { cancel(it) } }
@@ -152,6 +157,7 @@ object Downloads {
         } finally {
             active.value = active.value - t.id
             jobs.value = jobs.value.filter { it.first.id != t.id }
+            hasAny = items.value.isNotEmpty() || active.value.isNotEmpty()
         }
     }
 

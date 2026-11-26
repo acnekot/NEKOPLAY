@@ -204,10 +204,8 @@ object Boot {
             Column(Modifier.fillMaxSize()) {
             chrome?.invoke()
             Box(Modifier.weight(1f).fillMaxWidth()) {
-            AnimatedContent(wide, Modifier.fillMaxSize(), transitionSpec = {
-                fadeIn(Motion.standard()) togetherWith fadeOut(Motion.quick())
-            }, label = "layoutMode") { isWide ->
-            if (isWide) WideLayout() else Column(Modifier.fillMaxSize()) {
+            // 宽窄屏切换直接切树（取消双树并发 AnimatedContent 淡入淡出，避免拖窗越过 900dp 断点时同时渲染两套播放页/评论页导致卡顿与花屏）
+            if (wide) WideLayout() else Column(Modifier.fillMaxSize()) {
                 val hideTop = (Screen.short && nav.player) || (Screen.landscape && nav.stack.lastOrNull() == Page.CoverFlow)
                 if (chrome == null) androidx.compose.animation.AnimatedVisibility(!hideTop,
                     enter = androidx.compose.animation.expandVertically(Motion.hero()),
@@ -242,7 +240,6 @@ object Boot {
                     SubLayer(sub, subW)
                     PlayerOverlay()
                 }
-            }
             }
             }
             }

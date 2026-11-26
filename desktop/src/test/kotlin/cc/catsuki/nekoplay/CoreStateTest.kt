@@ -364,9 +364,18 @@ class CoreStateTest {
             assertEquals(rCardA, OriginBus.activePageOrigin())
             assertTrue(OriginBus.wave!!.seq > waveBeforePop)
             assertEquals(rItemB.center.y, OriginBus.wave!!.cy, 0.01f)
+
+            // 源点容器展开启用时，SharedHero 应自动静默，避免与容器展开叠出双封面重影
+            SharedHero.resetForTest()
+            val tok = SharedHero.allocToken()
+            SharedHero.register(HeroAnchorEntry(tok, "now:t9", "u9", "S", true, isTarget = false, tag = "bar", priority = 2) { rCardA })
+            SharedHero.capture("now:t9", "u9", "S", tag = "bar")
+            SharedHero.flyBack("now:t9")
+            assertNull(SharedHero.flight)
         } finally {
             AnimStyle.applyPlugin(null)
             OriginBus.resetForTest()
+            SharedHero.resetForTest()
             Plugins.delete(s.id)
             AnimStyle.style = prevStyle
         }

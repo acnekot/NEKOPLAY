@@ -162,7 +162,8 @@ object SharedHero {
 
     /** 点击源条目或播放条打开目标前武装直飞；传 tag 可在同屏存在多个同 key 封面时精准定位被点击项 */
     fun capture(key: String, url: String? = null, title: String = "", border: Boolean = true, tag: String = "") {
-        if (AnimStyle.off || key.isEmpty()) return
+        // 源点容器展开或点线面容器模式生效时由整块容器统一转场，避免再叠一层独立飞封面产生双影卡顿
+        if (AnimStyle.off || MotionEffects.originExpand || MotionEffects.geomContainer || key.isEmpty()) return
         val candidates = anchors.values.filter { it.key == key && !it.isTarget }
         val src = (if (tag.isNotEmpty()) candidates.lastOrNull { it.tag == tag } else null) ?: candidates.lastOrNull() ?: return
         val rect = src.getRect()?.takeIf { it.width > 4f && it.height > 4f } ?: return
@@ -191,7 +192,7 @@ object SharedHero {
 
     /** 主动从关闭中的目标锚点（如播放页大封面）回飞至前台优先级最高的源锚点（优先底栏 MiniBar/PlayerBar） */
     fun flyBack(key: String) {
-        if (AnimStyle.off || key.isEmpty()) return
+        if (AnimStyle.off || MotionEffects.originExpand || MotionEffects.geomContainer || key.isEmpty()) return
         val src = anchors.values.lastOrNull { it.key == key && it.isTarget } ?: return
         val fromRect = src.getRect()?.takeIf { it.width > 4f && it.height > 4f } ?: return
         val dstList = anchors.values.filter { it.key == key && !it.isTarget }.mapNotNull { entry ->

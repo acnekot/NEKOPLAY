@@ -56,13 +56,14 @@ import kotlinx.coroutines.launch
     // 手机版里「打开队列」的操作，在宽屏上改为打开右侧队列面板
     LaunchedEffect(nav.queue) { if (nav.queue) { nav.side = if (nav.side == 2) 0 else 2; nav.queue = false } }
     val playerDepth = animateFloatAsState(if (nav.player && MotionEffects.pageScale && !AnimStyle.off) 1f else 0f, Motion.page(), label = "wpDepth")
+    // 播放页完全覆盖后跳过底层重绘，且用单层遮罩替代整棵树 alpha<1 离屏 saveLayer，大幅降低桌面 GPU 填充率
+    val covered by remember { derivedStateOf { nav.player && (!MotionEffects.pageScale || AnimStyle.off || playerDepth.value >= 0.995f) } }
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().graphicsLayer {
+        Column(Modifier.fillMaxSize().layout { m, cs -> val pl = m.measure(cs); layout(pl.width, pl.height) { if (!covered) pl.place(0, 0) } }.graphicsLayer {
             val d = playerDepth.value
             if (d > 0.001f) {
                 val sc = 1f - 0.025f * d
                 scaleX = sc; scaleY = sc
-                alpha = 1f - 0.14f * d
             }
         }) {
             Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -81,6 +82,7 @@ import kotlinx.coroutines.launch
             }
             PlayerBar()
         }
+        if (!covered && playerDepth.value > 0.005f) Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black.copy(alpha = 0.22f * playerDepth.value)) })
         PlayerOverlay()
     }
 }
@@ -251,14 +253,15 @@ import kotlinx.coroutines.launch
     SideEffect { lastDepth = nav.stack.size }
 
     val spec: androidx.compose.animation.core.FiniteAnimationSpec<Float> = Motion.page()
-    val homeAlpha = animateFloatAsState(if (showHome) 1f else 0f, spec, label = "wh")
-    val libAlpha = animateFloatAsState(if (showLib) 1f else 0f, spec, label = "wl")
+    val fastOut: androidx.compose.animation.core.FiniteAnimationSpec<Float> = if (AnimStyle.off) androidx.compose.animation.core.snap() else tween(85)
+    val homeAlpha = animateFloatAsState(if (showHome) 1f else 0f, if (showHome) spec else fastOut, label = "wh")
+    val libAlpha = animateFloatAsState(if (showLib) 1f else 0f, if (showLib) spec else fastOut, label = "wl")
     val tabSlide = if (spatial) animateFloatAsState(if (nav.tab == 1) 1f else 0f, spec, label = "wts") else null
     val subDepth = if (spatial) animateFloatAsState(if (top != null) 1f else 0f, spec, label = "wsd") else null
 
     var wPx by remember { mutableFloatStateOf(1f) }
     Box(Modifier.fillMaxSize().onSizeChanged { wPx = it.width.toFloat().coerceAtLeast(1f) }) {
-        // 主页常驻：空间视差开启时切曲库向左顺滑推开，进子页面向左退 14% 并微缩形成视差衔接
+        // 主页常驻：空间视差开启时切曲库向左顺滑推开，进子页面快速淡出避免透明重影叠字
         Box(Modifier.fillMaxSize().layout { m, cs -> val pl = m.measure(cs); layout(pl.width, pl.height) { if (homeAlpha.value > 0.01f) pl.place(0, 0) } }.graphicsLayer {
             alpha = homeAlpha.value
             if (tabSlide != null && subDepth != null) {
@@ -287,19 +290,17 @@ import kotlinx.coroutines.launch
             if (AnimStyle.off || geomExp) fadeIn(androidx.compose.animation.core.snap()) togetherWith fadeOut(androidx.compose.animation.core.snap())
             else if (originExp) {
                 val to = OriginBus.originTransformOrigin(useClosing = !forward)
-                if (forward) (scaleIn(Motion.page(), 0.84f, to) + fadeIn(Motion.page())) togetherWith (scaleOut(Motion.standard(), 0.96f) + fadeOut(Motion.quick()))
-                else (scaleIn(Motion.page(), 0.96f) + fadeIn(Motion.page())) togetherWith (scaleOut(Motion.standard(), 0.84f, to) + fadeOut(Motion.quick()))
+                if (forward) (scaleIn(Motion.page(), 0.88f, to) + fadeIn(Motion.standard())) togetherWith fadeOut(tween(80))
+                else fadeIn(Motion.standard()) togetherWith (scaleOut(tween(150), 0.90f, to) + fadeOut(tween(110)))
             } else if (spatial) {
                 val scIn = if (MotionEffects.pageScale) scaleIn(Motion.page(), initialScale = 0.985f) else fadeIn(Motion.page())
-                val scOut = if (MotionEffects.pageScale) scaleOut(Motion.standard(), targetScale = 0.99f) else fadeOut(Motion.quick())
                 if (forward) {
-                    (slideInHorizontally(Motion.page()) { (it * .22f).toInt() } + fadeIn(Motion.page()) + scIn) togetherWith
-                        (slideOutHorizontally(Motion.standard()) { -(it * .12f).toInt() } + fadeOut(Motion.quick()) + scOut)
+                    (slideInHorizontally(Motion.page()) { (it * .18f).toInt() } + fadeIn(Motion.standard()) + scIn) togetherWith fadeOut(tween(80))
                 } else {
-                    (slideInHorizontally(Motion.page()) { -(it * .12f).toInt() } + fadeIn(Motion.page()) + scIn) togetherWith
-                        (slideOutHorizontally(Motion.standard()) { (it * .22f).toInt() } + fadeOut(Motion.quick()) + scOut)
+                    (slideInHorizontally(Motion.page()) { -(it * .10f).toInt() } + fadeIn(Motion.standard()) + scIn) togetherWith
+                        (slideOutHorizontally(tween(140)) { (it * .16f).toInt() } + fadeOut(tween(90)))
                 }
-            } else fadeIn(Motion.standard()) togetherWith fadeOut(Motion.quick())
+            } else fadeIn(Motion.standard()) togetherWith fadeOut(tween(80))
         }, label = "widePage") { k ->
             if (k != null) Box(Modifier.fillMaxSize().then(if (geomExp) Modifier.geomReveal(k, innerScale = false) else Modifier)) { PageContent(k) }
         }

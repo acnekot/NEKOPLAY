@@ -256,25 +256,25 @@ fun Modifier.originContainerExpand(
     return this.graphicsLayer {
         val p = progress().coerceIn(0f, 1f)
         val o = origin()
-        if (o == null || p >= 0.999f) {
+        if (o == null || p >= 0.995f) {
             alpha = if (p <= 0.001f) 0f else 1f
             clip = false
             return@graphicsLayer
         }
         val curW = (o.width + (size.width - o.width) * p).coerceAtLeast(1f)
         val curH = (o.height + (size.height - o.height) * p).coerceAtLeast(1f)
-        val minScale = max(o.width / size.width.coerceAtLeast(1f), o.height / size.height.coerceAtLeast(1f)).coerceIn(0.62f, 0.94f)
+        val minScale = max(o.width / size.width.coerceAtLeast(1f), o.height / size.height.coerceAtLeast(1f)).coerceIn(0.68f, 0.94f)
         val sc = minScale + (1f - minScale) * p
         val targetCx = o.center.x + (size.width * 0.5f - o.center.x) * p
         val targetCy = o.center.y + (size.height * 0.5f - o.center.y) * p
-        clip = true
+        clip = p < 0.96f
         this.shape = shape
         scaleX = sc
         scaleY = sc
-        translationX = (targetCx - size.width * 0.5f) * (1f - p) * 0.45f
-        translationY = (targetCy - size.height * 0.5f) * (1f - p) * 0.45f
-        // 避免缩到极小时突然消失：前 22% 丝滑淡入，收起最后 22% 丝滑融入源卡片
-        alpha = ((p / 0.22f).coerceIn(0f, 1f)) * (if (curW > 2f && curH > 2f) 1f else 0f)
+        translationX = (targetCx - size.width * 0.5f) * (1f - p) * 0.42f
+        translationY = (targetCy - size.height * 0.5f) * (1f - p) * 0.42f
+        // 仅在最初/末尾 12% 过渡淡入淡出，其余 88% 保持 alpha=1f 避免整屏离屏 saveLayer 开销
+        alpha = if (p < 0.12f) (p / 0.12f).coerceIn(0f, 1f) * (if (curW > 2f && curH > 2f) 1f else 0f) else 1f
     }
 }
 

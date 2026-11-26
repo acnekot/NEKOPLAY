@@ -5,6 +5,13 @@
 
 ## [未发布]
 
+### 性能与渲染修复
+- **彻底解决 Windows 端拖窗闪白、切换卡顿与页面透明重影**：
+  - 桌面端 JVM 统一升级为低停顿 **G1GC（`-XX:MaxGCPauseMillis=10`，堆 `48M–384M`）**，全平台补齐 `-Dsun.awt.noerasebackground=true`、`-Dskiko.buffering=TRIPLE` 与 64MB GPU 纹理/图片内存缓存，窗口底层背景色实时同步主题 `c.page` 彻底消除 Windows 拖窗右侧闪白条；Windows 拖边调整窗口尺寸按 ~60Hz 节流避免 D3D SwapChain 重建积压掉帧
+  - 移除 `Root` 宽窄屏切换的双树并发 `AnimatedContent(wide)` 以及 `PlayerOverlay` / `WidePlayerBody` 中的 `BoxWithConstraints`（`SubcomposeLayout`），拖窗越过 900dp 断点与缩放播放页/评论区不再全树双重渲染或花屏卡死
+  - 移除宽屏播放页展开时对整棵底层界面树施加 `alpha < 1` 导致的整屏离屏 `saveLayer` 渲染开销（改用单层轻遮罩并在播放页完全覆盖后跳过底层绘制），优化 `originContainerExpand` 减少 88% 离屏图层开销；启用源点容器或点线面容器模式时自动屏蔽重复的 `SharedHero` 独立飞封面，杜绝双封面重影打架
+  - 宽屏切页（`WideContent`）加快旧页退出淡出消除多层透明叠字重影；`TrackRow` 选中/悬停动效、`Modifier.press` 与下载角标全面改为按需懒分配与零协程短路，显著降低进入歌单/历史页的首帧协程峰值与滚动掉帧
+
 ## [0.6.8-nightly.20261127.1] - 2026-11-27
 
 预发布构建（全五端：Android / Windows / macOS / Linux / iOS）：为声明式插件页与插件管理页全面加入 `FlowRow` 自动换行，修复手机窄屏下插件选项与操作按钮显示不全的问题。

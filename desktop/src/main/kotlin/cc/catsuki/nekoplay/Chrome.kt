@@ -167,6 +167,7 @@ private fun DrawScope.square(col: Color, ox: Float, oy: Float, s: Float) {
                 val minW = window.minimumSize.width; val minH = window.minimumSize.height
                 var lastX = b0.x; var lastY = b0.y; var lastW = b0.width; var lastH = b0.height
                 var pendX = lastX; var pendY = lastY; var pendW = lastW; var pendH = lastH
+                val stepNs = if (System.getProperty("os.name").orEmpty().lowercase().contains("win")) 15_000_000L else 7_500_000L
                 var lastApplyNs = 0L
                 while (true) {
                     val ev = awaitPointerEvent()
@@ -187,8 +188,8 @@ private fun DrawScope.square(col: Color, ox: Float, oy: Float, s: Float) {
                     }
                     ev.changes.forEach { it.consume() }
                     val tNs = System.nanoTime()
-                    // 按 120Hz 帧步调合批 setBounds，消除高回报率鼠标下频繁重建 Swapchain 造成的卡顿与高 CPU
-                    if ((pendX != lastX || pendY != lastY || pendW != lastW || pendH != lastH) && tNs - lastApplyNs >= 7_500_000L) {
+                    // Windows D3D SwapChain 重建成本较高，按 ~60Hz 节流避免积压卡顿；macOS/Linux 按 ~120Hz 节流
+                    if ((pendX != lastX || pendY != lastY || pendW != lastW || pendH != lastH) && tNs - lastApplyNs >= stepNs) {
                         window.setBounds(pendX, pendY, pendW, pendH)
                         lastX = pendX; lastY = pendY; lastW = pendW; lastH = pendH
                         lastApplyNs = tNs

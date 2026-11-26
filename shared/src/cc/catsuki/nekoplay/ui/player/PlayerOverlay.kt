@@ -165,12 +165,16 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                 if (t == null) { Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { T("NO TRACK", 12, p.s, mono = true, ls = .08f) }; return@Column }
                 // 宽窗口（PC / 平板横屏）：左边封面 + 信息 + 控制，右边歌词
                 if (wideP) { Box(Modifier.weight(1f).fillMaxWidth()) { WidePlayerBody(t, st, showTr) { showTr = !showTr } }; return@Column }
-                BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+                var boxW by remember { mutableFloatStateOf(360f) }
+                var boxH by remember { mutableFloatStateOf(640f) }
+                Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().onSizeChanged {
+                    if (it.width > 0 && it.height > 0) { boxW = it.width.toFloat(); boxH = it.height.toFloat() }
+                }) {
                     val d = LocalDensity.current
-                    val w = with(d) { maxWidth.toPx() }
+                    val w = boxW
                     val bottomPad = with(d) { WindowInsets.navigationBars.getBottom(d).toFloat() }
                     val ctrlH = with(d) { 156.dp.toPx() } + bottomPad
-                    val free = with(d) { maxHeight.toPx() } - ctrlH
+                    val free = boxH - ctrlH
                     val dp = with(d) { 1.dp.toPx() }
                     // 下面要留给歌名、歌手、音质三行；矮屏这三行各只占一行，封面左右只留 12dp
                     val sh = Screen.short
@@ -302,17 +306,21 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
     // 仅在队列栏开关时跑弹簧插值；拖窗缩放时 queueAnim 恒定在 0 或 1，封面与左栏 1:1 实时贴合零追尾滞后
     val queueOpen = nav.side == 2
     val queueAnim = animateFloatAsState(if (queueOpen) 1f else 0f, if (AnimStyle.off) androidx.compose.animation.core.snap() else spring(1f, Anim.stiff(Spring.StiffnessMediumLow)), label = "qOpen")
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    var bodyW by remember { mutableStateOf(1080.dp) }
+    var bodyH by remember { mutableStateOf(720.dp) }
+    Box(Modifier.fillMaxSize().onSizeChanged {
+        if (it.width > 0 && it.height > 0) with(dens) { bodyW = it.width.toDp(); bodyH = it.height.toDp() }
+    }) {
     val sideKeys = PlayerLayout.keys(true, "side")
     val sideW0 = if (sideKeys.isEmpty()) 0.dp else 52.dp
     val chrome = 44.dp + 56.dp + sideW0 + 16.dp
-    val hLimit = minOf(maxHeight - 290.dp, 560.dp) * (UiPref.coverPct / 100f)
-    val coverClosed = minOf(hLimit, maxWidth * .5f - chrome).coerceAtLeast(200.dp)
-    val coverOpened = minOf(hLimit, (maxWidth - 363.dp) * .5f - chrome).coerceAtLeast(200.dp)
+    val hLimit = minOf(bodyH - 290.dp, 560.dp) * (UiPref.coverPct / 100f)
+    val coverClosed = minOf(hLimit, bodyW * .5f - chrome).coerceAtLeast(200.dp)
+    val coverOpened = minOf(hLimit, (bodyW - 363.dp) * .5f - chrome).coerceAtLeast(200.dp)
     val q = queueAnim.value
     val cover = coverClosed + (coverOpened - coverClosed) * q
     val leftW = cover + chrome + 56.dp
-    val rightTarget = (maxWidth - (if (queueOpen) 363.dp else 0.dp) - (if (queueOpen) coverOpened else coverClosed) - chrome - 56.dp).coerceAtLeast(160.dp)
+    val rightTarget = (bodyW - (if (queueOpen) 363.dp else 0.dp) - (if (queueOpen) coverOpened else coverClosed) - chrome - 56.dp).coerceAtLeast(160.dp)
     Row(Modifier.fillMaxSize()) {
         Box(Modifier.width(leftW).fillMaxHeight().clipToBounds(), contentAlignment = Alignment.CenterStart) {
             Row(Modifier.padding(start = 56.dp), verticalAlignment = Alignment.Bottom) {
