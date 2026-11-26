@@ -145,7 +145,10 @@ object Engine {
         audio.listener = object : Audio.Listener {
             override fun onPlaying(p: Boolean) {
                 state.value = state.value.copy(playing = p)
-                if (p) { errStreak = 0; startRampIn() }
+                if (p) {
+                    errStreak = 0; startRampIn()
+                    if (error.value?.let { it.startsWith("无法播放") || it.startsWith("播放失败") } == true) error.value = null
+                }
                 Plugins.emitEvent("onPlayState", org.json.JSONObject().put("playing", p).put("id", state.value.current?.id ?: ""))
             }
             override fun onBuffering(b: Boolean) { state.value = state.value.copy(loading = b) }
@@ -257,9 +260,13 @@ object Engine {
                 if (state.value.want && audio.isPlaying) startRampIn()
                 prefetchNext()
                 Store.saveQueue(state.value.queue, i, startAt)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                state.value = state.value.copy(loading = false)
-                error.value = "无法播放「${t.title}」：${e.message}"
+                if (state.value.current?.id == t.id) {
+                    state.value = state.value.copy(loading = false)
+                    error.value = "无法播放「${t.title}」：${e.message}"
+                }
             }
         }
     }
@@ -364,8 +371,6 @@ object Engine {
 
     private var prefs: KV? = null
     private fun cacheKey(id: String, level: String) = "${id}_$level"
-
-    /** 找已经完整缓存好的档位：从选中档位往下找（也接受更高档位） → (档位, 格式) */
     private fun cachedLevel(id: String): Pair<String, String>? {
         val q = q
         val order = Ncm.LEVELS.reversed().sortedBy { kotlin.math.abs(Ncm.LEVELS.indexOf(it) - q) }
@@ -376,15 +381,12 @@ object Engine {
         }
         return null
     }
-
-    /** 提前拿好下一首的播放地址，切歌更快 */
     private fun prefetchNext() {
         val s = state.value
         if (s.mode == Mode.SHUFFLE || s.queue.size < 2) return
         val n = s.queue[(s.index + 1) % s.queue.size]
         scope.launch { runCatching { if (cachedLevel(n.id) == null) Ncm.stream(n.id, q) } }
     }
-
     fun cacheBytes(): Long = runCatching { audio.cacheBytes() }.getOrDefault(0)
     fun clearCache() { runCatching { audio.clearCache() } }
     fun changeQuality(q: Int) { quality = q; prefs?.edit()?.putInt("q2", q)?.apply(); if (state.value.current != null) load(state.value.index, audio.isPlaying, audio.position) }

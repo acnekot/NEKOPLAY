@@ -342,7 +342,7 @@ private class MpvAudio : Audio {
                 if (pp > 0) { cmd("playlist-remove", "0"); java.awt.EventQueue.invokeLater { listener?.onAdvanced() } }
                 val buf = str("paused-for-cache") == "yes"
                 // 打开失败（地址打不开、解码 / 声卡初始化失败）：mpv 会回到空闲状态，以前界面一直停在 00:00 显示「播放中」
-                if (!failed && System.currentTimeMillis() - openedAt > 1500 && str("idle-active") == "yes") {
+                if (!failed && System.currentTimeMillis() - openedAt > 4000 && str("idle-active") == "yes" && str("path").isNullOrEmpty()) {
                     failed = true; opened = false; playing = false
                     val why = lastLogError()
                     java.awt.EventQueue.invokeLater { lastPlaying = false; listener?.onPlaying(false); listener?.onError("播放内核打不开这首歌" + (why?.let { "：$it" } ?: "") + "（日志：${logFile.absolutePath}）") }
