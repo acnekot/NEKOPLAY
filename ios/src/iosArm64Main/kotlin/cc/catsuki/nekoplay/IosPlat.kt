@@ -194,10 +194,14 @@ class IosPlat : PlatImpl {
     ) {
         val cb by rememberUpdatedState(intercept)
         val cookieCb by rememberUpdatedState(onCookie)
+        val ua = if (desktopUa) "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+            else "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
         val del = remember { WebDelegate { cb } }
         val loaded = remember { arrayOfNulls<String>(1) }
         val cleared = remember { booleanArrayOf(clearCookie.isNullOrBlank()) }
         val webRef = remember { arrayOfNulls<platform.WebKit.WKWebView>(1) }
+        val containerRef = remember { arrayOfNulls<UIView>(1) }
+        val uiDel = remember(ua) { WebUiDelegate({ containerRef[0] }, ua, del) }
         val cookieHost = remember(cookieUrl) { cookieUrl?.let { NSURL.URLWithString(it)?.host?.lowercase() }.orEmpty() }
         LaunchedEffect(cookieHost) {
             if (cookieHost.isEmpty()) return@LaunchedEffect
@@ -220,13 +224,22 @@ class IosPlat : PlatImpl {
             }
         }
         androidx.compose.ui.viewinterop.UIKitView(factory = {
-            platform.WebKit.WKWebView(frame = platform.CoreGraphics.CGRectZero.readValue(), configuration = platform.WebKit.WKWebViewConfiguration()).apply {
-                navigationDelegate = del
-                if (desktopUa) customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-                webRef[0] = this
+            UIView(frame = platform.CoreGraphics.CGRectZero.readValue()).also { container ->
+                containerRef[0] = container
+                val cfg = platform.WebKit.WKWebViewConfiguration().apply {
+                    preferences.javaScriptCanOpenWindowsAutomatically = true
+                }
+                val w = platform.WebKit.WKWebView(frame = container.bounds, configuration = cfg).apply {
+                    autoresizingMask = UIViewAutoresizingFlexibleWidth or UIViewAutoresizingFlexibleHeight
+                    navigationDelegate = del
+                    UIDelegate = uiDel
+                    customUserAgent = ua
+                }
+                webRef[0] = w
+                container.addSubview(w)
             }
-        }, modifier = modifier, update = { w ->
-            webRef[0] = w
+        }, modifier = modifier, update = { _ ->
+            val w = webRef[0] ?: return@UIKitView
             if (loaded[0] != url) {
                 loaded[0] = url
                 val load = { NSURL.URLWithString(url)?.let { w.loadRequest(NSURLRequest.requestWithURL(it)) }; Unit }
@@ -302,11 +315,38 @@ private class JsonKV(val f: File) : KV {
 }
 
 
-/** 网页跳转拦截（QQ 网页登录） */
+/** 网页跳转拦截与 OAuth 弹窗容器支持 */
 private class WebDelegate(val cb: () -> ((String) -> Boolean)) : NSObject(), platform.WebKit.WKNavigationDelegateProtocol {
     override fun webView(webView: platform.WebKit.WKWebView, decidePolicyForNavigationAction: platform.WebKit.WKNavigationAction, decisionHandler: (platform.WebKit.WKNavigationActionPolicy) -> Unit) {
         val u = decidePolicyForNavigationAction.request.URL?.absoluteString ?: ""
         val main = decidePolicyForNavigationAction.targetFrame?.mainFrame ?: true
         decisionHandler(if (main && cb()(u)) platform.WebKit.WKNavigationActionPolicy.WKNavigationActionPolicyCancel else platform.WebKit.WKNavigationActionPolicy.WKNavigationActionPolicyAllow)
+    }
+}
+
+private class WebUiDelegate(
+    private val containerRef: () -> UIView?,
+    private val ua: String,
+    private val navDel: WebDelegate,
+) : NSObject(), platform.WebKit.WKUIDelegateProtocol {
+    override fun webView(
+        webView: platform.WebKit.WKWebView,
+        createWebViewWithConfiguration: platform.WebKit.WKWebViewConfiguration,
+        forNavigationAction: platform.WebKit.WKNavigationAction,
+        windowFeatures: platform.WebKit.WKWindowFeatures,
+    ): platform.WebKit.WKWebView? {
+        val host = containerRef() ?: return null
+        val child = platform.WebKit.WKWebView(frame = host.bounds, configuration = createWebViewWithConfiguration).apply {
+            autoresizingMask = UIViewAutoresizingFlexibleWidth or UIViewAutoresizingFlexibleHeight
+            customUserAgent = ua
+            navigationDelegate = navDel
+            UIDelegate = this@WebUiDelegate
+        }
+        host.addSubview(child)
+        return child
+    }
+
+    override fun webViewDidClose(webView: platform.WebKit.WKWebView) {
+        webView.removeFromSuperview()
     }
 }

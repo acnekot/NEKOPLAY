@@ -31,6 +31,7 @@ import java.io.File
 
 /** 安卓平台实现 */
 private const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+private const val MOBILE_UA = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
 
 class AndroidPlat(private val ctx: Context) : PlatImpl {
     companion object {
@@ -205,6 +206,21 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
         val info by rememberUpdatedState(onInfo)
         val cookieCb by rememberUpdatedState(onCookie)
         val loaded = remember { arrayOfNulls<String>(1) }
+        val mainRef = remember { arrayOfNulls<android.webkit.WebView>(1) }
+        val containerRef = remember { arrayOfNulls<android.widget.FrameLayout>(1) }
+        val popups = remember { ArrayList<android.webkit.WebView>() }
+        var hasPopup by remember { mutableStateOf(false) }
+        fun closePopup(w: android.webkit.WebView) {
+            containerRef[0]?.removeView(w)
+            popups.remove(w)
+            runCatching { w.stopLoading(); w.destroy() }
+            hasPopup = popups.isNotEmpty()
+        }
+        androidx.activity.compose.BackHandler(enabled = hasPopup) {
+            popups.lastOrNull()?.let { top ->
+                if (top.canGoBack()) top.goBack() else closePopup(top)
+            }
+        }
         LaunchedEffect(cookieUrl, clearCookie) {
             val target = cookieUrl?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
             delay(800)
@@ -214,42 +230,99 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
                 delay(1200)
             }
         }
-        androidx.compose.ui.viewinterop.AndroidView(factory = { ctx ->
-            android.webkit.WebView(ctx).apply {
-                layoutParams = android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
-                settings.javaScriptEnabled = true; settings.domStorageEnabled = true; settings.databaseEnabled = true
-                settings.loadWithOverviewMode = true; settings.useWideViewPort = true
-                settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                settings.userAgentString = if (desktopUa) DESKTOP_UA else settings.userAgentString.replace("; wv", "")
-                val cm = android.webkit.CookieManager.getInstance()
-                cm.setAcceptCookie(true)
-                cm.setAcceptThirdPartyCookies(this, true)
-                if (!clearCookie.isNullOrBlank() && !cookieUrl.isNullOrBlank()) {
-                    val host = android.net.Uri.parse(cookieUrl).host.orEmpty()
-                    cm.setCookie(cookieUrl, "$clearCookie=; Max-Age=0; Path=/")
-                    if (host.isNotEmpty()) cm.setCookie(cookieUrl, "$clearCookie=; Max-Age=0; Path=/; Domain=.$host")
-                    cm.flush()
-                }
-                webChromeClient = object : android.webkit.WebChromeClient() {
-                    override fun onProgressChanged(v: android.webkit.WebView, p: Int) { info(if (p < 100) "加载中 $p% · ${android.net.Uri.parse(v.url ?: "").host ?: ""}" else "") }
-                }
-                webViewClient = object : android.webkit.WebViewClient() {
-                    override fun shouldOverrideUrlLoading(v: android.webkit.WebView, r: android.webkit.WebResourceRequest): Boolean = r.isForMainFrame && cb(r.url.toString())
-                    override fun onPageFinished(v: android.webkit.WebView, pageUrl: String?) {
-                        if (!cookieUrl.isNullOrBlank()) {
-                            runCatching { android.webkit.CookieManager.getInstance().getCookie(cookieUrl) }
-                                .getOrNull()?.takeIf { it.isNotBlank() }?.let { cookieCb(it) }
+        fun setupSettings(w: android.webkit.WebView) {
+            w.layoutParams = android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+            w.settings.javaScriptEnabled = true
+            w.settings.domStorageEnabled = true
+            w.settings.databaseEnabled = true
+            w.settings.javaScriptCanOpenWindowsAutomatically = true
+            w.settings.setSupportMultipleWindows(true)
+            w.settings.loadWithOverviewMode = true
+            w.settings.useWideViewPort = true
+            w.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            w.settings.userAgentString = if (desktopUa) DESKTOP_UA else MOBILE_UA
+            val cm = android.webkit.CookieManager.getInstance()
+            cm.setAcceptCookie(true)
+            cm.setAcceptThirdPartyCookies(w, true)
+        }
+        fun makeChrome(ctx: Context, container: android.widget.FrameLayout): android.webkit.WebChromeClient = object : android.webkit.WebChromeClient() {
+            override fun onProgressChanged(v: android.webkit.WebView, p: Int) {
+                info(if (p < 100) "加载中 $p% · ${android.net.Uri.parse(v.url ?: "").host ?: ""}" else "")
+            }
+            override fun onCreateWindow(view: android.webkit.WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
+                val transport = resultMsg?.obj as? android.webkit.WebView.WebViewTransport ?: return false
+                val child = android.webkit.WebView(ctx).apply {
+                    setupSettings(this)
+                    webChromeClient = makeChrome(ctx, container)
+                    webViewClient = object : android.webkit.WebViewClient() {
+                        override fun shouldOverrideUrlLoading(v: android.webkit.WebView, r: android.webkit.WebResourceRequest): Boolean {
+                            val u = r.url.toString()
+                            return if (u.startsWith("http") || u.startsWith("about:")) false else r.isForMainFrame && cb(u)
+                        }
+                        override fun onPageFinished(v: android.webkit.WebView, pageUrl: String?) {
+                            if (!cookieUrl.isNullOrBlank()) {
+                                runCatching { android.webkit.CookieManager.getInstance().getCookie(cookieUrl) }
+                                    .getOrNull()?.takeIf { it.isNotBlank() }?.let { cookieCb(it) }
+                            }
                         }
                     }
-                    override fun onReceivedError(v: android.webkit.WebView, r: android.webkit.WebResourceRequest, e: android.webkit.WebResourceError) {
-                        if (r.isForMainFrame) info("加载失败：${e.description}（${e.errorCode}）")
+                }
+                popups.add(child)
+                container.addView(child)
+                hasPopup = true
+                transport.webView = child
+                resultMsg.sendToTarget()
+                return true
+            }
+            override fun onCloseWindow(window: android.webkit.WebView?) {
+                if (window != null && window in popups) closePopup(window)
+            }
+        }
+        androidx.compose.ui.viewinterop.AndroidView(factory = { ctx ->
+            android.widget.FrameLayout(ctx).also { container ->
+                containerRef[0] = container
+                val wv = android.webkit.WebView(ctx).apply {
+                    setupSettings(this)
+                    if (!clearCookie.isNullOrBlank() && !cookieUrl.isNullOrBlank()) {
+                        val cm = android.webkit.CookieManager.getInstance()
+                        val host = android.net.Uri.parse(cookieUrl).host.orEmpty()
+                        cm.setCookie(cookieUrl, "$clearCookie=; Max-Age=0; Path=/")
+                        if (host.isNotEmpty()) cm.setCookie(cookieUrl, "$clearCookie=; Max-Age=0; Path=/; Domain=.$host")
+                        cm.flush()
                     }
-                    override fun onReceivedHttpError(v: android.webkit.WebView, r: android.webkit.WebResourceRequest, e: android.webkit.WebResourceResponse) {
-                        if (r.isForMainFrame) info("加载失败：HTTP ${e.statusCode}")
+                    webChromeClient = makeChrome(ctx, container)
+                    webViewClient = object : android.webkit.WebViewClient() {
+                        override fun shouldOverrideUrlLoading(v: android.webkit.WebView, r: android.webkit.WebResourceRequest): Boolean = r.isForMainFrame && cb(r.url.toString())
+                        override fun onPageFinished(v: android.webkit.WebView, pageUrl: String?) {
+                            if (!cookieUrl.isNullOrBlank()) {
+                                runCatching { android.webkit.CookieManager.getInstance().getCookie(cookieUrl) }
+                                    .getOrNull()?.takeIf { it.isNotBlank() }?.let { cookieCb(it) }
+                            }
+                        }
+                        override fun onReceivedError(v: android.webkit.WebView, r: android.webkit.WebResourceRequest, e: android.webkit.WebResourceError) {
+                            if (r.isForMainFrame) info("加载失败：${e.description}（${e.errorCode}）")
+                        }
+                        override fun onReceivedHttpError(v: android.webkit.WebView, r: android.webkit.WebResourceRequest, e: android.webkit.WebResourceResponse) {
+                            if (r.isForMainFrame) info("加载失败：HTTP ${e.statusCode}")
+                        }
                     }
                 }
+                mainRef[0] = wv
+                container.addView(wv)
             }
-        }, modifier = modifier, update = { w -> if (loaded[0] != url) { loaded[0] = url; w.loadUrl(url) } }, onRelease = { it.destroy() })
+        }, modifier = modifier, update = { _ ->
+            val w = mainRef[0]
+            if (w != null && loaded[0] != url) { loaded[0] = url; w.loadUrl(url) }
+        }, onRelease = { container ->
+            popups.toList().forEach { runCatching { container.removeView(it); it.destroy() } }
+            popups.clear()
+            mainRef[0]?.let { runCatching { container.removeView(it); it.destroy() } }
+            mainRef[0] = null
+            containerRef[0] = null
+        })
     }
 
     @Composable override fun BackHandler(enabled: Boolean, onBack: () -> Unit) = androidx.activity.compose.BackHandler(enabled, onBack)

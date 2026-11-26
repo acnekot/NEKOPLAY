@@ -62,10 +62,19 @@ object FxWebView {
         javafx.embed.swing.JFXPanel().also { p ->
             javafx.application.Platform.setImplicitExit(false)
             javafx.application.Platform.runLater {
+                val stack = javafx.scene.layout.StackPane()
                 val wv = javafx.scene.web.WebView()
                 val e = wv.engine
-                e.userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-                e.createPopupHandler = javafx.util.Callback { e }
+                val ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                e.userAgent = ua
+                e.createPopupHandler = javafx.util.Callback {
+                    val child = javafx.scene.web.WebView()
+                    child.engine.userAgent = ua
+                    child.engine.onVisibilityChanged = javafx.event.EventHandler { ev -> if (!ev.data) stack.children.remove(child) }
+                    stack.children.add(child)
+                    child.engine
+                }
+                stack.children.add(wv)
                 e.locationProperty().addListener { _, _, u ->
                     if (u.isNullOrEmpty()) return@addListener
                     if (stop?.containsMatchIn(u) == true) { holder.stopped = true; e.loadWorker.cancel() }
@@ -73,7 +82,7 @@ object FxWebView {
                 }
                 e.loadWorker.stateProperty().addListener { _, _, st -> if (st == javafx.concurrent.Worker.State.SUCCEEDED) java.awt.EventQueue.invokeLater { info("已打开：" + (e.title ?: e.location.take(80))) } }
                 e.loadWorker.exceptionProperty().addListener { _, _, ex -> if (ex != null && !holder.stopped) java.awt.EventQueue.invokeLater { info("加载出错：${ex.message}") } }
-                p.scene = javafx.scene.Scene(wv)
+                p.scene = javafx.scene.Scene(stack)
                 holder.engine = e
                 holder.pending?.let { e.load(it) }; holder.pending = null
             }

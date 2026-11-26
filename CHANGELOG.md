@@ -10,7 +10,7 @@
   - Android 端引入 `media3-exoplayer-hls` 并在 `ExoAudio` 中为 HLS 流直连 `HlsMediaSource`（自动绕过单文件 `SimpleCache` 键值冲突），解决插件返回 `.m3u8` 分段音频流时 Android 无法播放或误判已缓存的问题
   - 下载队列（`Downloads`）新增 HLS 流格式拦截提示，避免误将 `.m3u8` 索引文本存成损坏音频文件；Android / iOS / CarPlay 通知栏封面地址不再盲目拼接无关参数
 - **插件内嵌网页直接登录与 Cookie 自动捕获**：
-  - `PlatImpl.WebPage` 与 `PluginLoginUi` 新增通用 `cookieUrl` / `cookieMatch` / `clearCookie` 能力，在 Android（`WebView` + `CookieManager`）、iOS（`WKWebView` + `WKHTTPCookieStore`）、Windows x64（`WebView2`）与 Linux（`JavaFX WebView`）上支持内嵌目标网页直接登录并在登录成功后自动捕获凭证回调 `loginWebDone(url, cookie)`；含原生扫码的插件在桌面端仍保持优先原生扫码不受影响，仅支持网页登录的插件同步提供「网页直接登录 / Cookie 粘贴」切换标签，macOS 端提供「在浏览器打开登录页」一键跳转。
+  - `PlatImpl.WebPage` 与 `PluginLoginUi` 新增通用 `cookieUrl` / `cookieMatch` / `clearCookie` 能力，在 Android（`WebView` + `CookieManager`）、iOS（`WKWebView` + `WKHTTPCookieStore`）、Windows x64（`WebView2`）与 Linux（`JavaFX WebView`）上支持内嵌目标网页直接登录并在登录成功后自动捕获凭证回调 `loginWebDone(url, cookie)`；同步补齐 Android / iOS / Linux 内嵌网页的多窗口弹窗（`window.open` / `window.opener`）与标准浏览器 UA 兼容，修复第三方 OAuth 弹窗按钮点击无跳转的问题；含原生扫码的插件在桌面端仍保持优先原生扫码不受影响，仅支持网页登录的插件同步提供「网页直接登录 / Cookie 粘贴」切换标签，macOS 端提供「在浏览器打开登录页」一键跳转。
 - **Cookie 专属登录插件入口补齐**：`JsSource` 新增统一 `canLogin` 判定（覆盖扫码、网页与仅支持 `setCookie` 的音源插件），在设置账号栏、插件管理页、曲库与头像菜单中完整展示登录入口。
 
 ## [0.6.8-nightly.20261127.2] - 2026-11-27
