@@ -74,14 +74,14 @@ import java.util.Calendar
         }
         // 每个能登录的插件一行；首页来源（主插件）的账号就是上面这个
         if (Plugins.enabledSources.isEmpty()) item { NavRow("还没有音源插件", "本体只带本地播放；到「插件」导入音源插件或功能插件脚本", null) { nav.push(Page.PluginMgr) } }
-        Plugins.enabledSources.filter { it.has("account") || it.has("loginQr") }.forEach { s ->
+        Plugins.enabledSources.filter { it.has("account") || it.canLogin }.forEach { s ->
             item(key = "acc" + s.id) {
                 val acc by PluginStore.accounts.collectAsState()
                 val name = acc[s.id]
                 val isMain = s.id == Plugins.main()?.id
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp).bottomLine().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) { T(s.name + if (isMain) " · 主账号" else "", 16, w = 700); T(if (name == null) "未登录 · 登录后可使用它的歌单和「我喜欢」" else "已登录 · $name", 13, p.s, lh = 1.4f) }
-                    if (name == null) { if (s.has("loginQr")) LinkBtn("登录", 14) { nav.push(Page.PluginLogin(s.id)) } }
+                    if (name == null) { if (s.canLogin) LinkBtn("登录", 14) { nav.push(Page.PluginLogin(s.id)) } }
                     else LinkBtn("退出登录", 14, p.bad) { confirmLogout(nav, s.name) { if (isMain) Store.logout() else PluginStore.logout(s.id) } }
                 }
             }

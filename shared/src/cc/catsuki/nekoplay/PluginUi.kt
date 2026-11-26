@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 /** 能力名 → 给人看的说明 */
 private val CAP_NAMES = linkedMapOf(
     "search" to "搜索", "stream" to "播放", "lyric" to "歌词", "playlist" to "歌单", "album" to "专辑", "artist" to "歌手",
-    "toplists" to "排行榜", "myPlaylists" to "我的歌单", "like" to "收藏", "loginQr" to "扫码登录", "loginWeb" to "网页登录",
+    "toplists" to "排行榜", "myPlaylists" to "我的歌单", "like" to "收藏", "loginQr" to "扫码登录", "loginWeb" to "网页登录", "setCookie" to "Cookie 登录",
     "daily" to "每日推荐", "fm" to "私人 FM", "comments" to "评论", "recMvs" to "MV", "hotRadios" to "电台", "cloud" to "云盘",
     "manifest" to "功能声明", "profile" to "动效引擎", "config" to "热更新配置", "render" to "独立页面", "onTrackChange" to "切歌监听", "onPlayState" to "播控监听", "transformLyric" to "歌词处理", "action" to "快捷动作",
 )
@@ -115,7 +115,7 @@ internal fun confirmPluginNotice(nav: Nav, proceed: () -> Unit) {
                 }
                 FlowRow(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     val acc by PluginStore.accounts.collectAsState()
-                    if (on && s.has("loginQr")) {
+                    if (on && s.canLogin) {
                         if (acc[s.id] == null) LinkBtn("登录", 13) { nav.push(Page.PluginLogin(s.id)) }
                         else LinkBtn("退出 ${acc[s.id]}", 13) { confirmLogout(nav, s.name) { scope.launch { runCatching { s.call("logout") }; PluginStore.refresh() } } }
                     }
@@ -146,9 +146,9 @@ fun androidx.compose.foundation.lazy.LazyListScope.pluginLibrary(nav: Nav, excep
         val acc by PluginStore.accounts.collectAsState()
         val pls by PluginStore.playlists.collectAsState()
         Column {
-            list.filter { it.id != except && Plugins.on(it.id) && (it.has("myPlaylists") || it.has("loginQr")) }.forEach { s ->
+            list.filter { it.id != except && Plugins.on(it.id) && (it.has("myPlaylists") || it.canLogin) }.forEach { s ->
                 Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow(s.name.uppercase(), 12.dp) { acc[s.id]?.let { T(it, 13, c.s) } } }
-                if (acc[s.id] == null && s.has("loginQr")) ListRow({ IconCover(NIcons.chevronRight, 56.dp) }, "登录${s.name}", "登录后在这里看到它的歌单") { nav.push(Page.PluginLogin(s.id)) }
+                if (acc[s.id] == null && s.canLogin) ListRow({ IconCover(NIcons.chevronRight, 56.dp) }, "登录${s.name}", "登录后在这里看到它的歌单") { nav.push(Page.PluginLogin(s.id)) }
                 (pls[s.id] ?: emptyList()).forEach { pl ->
                     ListRow({ if (pl.liked) LikedCover(pl.cover, 56.dp) else Cover(pl.cover, 56.dp, pl.name) }, pl.name, (if (pl.mine) "" else "歌单 · ") + "${two(pl.count)} 首") { nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
                 }

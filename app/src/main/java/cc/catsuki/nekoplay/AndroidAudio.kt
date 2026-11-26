@@ -11,6 +11,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.ContentMetadata
@@ -18,6 +19,7 @@ import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import java.io.File
 
@@ -34,11 +36,13 @@ class ExoAudio(private val c: Context) : Audio {
     val exo: ExoPlayer
     val player: Player
     private val cache = SimpleCache(File(c.cacheDir, "audio"), LeastRecentlyUsedCacheEvictor(1024L * 1024 * 1024), StandaloneDatabaseProvider(c))
+    private val upstream: DataSource.Factory
+    private val hlsFactory: HlsMediaSource.Factory
     init {
         val lc = DefaultLoadControl.Builder().setBufferDurationsMs(15_000, 25_000, 1_500, 4_000).setTargetBufferBytes(4 * 1024 * 1024).build()
         val http = DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0").setConnectTimeoutMs(10_000).setReadTimeoutMs(15_000)
         // 地址里带账号密码（WebDAV 音乐 https://用户:密码@主机/…）：去掉并改成 Basic 认证头；特定 CDN 自动补 Referer 防 403
-        val upstream = androidx.media3.datasource.ResolvingDataSource.Factory(http) { spec ->
+        upstream = androidx.media3.datasource.ResolvingDataSource.Factory(http) { spec ->
             val host = spec.uri.host.orEmpty().lowercase()
             val s0 = if ("bilivideo" in host || "hdslb" in host || "bilibili" in host || "akamaized" in host) {
                 spec.withAdditionalHeaders(mapOf("Referer" to "https://www.bilibili.com/", "Origin" to "https://www.bilibili.com"))
@@ -48,6 +52,7 @@ class ExoAudio(private val c: Context) : Audio {
             else s0.withUri(s0.uri.buildUpon().encodedAuthority(s0.uri.encodedAuthority!!.substringAfter('@')).build())
                 .withAdditionalHeaders(mapOf("Authorization" to "Basic " + android.util.Base64.encodeToString(android.net.Uri.decode(ui).toByteArray(), android.util.Base64.NO_WRAP)))
         }
+        hlsFactory = HlsMediaSource.Factory(upstream)
         val ds = CacheDataSource.Factory().setCache(cache).setUpstreamDataSourceFactory(upstream).setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         exo = ExoPlayer.Builder(c).setLoadControl(lc).setMediaSourceFactory(DefaultMediaSourceFactory(ds))
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
@@ -80,25 +85,35 @@ class ExoAudio(private val c: Context) : Audio {
             override fun hasPreviousMediaItem() = true
         }
     }
+    private fun isHls(url: String?) = url != null && (url.substringBefore('?').endsWith(".m3u8", ignoreCase = true) || ".m3u8" in url.lowercase())
+    private fun artworkUri(cover: String?) = cover?.let { android.net.Uri.parse(if ("music.126.net" in it && '?' !in it) "$it?param=512y512" else it) }
     override fun open(url: String?, cacheKey: String, startMs: Long, autoplay: Boolean, meta: Track) {
-        val m = MediaMetadata.Builder().setTitle(meta.title).setArtist(meta.artist).setAlbumTitle(meta.album)
-            .setArtworkUri(meta.cover?.let { android.net.Uri.parse("$it?param=512y512") }).build()
-        val item = MediaItem.Builder().setUri(url ?: "cache://${meta.id}").setCustomCacheKey(cacheKey).setMediaId(meta.id).setMediaMetadata(m).build()
-        if (url?.startsWith("file:") == true || url?.startsWith("content:") == true) exo.setMediaSource(androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(c)).createMediaSource(item), startMs)
-        else exo.setMediaItem(item, startMs)
+        val hls = isHls(url)
+        val item = item(url, cacheKey, meta, withCacheKey = !hls)
+        when {
+            url?.startsWith("file:") == true || url?.startsWith("content:") == true ->
+                exo.setMediaSource(androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(c)).createMediaSource(item), startMs)
+            hls -> exo.setMediaSource(hlsFactory.createMediaSource(item), startMs)
+            else -> exo.setMediaItem(item, startMs)
+        }
         if (lastRateSpeed != 1f || lastRatePitch) { lastRateSpeed = 1f; lastRatePitch = false; runCatching { exo.playbackParameters = androidx.media3.common.PlaybackParameters.DEFAULT } }
         exo.prepare(); exo.playWhenReady = autoplay
     }
-    private fun item(url: String?, cacheKey: String, meta: Track): MediaItem {
+    private fun item(url: String?, cacheKey: String, meta: Track, withCacheKey: Boolean = true): MediaItem {
         val m = MediaMetadata.Builder().setTitle(meta.title).setArtist(meta.artist).setAlbumTitle(meta.album)
-            .setArtworkUri(meta.cover?.let { android.net.Uri.parse("$it?param=512y512") }).build()
-        return MediaItem.Builder().setUri(url ?: "cache://${meta.id}").setCustomCacheKey(cacheKey).setMediaId(meta.id).setMediaMetadata(m).build()
+            .setArtworkUri(artworkUri(meta.cover)).build()
+        return MediaItem.Builder().setUri(url ?: "cache://${meta.id}").apply { if (withCacheKey) setCustomCacheKey(cacheKey) }.setMediaId(meta.id).setMediaMetadata(m).build()
     }
     override fun queueNext(url: String?, cacheKey: String, meta: Track) {
         clearNext()
-        val it = item(url, cacheKey, meta)
-        if (url?.startsWith("file:") == true || url?.startsWith("content:") == true) exo.addMediaSource(androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(c)).createMediaSource(it))
-        else exo.addMediaItem(it)
+        val hls = isHls(url)
+        val it = item(url, cacheKey, meta, withCacheKey = !hls)
+        when {
+            url?.startsWith("file:") == true || url?.startsWith("content:") == true ->
+                exo.addMediaSource(androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(androidx.media3.datasource.DefaultDataSource.Factory(c)).createMediaSource(it))
+            hls -> exo.addMediaSource(hlsFactory.createMediaSource(it))
+            else -> exo.addMediaItem(it)
+        }
     }
     override fun clearNext() { val n = exo.mediaItemCount; val cur = exo.currentMediaItemIndex; if (n > cur + 1) exo.removeMediaItems(cur + 1, n) }
     override fun play() = exo.play()

@@ -87,6 +87,8 @@ class JsSource(val file: File) {
     var error by mutableStateOf<String?>(null); private set
     val isRunning get() = js != null
     fun has(cap: String) = cap in caps
+    /** 是否支持任意登录方式（扫码 / 网页 / Cookie） */
+    val canLogin: Boolean get() = has("loginQr") || has("loginWeb") || has("setCookie")
     suspend fun start(): Boolean = lock.withLock {
         lastUsedAt = System.currentTimeMillis()
         if (js != null) return true

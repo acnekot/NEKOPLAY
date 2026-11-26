@@ -5,6 +5,12 @@
 
 ## [未发布]
 
+### 新增与修复
+- **全端 HLS（`.m3u8`）音频流兼容增强**：
+  - Android 端引入 `media3-exoplayer-hls` 并在 `ExoAudio` 中为 HLS 流直连 `HlsMediaSource`（自动绕过单文件 `SimpleCache` 键值冲突），解决插件返回 `.m3u8` 分段音频流时 Android 无法播放或误判已缓存的问题
+  - 下载队列（`Downloads`）新增 HLS 流格式拦截提示，避免误将 `.m3u8` 索引文本存成损坏音频文件；Android / iOS / CarPlay 通知栏封面地址不再盲目拼接无关参数
+- **Cookie 专属登录插件入口补齐**：`JsSource` 新增统一 `canLogin` 判定（覆盖扫码、网页与仅支持 `setCookie` 的音源插件），在设置账号栏、插件管理页、曲库与头像菜单中完整展示登录入口。
+
 ## [0.6.8-nightly.20261127.2] - 2026-11-27
 
 预发布构建（全五端：Android / Windows / macOS / Linux / iOS）：全面根治 Windows 端拖窗闪白、切页卡顿与双封面/透明叠字重影，并将 3D 封面墙鼠标跟随升级为 1:1 零延迟实时跟踪。

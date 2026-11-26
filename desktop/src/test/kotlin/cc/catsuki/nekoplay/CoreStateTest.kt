@@ -491,4 +491,42 @@ class CoreStateTest {
             Store.flushRecentsSync()
         }
     }
+
+    @Test fun cookieOnlySourcePluginExposesCanLogin() = runBlocking {
+        TestEnv.init()
+        val cookieSrc = """
+            // @id _test_cookie_src
+            // @name Cookie Source
+            // @type source
+            // @version 1.0.0
+            // @api 2
+            nk.register({
+              search() { return []; },
+              stream() { return null; },
+              setCookie(raw) { nk.store.set('ck', raw); },
+              account() { return null; }
+            });
+        """.trimIndent()
+        val plainSrc = """
+            // @id _test_plain_src
+            // @name Plain Source
+            // @type source
+            // @version 1.0.0
+            // @api 2
+            nk.register({
+              search() { return []; },
+              stream() { return null; }
+            });
+        """.trimIndent()
+        val s1 = Plugins.import(cookieSrc)
+        val s2 = Plugins.import(plainSrc)
+        try {
+            assertTrue(s1.has("setCookie") && !s1.has("loginQr") && !s1.has("loginWeb"))
+            assertTrue(s1.canLogin)
+            assertFalse(s2.canLogin)
+        } finally {
+            Plugins.delete(s1.id)
+            Plugins.delete(s2.id)
+        }
+    }
 }

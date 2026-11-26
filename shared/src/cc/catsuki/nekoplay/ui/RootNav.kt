@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
         T(prof?.name ?: tr("本地用户"), 15, w = 800, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         val acc by PluginStore.accounts.collectAsState()
         (listOfNotNull(prof?.let { tr("我的主页") to Page.User(it.uid, it.name) }, tr("设置") to Page.Settings) +
-            Plugins.enabled.filter { it.has("loginQr") || it.has("loginWeb") }.filter { acc[it.id] == null }.map { "${tr("登录")} ${it.name}" to Page.PluginLogin(it.id) }).forEach { (t, pg) ->
+            Plugins.enabled.filter { it.canLogin }.filter { acc[it.id] == null }.map { "${tr("登录")} ${it.name}" to Page.PluginLogin(it.id) }).forEach { (t, pg) ->
             Box(Modifier.fillMaxWidth().height(48.dp).press { nav.menu = false; nav.player = false; nav.push(pg) }.drawBehind { drawRect(p.l1, size = androidx.compose.ui.geometry.Size(size.width, 1f)) }.padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart) { T(t, 15) }
         }

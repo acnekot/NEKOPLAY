@@ -115,6 +115,9 @@ object Downloads {
         val tmp = File(dir, ".${t.id}.part")
         try {
             val s = Ncm.stream(t.id, quality)
+            if (s.url.substringBefore('?').endsWith(".m3u8", ignoreCase = true) || ".m3u8" in s.url.lowercase()) {
+                throw Exception("HLS 流媒体暂不支持离线下载")
+            }
             val ext = s.format.ifEmpty { "mp3" }
             val base = safe("${t.artist} - ${t.title}")
             var f = File(dir, "$base.$ext")

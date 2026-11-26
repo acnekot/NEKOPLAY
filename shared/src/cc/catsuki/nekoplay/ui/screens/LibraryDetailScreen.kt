@@ -101,7 +101,7 @@ import java.util.Calendar
                 }
             }
         }
-        if (main != null && prof == null && main.has("loginQr")) item {
+        if (main != null && prof == null && main.canLogin) item {
             Column(Modifier.padding(vertical = 24.dp)) {
                 T("NOT LOGGED IN", 12, c.s, mono = true, lines = 2, ls = .06f, lh = 1.7f)
                 Spacer(Modifier.height(12.dp)); ActionRow { PrimaryBar("登录" + main.name, NIcons.chevronRight, Modifier.weight(1f)) { nav.push(Page.PluginLogin(main.id)) } }
