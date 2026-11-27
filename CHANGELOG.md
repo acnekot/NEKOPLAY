@@ -5,12 +5,19 @@
 
 ## [未发布]
 
+## [0.6.8-nightly.20261127.4] - 2026-11-27
+
+预发布构建（全五端：Android / Windows / macOS / Linux / iOS）：搜索页歌单搜索增强（类型预选、滚动翻页、「我的歌单」匹配），核心模块瘦身拆分与回归单测补齐，Android 内嵌登录合并当前页 Cookie。
+
 ### 搜索
 - **搜索页歌单搜索增强**：结果类型栏（单曲 / 专辑 / 歌手 / 歌单 / 用户）在搜索前即可预选，不再只在出结果后才出现；所有类型支持滚动到底自动翻页加载（按 id 去重，无新条目即判定到底）；搜「歌单」时会先在顶部列出名字匹配的「我的歌单」，再展示在线结果。
 
 ### 架构与测试优化
 - **核心模块瘦身拆分**：将逼近 400 行架构上限的 `Motion.kt`（399 行）、`CoverFlowScreen.kt`（394 行）、`SettingsScreen.kt`（390 行）与 `Engine.kt`（385 行）分别拆出 `MotionProfile.kt` / `MotionCascade.kt`、`CoverFlowStage.kt`、`SettingsSections.kt` 与 `EngineFade.kt`，核心文件全面回落至安全余量区间。
 - **关键回归单测补齐**：在 `CoreStateTest` 新增 HLS（`.m3u8`）下载拦截判定、`@type motion` 动效插件互斥生效与 `@minHost` 版本守门单元测试。
+
+### 修复
+- **Android 内嵌网页登录 Cookie 合并**：登录完成时除 `cookieUrl` 外同时合并当前 `WebView` 页面地址下的 Cookie，修复 OAuth 跳转到子域后凭证捕获不全导致登录失败的问题。
 
 ## [0.6.8-nightly.20261127.3] - 2026-11-27
 
