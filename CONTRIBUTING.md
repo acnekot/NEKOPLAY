@@ -101,4 +101,6 @@ for f in plugins/*.js; do node --check "$f"; done
 ## 安全
 
 - 不要提交 `*.keystore`、`*.jks`、`local.properties` 等密钥和本机配置（`.gitignore` 已经排除）
-- 安卓正式签名用仓库 Secrets（`ANDROID_KEYSTORE_BASE64` 等），见 `.github/workflows/build.yml`
+- 安卓正式签名用仓库 Secrets（`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASS` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASS`），见 `.github/workflows/build.yml`
+  - 缺少密钥时打包直接失败；打包后会校验 APK 证书 SHA-256 指纹必须是 `e1b0261b…87ea9d`（完整值见工作流），防止误用每次都不同的 debug 签名导致用户无法覆盖升级
+  - 密钥库原件只保存在维护者本机并离线备份，**丢失后将永远无法发布可覆盖升级的安卓版本**，切勿提交到仓库
