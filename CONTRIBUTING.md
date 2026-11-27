@@ -82,6 +82,13 @@ for f in plugins/*.js; do node --check "$f"; done
 - 改了插件要升 `@version`，然后运行 `python3 plugins/gen-index.py` 更新 `index.json`（CI 会检查两者是否一致）
 - 插件里不要放账号、密钥；登录信息用 `nk.store` 存在用户本机
 
+## 代码规范检查（`archCheck`）
+
+提交前在 `desktop/` 下运行 `./gradlew archCheck test`，CI 也会跑同样的检查：
+
+- `shared/src` 里每个 `.kt` 文件不超过 400 行，核心层（`Engine` / `Plugins` / `Store` 等）不能依赖界面代码
+- **单行不超过 200 字符**、**`T("…")` 里的中文要包 `tr()`**：存量记在 `shared/arch-baseline.txt`，每个文件的数量只能减少不能增加；清理了存量后运行 `./gradlew archBaseline` 更新基线
+
 ## 版本和发布
 
 1. 改 `shared/src/cc/catsuki/nekoplay/Version.kt` 里的 `APP_VERSION`

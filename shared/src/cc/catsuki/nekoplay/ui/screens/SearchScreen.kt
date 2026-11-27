@@ -117,7 +117,8 @@ private fun myPlaylists(k: String): List<Playlist> = k.trim().lowercase().let { 
         busy = true
         job = scope.launch {
             try { @Suppress("UNCHECKED_CAST") val v = Plugins.search(pid, k, kind, r.page + 1) as List<Any>; if (res === r) res = r.plus(v, kind, r.page + 1) }
-            catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { if (res === r) res = SearchRes(r.type, r.tracks, r.albums, r.artists, r.playlists, r.users, r.mine, r.page, false) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { if (res === r) res = SearchRes(r.type, r.tracks, r.albums, r.artists, r.playlists, r.users, r.mine, r.page, false) }
             busy = false
         }
     }
@@ -192,7 +193,10 @@ private fun myPlaylists(k: String): List<Playlist> = k.trim().lowercase().let { 
             } else {
                 if (r != null && r.mine.isNotEmpty()) {
                     item { TagRow("MY PLAYLISTS", 12.dp) }
-                    items(r.mine, key = { "m" + it.id }, contentType = { "row" }) { pl -> ListRow({ Cover(pl.cover, 56.dp, pl.name) }, pl.name, "${two(pl.count)} 首 · ${Plugins.sourceName(pl.id) ?: "我的"}") { nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) } }
+                    items(r.mine, key = { "m" + it.id }, contentType = { "row" }) { pl ->
+                        val sub = "${two(pl.count)} 首 · ${Plugins.sourceName(pl.id) ?: tr("我的")}"
+                        ListRow({ Cover(pl.cover, 56.dp, pl.name) }, pl.name, sub) { nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) }
+                    }
                     if (r.playlists.isNotEmpty()) item { Box(Modifier.padding(top = 18.dp)) { TagRow("ONLINE", 12.dp) } }
                 }
                 if (busy && (r == null || r.empty)) item { T("SEARCHING", 12, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 18.dp)) }

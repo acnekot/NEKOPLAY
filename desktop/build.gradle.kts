@@ -99,6 +99,27 @@ compose.desktop {
 }
 
 // 0.6.0 架构守门测试：校验单向分层（core / data / player 禁止反向依赖 ui）与单文件行数上限（≤ 400）
+val ARCH_MAX_COL = 200
+val archBaselineFile = rootDir.parentFile.resolve("shared/arch-baseline.txt")
+val archCjkText = Regex("""\bT\("[^"]*[\u4e00-\u9fff]""")
+/** 每个 shared 文件：[超长行数, 未翻译 T("中文") 数] */
+fun archStyleCounts(root: File): Map<String, List<Int>> = root.walkTopDown().filter { it.isFile && it.extension == "kt" }.associate { f ->
+    val lines = f.readLines()
+    f.relativeTo(root).invariantSeparatorsPath to listOf(lines.count { it.length > ARCH_MAX_COL }, lines.sumOf { l -> archCjkText.findAll(l).count() })
+}.filterValues { it[0] > 0 || it[1] > 0 }.toSortedMap()
+
+tasks.register("archBaseline") {
+    group = "verification"
+    description = "Rewrite shared/arch-baseline.txt with the current long-line / untranslated-text counts."
+    doLast {
+        val root = rootDir.parentFile.resolve("shared/src/cc/catsuki/nekoplay")
+        val c = archStyleCounts(root)
+        archBaselineFile.writeText("# archCheck 规范基线：文件=超长行(>$ARCH_MAX_COL 字符)数,未翻译 T(\"中文\")数 —— 只允许减少，改善后运行 ./gradlew archBaseline 更新\n" +
+            c.entries.joinToString("\n") { "${it.key}=${it.value[0]},${it.value[1]}" } + "\n")
+        println("archBaseline: ${c.size} files, ${c.values.sumOf { it[0] }} long lines, ${c.values.sumOf { it[1] }} untranslated literals")
+    }
+}
+
 tasks.register("archCheck") {
     group = "verification"
     description = "Verify layer boundaries (no reverse UI deps in core/data/player) and <=400 lines per shared file."
@@ -133,10 +154,22 @@ tasks.register("archCheck") {
                 errors += "$name references UI symbol '$sym'"
             }
         }
+        // 代码规范棘轮：超长行（> 200 字符）与 T("中文") 未走 tr() 的数量，每个文件不得超过基线；存量只减不增
+        val baseline = archBaselineFile.takeIf { it.exists() }?.readLines()?.filter { "=" in it && !it.startsWith("#") }
+            ?.associate { l -> l.substringBefore('=') to l.substringAfter('=').split(',').map { it.trim().toInt() } } ?: emptyMap()
+        val now = archStyleCounts(sharedRoot)
+        var shrunk = 0
+        now.forEach { (file, cnt) ->
+            val base = baseline[file] ?: listOf(0, 0)
+            if (cnt[0] > base[0]) errors += "$file: ${cnt[0]} lines > $ARCH_MAX_COL chars (baseline ${base[0]}); wrap new long lines"
+            if (cnt[1] > base[1]) errors += "$file: ${cnt[1]} untranslated T(\"中文\") literals (baseline ${base[1]}); wrap new text with tr()"
+            if (cnt[0] < base[0] || cnt[1] < base[1]) shrunk++
+        }
+        if (shrunk > 0) println("archCheck: $shrunk file(s) improved below baseline — run ./gradlew archBaseline to lock in the gains.")
         if (errors.isNotEmpty()) {
             throw GradleException("Architecture check failed (${errors.size} violations):\n" + errors.joinToString("\n") { "  - $it" })
         }
-        println("archCheck PASSED: 0 reverse UI dependencies, all shared .kt files <= 400 lines.")
+        println("archCheck PASSED: 0 reverse UI dependencies, all shared .kt files <= 400 lines, style counts within baseline.")
     }
 }
 

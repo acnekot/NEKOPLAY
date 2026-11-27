@@ -20,9 +20,19 @@ object Debug {
     private val SECRET_KEYS = "(?:[a-z_]*token|cookie|set-cookie|authorization|password|passwd|secret|session(?:id)?|sid|csrf|ticket|music_u|musicu|uin)"
     private val jsonSecret = Regex("(\"$SECRET_KEYS\"\\s*:\\s*)(\"[^\"]*\"|\\[[^\\]]*\\])", RegexOption.IGNORE_CASE)
     private val kvSecret = Regex("((?<![a-z0-9])$SECRET_KEYS\\s*[=:]\\s*)([^&;,\\s\"]+)", RegexOption.IGNORE_CASE)
-    private fun mask(v: String): String { val t = v.trim('"'); return (if (v.startsWith("\"")) "\"" else "") + (if (t.length <= 4) "***" else t.take(4) + "***") + (if (v.endsWith("\"") && v.length > 1) "\"" else "") }
-    fun redact(s: String): String = if (s.isEmpty()) s else kvSecret.replace(jsonSecret.replace(s) { it.groupValues[1] + (if (it.groupValues[2].startsWith("[")) "[***]" else mask(it.groupValues[2])) }) { it.groupValues[1] + mask(it.groupValues[2]) }
+    private fun mask(v: String): String {
+        val quoted = v.length > 1 && v.startsWith("\"") && v.endsWith("\"")
+        val t = v.trim('"')
+        val m = if (t.length <= 4) "***" else t.take(4) + "***"
+        return if (quoted) "\"$m\"" else m
+    }
+    fun redact(s: String): String {
+        if (s.isEmpty()) return s
+        val j = jsonSecret.replace(s) { val v = it.groupValues[2]; it.groupValues[1] + if (v.startsWith("[")) "[***]" else mask(v) }
+        return kvSecret.replace(j) { it.groupValues[1] + mask(it.groupValues[2]) }
+    }
     /** 拼到错误信息后面的真实数据（调试模式才有） */
     fun detail(path: String, code: Int, type: String, body: String): String =
-        if (!on) "" else "\n[$path] HTTP $code · ${type.ifEmpty { "无类型" }} · ${body.length} 字节\n" + redact(body.take(800)).take(400).replace(Regex("\\s+"), " ").ifEmpty { "（空响应）" }
+        if (!on) "" else "\n[$path] HTTP $code · ${type.ifEmpty { "无类型" }} · ${body.length} 字节\n" +
+            redact(body.take(800)).take(400).replace(Regex("\\s+"), " ").ifEmpty { "（空响应）" }
 }
