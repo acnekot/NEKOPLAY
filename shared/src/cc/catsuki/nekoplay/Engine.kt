@@ -42,7 +42,7 @@ object Engine {
     private var localKbps = 0
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var loadJob: Job? = null
-    var quality by androidx.compose.runtime.mutableIntStateOf(3) // 默认无损，见 Ncm.LEVELS（界面会跟着刷新）
+    var quality by androidx.compose.runtime.mutableIntStateOf(3) // 默认无损，见 SourceApi.LEVELS（界面会跟着刷新）
     /** 用流量时的音质（-1 = 和 Wi-Fi 一样） */
     var qualityCell by androidx.compose.runtime.mutableIntStateOf(-1)
     /** 现在实际用的音质：按流量计费的网络下用流量音质 */
@@ -88,7 +88,7 @@ object Engine {
                     nt.src != null -> { audio.queueNext(srcUrl(nt.src), "loc_${nt.id}", nt); queuedFmt = nt.src.substringAfterLast('.', "").lowercase() }
                     dl != null -> { audio.queueNext(dl.toURI().toString(), "dl_${nt.id}", nt); queuedFmt = dl.extension.lowercase() }
                     hit != null && !Plat.isDesktop -> { audio.queueNext(null, cacheKey(nt.id, hit.first), nt); queuedFmt = hit.second }
-                    else -> { val st = Ncm.stream(nt.id, q); audio.queueNext(st.url, cacheKey(nt.id, st.level), nt); queuedFmt = st.format; queuedTrial = st.trial; prefs?.edit()?.putString("fmt_${cacheKey(nt.id, st.level)}", st.format)?.apply() }
+                    else -> { val st = SourceApi.stream(nt.id, q); audio.queueNext(st.url, cacheKey(nt.id, st.level), nt); queuedFmt = st.format; queuedTrial = st.trial; prefs?.edit()?.putString("fmt_${cacheKey(nt.id, st.level)}", st.format)?.apply() }
                 }
                 if (state.value.current?.id == cur.id) queuedIndex = ni else audio.clearNext()
             } catch (_: Exception) { } finally { queuing = false }
@@ -104,7 +104,7 @@ object Engine {
         reportPrev()
         val t = s.queue[ni]
         reportId = t.id
-        if (Ncm.loggedIn) scope.launch { Ncm.scrobbleStart(t.id) }
+        if (SourceApi.loggedIn) scope.launch { SourceApi.scrobbleStart(t.id) }
         state.value = s.copy(index = ni, loading = false, format = queuedFmt, kbps = 0, cached = false)
         position.value = 0; info.value = null; localKbps = 0
         Store.addRecent(t); Store.saveQueue(s.queue, ni, 0)
@@ -198,7 +198,7 @@ object Engine {
         reportId = null
         val sec = listenedMs / 1000; listenedMs = 0
         state.value.queue.firstOrNull { it.id == id }?.let { if (Features.on("stats")) Stats.add(it, sec) }
-        if (sec >= 30 && Ncm.loggedIn && !id.startsWith("local:")) scope.launch { Ncm.scrobble(id, sec) }
+        if (sec >= 30 && SourceApi.loggedIn && !id.startsWith("local:")) scope.launch { SourceApi.scrobble(id, sec) }
     }
 
     private fun load(i: Int, autoplay: Boolean, startMs: Long = 0) {
@@ -206,7 +206,7 @@ object Engine {
         ScrubController.stop()
         reportPrev()
         reportId = t.id
-        if (autoplay && Ncm.loggedIn && !t.local) scope.launch { Ncm.scrobbleStart(t.id) }
+        if (autoplay && SourceApi.loggedIn && !t.local) scope.launch { SourceApi.scrobbleStart(t.id) }
         dropNext()
         val safeStart = startMs.coerceAtLeast(0L)
         state.value = state.value.copy(index = i, loading = true, format = "", kbps = 0, want = autoplay)
@@ -236,7 +236,7 @@ object Engine {
                     audio.open(null, cacheKey(t.id, hit.first), startAt, state.value.want, t); opened = true
                     state.value = state.value.copy(loading = false, format = hit.second, kbps = 0, cached = true)
                 } else {
-                    val s = Ncm.stream(t.id, q)
+                    val s = SourceApi.stream(t.id, q)
                     s.trial?.let { error.value = it }   // 只能放试听：轮到这首真正播放时才提示
                     audio.open(s.url, cacheKey(t.id, s.level), startAt, state.value.want, t); opened = true
                     prefs?.edit()?.putString("fmt_${cacheKey(t.id, s.level)}", s.format)?.apply()
@@ -285,7 +285,7 @@ object Engine {
     )
     private fun fmFill(then: (() -> Unit)? = null) = EngineFm.fill(scope, { state.value }, { more -> state.value = state.value.copy(queue = state.value.queue + more) }, then)
     fun fmEnsureNext() { val s = state.value; if (s.fm && s.index + 2 >= s.queue.size) fmFill() }
-    fun fmTrash() { val t = state.value.current ?: return; scope.launch { runCatching { Ncm.fmTrash(t.id) } }; next() }
+    fun fmTrash() { val t = state.value.current ?: return; scope.launch { runCatching { SourceApi.fmTrash(t.id) } }; next() }
 
     fun next() { errStreak = 0; nextInternal() }
     private fun nextInternal() {
@@ -353,7 +353,7 @@ object Engine {
         val s = state.value
         if (s.mode == Mode.SHUFFLE || s.queue.size < 2) return
         val n = s.queue[(s.index + 1) % s.queue.size]
-        scope.launch { runCatching { if (cachedLevel(n.id) == null) Ncm.stream(n.id, q) } }
+        scope.launch { runCatching { if (cachedLevel(n.id) == null) SourceApi.stream(n.id, q) } }
     }
     fun cacheBytes(): Long = runCatching { audio.cacheBytes() }.getOrDefault(0)
     fun clearCache() { runCatching { audio.clearCache() } }

@@ -55,9 +55,9 @@ internal object EngineCache {
     fun key(id: String, level: String) = "${id}_$level"
 
     fun cachedLevel(id: String, targetQuality: Int, audio: Audio, prefs: KV?): Pair<String, String>? {
-        val order = Ncm.LEVELS.reversed().sortedBy { kotlin.math.abs(Ncm.LEVELS.indexOf(it) - targetQuality) }
+        val order = SourceApi.LEVELS.reversed().sortedBy { kotlin.math.abs(SourceApi.LEVELS.indexOf(it) - targetQuality) }
         for (lv in order) {
-            if (Ncm.LEVELS.indexOf(lv) > targetQuality + 1) continue
+            if (SourceApi.LEVELS.indexOf(lv) > targetQuality + 1) continue
             val k = key(id, lv)
             if (audio.isCached(k)) return lv to (prefs?.getString("fmt_$k", "") ?: "")
         }
@@ -77,7 +77,7 @@ internal object EngineFm {
     ) {
         scope.launch {
             try {
-                val l = Ncm.fm()
+                val l = SourceApi.fm()
                 if (l.isEmpty()) { onError("私人 FM 暂时没有歌曲"); return@launch }
                 setState(l)
                 onReady()
@@ -96,7 +96,7 @@ internal object EngineFm {
             return
         }
         fmJob = scope.launch {
-            runCatching { Ncm.fm() }.onSuccess { more ->
+            runCatching { SourceApi.fm() }.onSuccess { more ->
                 val s = getState()
                 if (s.fm) append(more.filter { m -> s.queue.none { it.id == m.id } })
             }

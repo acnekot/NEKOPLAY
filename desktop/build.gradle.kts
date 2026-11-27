@@ -132,7 +132,7 @@ tasks.register("archCheck") {
         }
         val nonUiFiles = setOf(
             "Version.kt", "Perf.kt", "Hash.kt", "Debug.kt", "Features.kt", "AppGraph.kt",
-            "Plugin.kt", "Plugins.kt", "PluginSubs.kt", "Sources.kt", "Ncm.kt", "Store.kt", "LocalLib.kt", "LocalMusic.kt",
+            "Plugin.kt", "Plugins.kt", "PluginSubs.kt", "Sources.kt", "SourceApi.kt", "Store.kt", "LocalLib.kt", "LocalMusic.kt",
             "Dav.kt", "Download.kt", "Backup.kt", "Updater.kt", "Stats.kt",
             "Engine.kt", "EngineQueue.kt", "Fx.kt", "Lrc.kt", "Sleep.kt",
         )

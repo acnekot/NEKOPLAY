@@ -34,7 +34,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
     val nav = LocalNav.current
     var err by remember { mutableStateOf<String?>(null) }
     val list by produceState<List<Playlist>?>(null, pg) {
-        try { value = when (pg.kind) { "simi" -> Ncm.simiPlaylists(pg.arg); else -> loadPlaylists(pg.kind, pg.arg) } } catch (e: Exception) { err = e.message; value = emptyList() }
+        try { value = when (pg.kind) { "simi" -> SourceApi.simiPlaylists(pg.arg); else -> loadPlaylists(pg.kind, pg.arg) } } catch (e: Exception) { err = e.message; value = emptyList() }
     }
     val p = c
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 18.dp)) {
@@ -63,7 +63,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 @Composable fun SquarePage() {
     val nav = LocalNav.current
     val p = c
-    val cats by produceState(listOf("全部")) { runCatching { value = Ncm.categories() } }
+    val cats by produceState(listOf("全部")) { runCatching { value = SourceApi.categories() } }
     var sel by remember { mutableIntStateOf(0) }
     val cat = cats.getOrElse(sel) { "全部" }
     val list = remember(cat) { mutableStateListOf<Playlist>() }
@@ -74,7 +74,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
     fun load() {
         if (busy || !more) return
         busy = true
-        scope.launch { try { val (l, m) = Ncm.square(cat, list.size); list += l.filter { x -> list.none { it.id == x.id } }; more = m && l.isNotEmpty() } catch (e: Exception) { err = e.message; more = false }; busy = false }
+        scope.launch { try { val (l, m) = SourceApi.square(cat, list.size); list += l.filter { x -> list.none { it.id == x.id } }; more = m && l.isNotEmpty() } catch (e: Exception) { err = e.message; more = false }; busy = false }
     }
     LaunchedEffect(cat) { load() }
     val ls = rememberLazyListState()
@@ -114,7 +114,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
     fun load() {
         if (busy || !more) return
         busy = true
-        scope.launch { try { val l = Ncm.newAlbums(area, list.size); list += l.filter { x -> list.none { it.id == x.id } }; more = l.size >= 30 } catch (e: Exception) { err = e.message; more = false }; busy = false }
+        scope.launch { try { val l = SourceApi.newAlbums(area, list.size); list += l.filter { x -> list.none { it.id == x.id } }; more = l.size >= 30 } catch (e: Exception) { err = e.message; more = false }; busy = false }
     }
     LaunchedEffect(area) { load() }
     val ls = rememberLazyListState()
@@ -144,7 +144,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
     val nav = LocalNav.current
     val p = c
     var err by remember { mutableStateOf<String?>(null) }
-    val dates by produceState<List<String>?>(null) { try { value = Ncm.historyDates() } catch (e: Exception) { err = e.message; value = emptyList() } }
+    val dates by produceState<List<String>?>(null) { try { value = SourceApi.historyDates() } catch (e: Exception) { err = e.message; value = emptyList() } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 18.dp)) {
         item {
             Column {
@@ -166,7 +166,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 
 /** 其它歌单来源（第 2 批起：歌单广场等） */
 suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kind) {
-    "top" -> Ncm.toplists(); "rec" -> Ncm.recPlaylists(); else -> throw NcmError("暂不支持")
+    "top" -> SourceApi.toplists(); "rec" -> SourceApi.recPlaylists(); else -> throw SourceError("暂不支持")
 }
 
 
@@ -177,8 +177,8 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
     val nav = LocalNav.current
     val p = c
     var err by remember { mutableStateOf<String?>(null) }
-    val albums by produceState<List<Album>?>(null, pg) { if (pg.kind == "album") try { value = Ncm.subAlbums() } catch (e: Exception) { err = e.message; value = emptyList() } }
-    val artists by produceState<List<Artist>?>(null, pg) { if (pg.kind != "album") try { value = Ncm.subArtists() } catch (e: Exception) { err = e.message; value = emptyList() } }
+    val albums by produceState<List<Album>?>(null, pg) { if (pg.kind == "album") try { value = SourceApi.subAlbums() } catch (e: Exception) { err = e.message; value = emptyList() } }
+    val artists by produceState<List<Artist>?>(null, pg) { if (pg.kind != "album") try { value = SourceApi.subArtists() } catch (e: Exception) { err = e.message; value = emptyList() } }
     val n = if (pg.kind == "album") albums?.size else artists?.size
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 18.dp)) {
         item {
@@ -213,7 +213,9 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
     val p = c
     var sel by remember { mutableIntStateOf(0) }
     var err by remember(sel) { mutableStateOf<String?>(null) }
-    val data by produceState<List<Pair<Track, Int>>?>(null, pg, sel) { value = null; try { value = Ncm.playRecord(pg.uid, sel == 0) } catch (e: Exception) { err = e.message; value = emptyList() } }
+    val data by produceState<List<Pair<Track, Int>>?>(null, pg, sel) {
+        value = null
+        try { value = SourceApi.playRecord(pg.uid, sel == 0) } catch (e: Exception) { err = e.message; value = emptyList() } }
     val list = data?.map { it.first } ?: emptyList()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 18.dp)) {
         item {
@@ -256,7 +258,9 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
     val p = c
     var sel by remember { mutableIntStateOf(0) }
     var err by remember(sel) { mutableStateOf<String?>(null) }
-    val list by produceState<List<Mv>?>(null, sel) { value = null; try { value = if (sel == 0) Ncm.recMvs() else Ncm.topMvs() } catch (e: Exception) { err = e.message; value = emptyList() } }
+    val list by produceState<List<Mv>?>(null, sel) {
+        value = null
+        try { value = if (sel == 0) SourceApi.recMvs() else SourceApi.topMvs() } catch (e: Exception) { err = e.message; value = emptyList() } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item {
             Column {
@@ -282,7 +286,7 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
     val ctl = remember { VideoControl() }
     LaunchedEffect(pg.id) {
         if (Engine.isPlaying) Engine.pause()
-        try { url = Ncm.mvUrl(pg.id) } catch (e: Exception) { err = e.message }
+        try { url = SourceApi.mvUrl(pg.id) } catch (e: Exception) { err = e.message }
     }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().aspectRatio(16 / 9f).background(Color.Black).press { ctl.toggle() }, contentAlignment = Alignment.Center) {
@@ -320,7 +324,7 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
     fun load() {
         if (busy || !more) return
         busy = true
-        scope.launch { try { val l = Ncm.hotRadios(list.size); list += l.filter { x -> list.none { it.id == x.id } }; more = l.size >= 30 } catch (e: Exception) { err = e.message; more = false }; busy = false }
+        scope.launch { try { val l = SourceApi.hotRadios(list.size); list += l.filter { x -> list.none { it.id == x.id } }; more = l.size >= 30 } catch (e: Exception) { err = e.message; more = false }; busy = false }
     }
     LaunchedEffect(Unit) { load() }
     val ls = rememberLazyListState()

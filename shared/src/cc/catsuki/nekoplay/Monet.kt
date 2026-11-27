@@ -113,7 +113,7 @@ object Monet {
     private val coverMemo = HashMap<String, Int?>()
     suspend fun fromCover(url: String): Int? = coverMemo[url] ?: withContext(Dispatchers.IO) {
         runCatching {
-            val bytes = Ncm.http.newCall(Request.Builder().url("$url?param=64y64").build()).execute().use { it.body!!.bytes() }
+            val bytes = SourceApi.http.newCall(Request.Builder().url("$url?param=64y64").build()).execute().use { it.body!!.bytes() }
             val f = File(Plat.impl.cacheDir, "monet_cover"); f.writeBytes(bytes)
             Plat.impl.decodeImage(f.path, 64)?.let { fromImage(it) }.also { f.delete() }
         }.getOrNull().also { coverMemo[url] = it }

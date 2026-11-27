@@ -178,12 +178,12 @@ object Plugins {
     /** 导入脚本：检查开头的 @id 与 @minHost，同 id 覆盖旧版本；导入后自动刷新账号与曲库 */
     suspend fun import(text: String): JsSource = withContext(Dispatchers.IO) {
         val id = Regex("""^\s*//\s*@id\s+([A-Za-z0-9_\-]+)\s*$""", RegexOption.MULTILINE).find(text.take(4000))?.groupValues?.get(1)
-            ?: throw NcmError("不是 NEKOPLAY 插件：脚本开头要有「// @id 名字」")
+            ?: throw SourceError("不是 NEKOPLAY 插件：脚本开头要有「// @id 名字」")
         get(id)?.close()?.join()
         val f = File(dir, "$id.js"); f.writeTextAtomic(text)
         val s = JsSource(f)
-        if (!s.hostCompatible) { f.delete(); throw NcmError("插件需要 NEKOPLAY v${s.minHost} 或更高版本（当前 v$APP_VERSION）") }
-        if (!s.start()) { f.delete(); throw NcmError("脚本运行出错：${s.error}") }
+        if (!s.hostCompatible) { f.delete(); throw SourceError("插件需要 NEKOPLAY v${s.minHost} 或更高版本（当前 v$APP_VERSION）") }
+        if (!s.start()) { f.delete(); throw SourceError("脚本运行出错：${s.error}") }
         list.value = list.value.filter { it.id != id } + s
         val baseOff = off - id
         off = if (s.isMotion) baseOff + list.value.filter { it.isMotion && it.id != id }.map { it.id } else baseOff
@@ -193,7 +193,7 @@ object Plugins {
         s
     }
     suspend fun importUrl(url: String): JsSource {
-        val text = withContext(Dispatchers.IO) { Ncm.http.newCall(Request.Builder().url(url.trim()).build()).execute().use { r -> if (!r.isSuccessful) throw NcmError("下载失败：HTTP ${r.code}"); r.body?.string() ?: "" } }
+        val text = withContext(Dispatchers.IO) { SourceApi.http.newCall(Request.Builder().url(url.trim()).build()).execute().use { r -> if (!r.isSuccessful) throw SourceError("下载失败：HTTP ${r.code}"); r.body?.string() ?: "" } }
         return import(text)
     }
     fun delete(id: String) {
@@ -224,7 +224,7 @@ object Plugins {
     fun wrap(pid: String, raw: Any?): String = raw?.toString()?.takeIf { it.isNotEmpty() && it != "null" }?.let { if (pid == "netease") it else "@$pid:$it" } ?: ""
     fun nameOf(pid: String) = get(pid)?.name ?: NAMES[pid] ?: pid
     /** id 所属的插件；没装或关着时报错（提示去导入） */
-    fun of(id: String): JsSource = get(pidOf(id))?.takeIf { on(it.id) } ?: throw NcmError("需要「${nameOf(pidOf(id))}」插件：到 设置 → 插件 导入或打开")
+    fun of(id: String): JsSource = get(pidOf(id))?.takeIf { on(it.id) } ?: throw SourceError("需要「${nameOf(pidOf(id))}」插件：到 设置 → 插件 导入或打开")
     fun ofOrNull(id: String): JsSource? = get(pidOf(id))?.takeIf { on(it.id) }
     /** 调 id 所属插件的方法；插件没实现时返回 null */
     suspend fun callFor(id: String, fn: String, vararg args: Any?): Any? { val s = ofOrNull(id) ?: return null; if (!s.start() || !s.has(fn)) return null; return s.call(fn, *args) }
@@ -262,7 +262,7 @@ object Plugins {
     fun tracksOf(pid: String, v: Any?) = arr(if (v is JSONObject) v.opt("tracks") ?: v.opt("items") else v).map { track(pid, it) }
 
     suspend fun search(pid: String, q: String, type: String, page: Int = 1): Any {
-        val s = get(pid) ?: throw NcmError("插件没有安装")
+        val s = get(pid) ?: throw SourceError("插件没有安装")
         val r = s.call("search", q, type, page)
         val items = arr(if (r is JSONObject) r.opt("items") ?: r.opt(type + "s") else r)
         return when (type) {
@@ -282,17 +282,17 @@ object Plugins {
         val key = "$id|$quality"
         val now = System.currentTimeMillis()
         streamLock.withLock { streamCache[key]?.takeIf { now - it.at < STREAM_TTL } }?.let { return it.s }
-        val o = of(id).call("stream", raw(id), quality) as? JSONObject ?: throw NcmError("插件没有给出播放地址")
-        val url = o.optString("url").ifEmpty { throw NcmError(o.optString("error").ifEmpty { "插件没有给出播放地址" }) }
+        val o = of(id).call("stream", raw(id), quality) as? JSONObject ?: throw SourceError("插件没有给出播放地址")
+        val url = o.optString("url").ifEmpty { throw SourceError(o.optString("error").ifEmpty { "插件没有给出播放地址" }) }
         val trial = if (o.optBoolean("trial")) o.optString("message").ifEmpty { "当前只能放试听片段" } else null
         val st = Stream(url, o.optString("ext").ifEmpty { url.substringBefore('?').substringAfterLast('.', "mp3") }, o.optInt("kbps"), o.optString("level", "standard"), trial)
         streamLock.withLock { streamCache.entries.removeAll { now - it.value.at >= STREAM_TTL }; streamCache[key] = CachedStream(st, now) }
         return st
     }
     suspend fun lyric(id: String): LyricData {
-        val o = callFor(id, "lyric", raw(id)) as? JSONObject ?: throw NcmError("暂无歌词")
+        val o = callFor(id, "lyric", raw(id)) as? JSONObject ?: throw SourceError("暂无歌词")
         val l = LyricData(o.optString("lrc"), o.optString("tr").takeIf { it.isNotBlank() && it != "null" }, o.optString("yrc").takeIf { it.isNotBlank() && it != "null" })
-        if (l.lrc.isBlank() && l.yrc == null) throw NcmError("暂无歌词")
+        if (l.lrc.isBlank() && l.yrc == null) throw SourceError("暂无歌词")
         val cur = Engine.state.value.current?.takeIf { it.id == id } ?: Track(id, "", "", "", 0, null)
         return transformLyric(cur, l)
     }

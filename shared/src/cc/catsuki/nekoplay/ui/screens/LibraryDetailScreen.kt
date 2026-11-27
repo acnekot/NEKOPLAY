@@ -58,7 +58,7 @@ import java.util.Calendar
     val ver by Store.plVersion.collectAsState()
     // 主插件（首页来源）的账号；其它插件的歌单在最下面
     val main = Plugins.main()
-    val subAlbums by produceState<List<Album>?>(null, prof, ver, main?.id) { if (prof != null && main?.has("subAlbums") == true) runCatching { value = Ncm.subAlbums() } }
+    val subAlbums by produceState<List<Album>?>(null, prof, ver, main?.id) { if (prof != null && main?.has("subAlbums") == true) runCatching { value = SourceApi.subAlbums() } }
     var albumCard by remember { mutableStateOf(Plat.prefs("ui").getInt("lib_album_style", 0) == 0) }
     var albumAll by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp)) {
@@ -74,7 +74,7 @@ import java.util.Calendar
                         val signed by Store.signedToday.collectAsState()
                         if (!main.has("signin")) Unit
                         else if (signed) Box(Modifier.defaultMinSize(44.dp, 44.dp), contentAlignment = Alignment.Center) { Box(Modifier.height(28.dp).background(c.l3).padding(horizontal = 10.dp), contentAlignment = Alignment.Center) { T(tr("已签到"), 12, c.s, 700) } }
-                        else LinkBtn("签到", 14) { Store.run { nav.toast = runCatching { Ncm.signin().also { (ok, _) -> if (ok) Store.markSigned() }.second }.getOrElse { "签到失败：${it.message}" } } }
+                        else LinkBtn("签到", 14) { Store.run { nav.toast = runCatching { SourceApi.signin().also { (ok, _) -> if (ok) Store.markSigned() }.second }.getOrElse { "签到失败：${it.message}" } } }
                         if (main.has("createPlaylist")) { Spacer(Modifier.width(6.dp)); LinkBtn("新建歌单", 14) { newPlaylist(nav) } }
                     }
                     else T(tr("${two(others.size)} 个歌单"), 13, c.s, mono = true, ls = .06f, modifier = Modifier.padding(bottom = 6.dp))
@@ -116,7 +116,7 @@ import java.util.Calendar
             fun openAl(al: Album) { SharedHero.capture("alb:${al.id}", al.pic, al.name); nav.push(Page.Album(al.id, al.name, al.pic)) }
             fun longAl(al: Album) {
                 nav.sheet = SheetSpec(al.name, al.artist, listOf(SheetItem("取消收藏", danger = true) {
-                    Store.run { try { Ncm.subAlbum(al.id, false); nav.toast = "已取消收藏"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "操作失败：${e.message}" } }
+                    Store.run { try { SourceApi.subAlbum(al.id, false); nav.toast = "已取消收藏"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "操作失败：${e.message}" } }
                 }))
             }
             item {
@@ -205,11 +205,11 @@ import java.util.Calendar
             "recent" -> value = emptyList()
             "llike" -> LocalLib.liked.collect { value = it }
             "lpl" -> LocalLib.lists.collect { l -> value = l.firstOrNull { it.id == p.id }?.tracks ?: emptyList() }
-            "simi" -> try { value = Ncm.simiSongs(p.id) } catch (e: Exception) { err = e.message }
-            "newsong" -> try { value = Ncm.newSongs(p.id.toIntOrNull() ?: 0) } catch (e: Exception) { err = e.message }
-            "hist" -> try { value = Ncm.historySongs(p.id) } catch (e: Exception) { err = e.message }
-            "cloud" -> try { value = Ncm.cloud() } catch (e: Exception) { err = e.message }
-            "radio" -> try { value = Ncm.radioPrograms(p.id) } catch (e: Exception) { err = e.message }
+            "simi" -> try { value = SourceApi.simiSongs(p.id) } catch (e: Exception) { err = e.message }
+            "newsong" -> try { value = SourceApi.newSongs(p.id.toIntOrNull() ?: 0) } catch (e: Exception) { err = e.message }
+            "hist" -> try { value = SourceApi.historySongs(p.id) } catch (e: Exception) { err = e.message }
+            "cloud" -> try { value = SourceApi.cloud() } catch (e: Exception) { err = e.message }
+            "radio" -> try { value = SourceApi.radioPrograms(p.id) } catch (e: Exception) { err = e.message }
             else -> {
                 withContext(Dispatchers.IO) { Store.cachedTracks(p.id) }?.let { value = it }
                 try { val fresh = Store.tracksOf(p.id, refresh = true); if (fresh != value) value = fresh } catch (e: Exception) { if (value == null) err = e.message }
@@ -262,9 +262,9 @@ import java.util.Calendar
                     }
                     // 别人的歌单：可以收藏
                     // QQ / 酷狗的歌单只会是自己建的或已收藏的（曲库里列出来的就是），不显示收藏按钮
-                    if (p.kind == "pl" && Ncm.loggedIn && !mine && Plugins.sourceName(p.id) == null) {
-                        val subbed by produceState<Boolean?>(null, p.id) { value = runCatching { Ncm.playlistSubscribed(p.id) }.getOrNull() }
-                        Spacer(Modifier.width(10.dp)); FollowBtn(subbed ?: false, "收藏", "已收藏", ready = subbed != null) { on -> Ncm.subscribePlaylist(p.id, on); Store.refreshPlaylists() }
+                    if (p.kind == "pl" && SourceApi.loggedIn && !mine && Plugins.sourceName(p.id) == null) {
+                        val subbed by produceState<Boolean?>(null, p.id) { value = runCatching { SourceApi.playlistSubscribed(p.id) }.getOrNull() }
+                        Spacer(Modifier.width(10.dp)); FollowBtn(subbed ?: false, "收藏", "已收藏", ready = subbed != null) { on -> SourceApi.subscribePlaylist(p.id, on); Store.refreshPlaylists() }
                     }
                 }
                 Spacer(Modifier.height(12.dp)); Rule()

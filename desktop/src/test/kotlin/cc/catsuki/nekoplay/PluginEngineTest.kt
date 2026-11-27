@@ -1,6 +1,6 @@
 package cc.catsuki.nekoplay
 
-import cc.catsuki.nekoplay.NcmError
+import cc.catsuki.nekoplay.SourceError
 import cc.catsuki.nekoplay.Plugins
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -84,7 +84,7 @@ class PluginEngineTest {
 
     @Test fun scriptErrorsBecomeNcmError() = runBlocking {
         val s = Plugins.import(script(server.url("").toString().trimEnd('/')))
-        val e = assertFailsWith<NcmError> { s.call("boom") }
+        val e = assertFailsWith<SourceError> { s.call("boom") }
         assertEquals("出错了", e.message)
     }
 }

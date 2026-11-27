@@ -68,7 +68,7 @@ object LyricCache {
             put(id, l); return@run l
         }
         if (id.startsWith("dav:")) { val l = DavMusic.lyric(id)?.let { Lrc.parse(it, null) } ?: emptyList(); put(id, l); return@run l }
-        val d = Ncm.lyricFull(id)
+        val d = SourceApi.lyricFull(id)
         // 有逐字歌词就用逐字的，没有退回普通 LRC
         val l = d.yrc?.let { Lrc.parseYrc(it, d.tr) }?.takeIf { it.isNotEmpty() } ?: Lrc.parse(d.lrc, d.tr)
         put(id, l); l

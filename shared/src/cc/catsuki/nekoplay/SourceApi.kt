@@ -39,15 +39,21 @@ data class LyricData(val lrc: String, val tr: String?, val yrc: String?)
 data class UserBrief(val uid: String, val name: String, val avatar: String?, val signature: String)
 /** trial：只能放试听片段时给用户看的提示 */
 data class Stream(val url: String, val format: String, val kbps: Int, val level: String, val trial: String? = null)
-class NcmError(msg: String) : Exception(msg)
+class SourceError(msg: String) : Exception(msg)
+
+/** 旧名兼容：早期只接一个音源时叫 Ncm / NcmError，现在是所有音源插件的统一调用层 */
+@Deprecated("改用 SourceError", ReplaceWith("SourceError"))
+typealias NcmError = SourceError
+@Deprecated("改用 SourceApi", ReplaceWith("SourceApi"))
+typealias Ncm = SourceApi
 
 /**
  * 在线功能的统一入口。本体不带任何音源：这里的每个方法都转给插件——
  * 带 id 的（播放、歌词、歌单、专辑、歌手、评论……）交给 id 所属的插件，
  * 不带 id 的（日推、FM、推荐歌单、账号……）交给提供这个功能的插件（优先主插件，见 Plugins.main）。
- * 名字沿用 Ncm 是为了少改界面代码；网易云本身也只是一个插件（plugins/netease.js）。
+ * 名字沿用 SourceApi 是为了少改界面代码；网易云本身也只是一个插件（plugins/netease.js）。
  */
-object Ncm {
+object SourceApi {
     val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build()
     fun init() {}
 
@@ -61,7 +67,7 @@ object Ncm {
     /** 主插件登录了没有 */
     val loggedIn get() = Plugins.main()?.let { PluginStore.accounts.value.containsKey(it.id) } ?: false
 
-    private suspend fun need(cap: String, what: String): JsSource = Plugins.provider(cap) ?: throw NcmError("没有提供「$what」的插件：到 设置 → 插件 导入")
+    private suspend fun need(cap: String, what: String): JsSource = Plugins.provider(cap) ?: throw SourceError("没有提供「$what」的插件：到 设置 → 插件 导入")
     private suspend fun mainCall(fn: String, vararg a: Any?): Any? { val m = Plugins.main() ?: return null; if (!m.start() || !m.has(fn)) return null; return m.call(fn, *a) }
     private fun arr(v: Any?) = Plugins.arr(v)
     private fun tracks(pid: String, v: Any?) = Plugins.tracksOf(pid, v)
@@ -87,12 +93,12 @@ object Ncm {
         val a = (if (m.start() && m.has("account")) m.call("account") else null) as? JSONObject ?: return null
         return Profile(Plugins.wrap(m.id, a.opt("uid") ?: a.optString("name")), a.optString("name"), a.optString("avatar").takeIf { it.isNotEmpty() && it != "null" } ?: "")
     }
-    suspend fun uid(): String = profile()?.uid ?: throw NcmError("请先登录")
+    suspend fun uid(): String = profile()?.uid ?: throw SourceError("请先登录")
     /** 主插件账号下的歌单，第一个是「我喜欢」 */
-    suspend fun playlists(): List<Playlist> { val m = Plugins.main() ?: throw NcmError("请先导入插件"); return Plugins.myPlaylists(m.id).sortedByDescending { it.liked } }
+    suspend fun playlists(): List<Playlist> { val m = Plugins.main() ?: throw SourceError("请先导入插件"); return Plugins.myPlaylists(m.id).sortedByDescending { it.liked } }
     suspend fun logout() { runCatching { mainCall("logout") }; PluginStore.refresh() }
     /** 粘贴 Cookie 登录（插件实现了 setCookie 才有） */
-    suspend fun saveCookie(text: String) { mainCall("setCookie", text) ?: throw NcmError("当前插件不支持粘贴 Cookie 登录"); PluginStore.refresh() }
+    suspend fun saveCookie(text: String) { mainCall("setCookie", text) ?: throw SourceError("当前插件不支持粘贴 Cookie 登录"); PluginStore.refresh() }
 
     // ---------- 歌单 / 专辑 / 歌手 / 用户 ----------
     suspend fun playlistTracks(id: String): List<Track> = Plugins.playlistTracks(id)
@@ -104,7 +110,7 @@ object Ncm {
         val r = Plugins.callFor(id, "artistAlbums", Plugins.raw(id), offset, limit) as? JSONObject ?: return emptyList<Album>() to false
         return arr(r.opt("items")).map { Plugins.album(Plugins.pidOf(id), it) } to r.optBoolean("more")
     }
-    suspend fun user(uid: String): User = (Plugins.callFor(uid, "user", Plugins.raw(uid)) as? JSONObject)?.let { Plugins.userOf(Plugins.pidOf(uid), it) } ?: throw NcmError("这个音源没有用户主页")
+    suspend fun user(uid: String): User = (Plugins.callFor(uid, "user", Plugins.raw(uid)) as? JSONObject)?.let { Plugins.userOf(Plugins.pidOf(uid), it) } ?: throw SourceError("这个音源没有用户主页")
     suspend fun userPlaylists(uid: String): List<Playlist> = arr(Plugins.callFor(uid, "userPlaylists", Plugins.raw(uid))).map { Plugins.playlist(Plugins.pidOf(uid), it) }
 
     // ---------- 发现（交给提供这个功能的插件） ----------
@@ -147,14 +153,14 @@ object Ncm {
     }
     suspend fun commentLike(songId: String, cid: Long, on: Boolean) { Plugins.callFor(songId, "commentLike", Plugins.raw(songId), cid, on) }
     /** 发评论；replyTo 不为空时是回复某条评论 */
-    suspend fun commentPost(songId: String, content: String, replyTo: Long?) { Plugins.callFor(songId, "commentPost", Plugins.raw(songId), content, replyTo) ?: throw NcmError("这个音源不支持评论") }
+    suspend fun commentPost(songId: String, content: String, replyTo: Long?) { Plugins.callFor(songId, "commentPost", Plugins.raw(songId), content, replyTo) ?: throw SourceError("这个音源不支持评论") }
 
     // ---------- 歌单管理 / 收藏关注 ----------
-    suspend fun createPlaylist(name: String, private: Boolean): String { val m = Plugins.provider("createPlaylist") ?: throw NcmError("当前插件不支持建歌单"); return Plugins.wrap(m.id, m.call("createPlaylist", name, private)) }
+    suspend fun createPlaylist(name: String, private: Boolean): String { val m = Plugins.provider("createPlaylist") ?: throw SourceError("当前插件不支持建歌单"); return Plugins.wrap(m.id, m.call("createPlaylist", name, private)) }
     suspend fun deletePlaylist(id: String) { Plugins.callFor(id, "deletePlaylist", Plugins.raw(id)) }
     /** 往歌单加 / 删歌：op = add / del */
     suspend fun playlistTracks(pid: String, op: String, ids: List<String>) {
-        Plugins.callFor(pid, "editPlaylist", Plugins.raw(pid), op, JSONArray(ids.filter { Plugins.pidOf(it) == Plugins.pidOf(pid) }.map { Plugins.raw(it) })) ?: throw NcmError("这个歌单不支持修改")
+        Plugins.callFor(pid, "editPlaylist", Plugins.raw(pid), op, JSONArray(ids.filter { Plugins.pidOf(it) == Plugins.pidOf(pid) }.map { Plugins.raw(it) })) ?: throw SourceError("这个歌单不支持修改")
     }
     suspend fun subscribePlaylist(id: String, sub: Boolean) { Plugins.callFor(id, "subscribePlaylist", Plugins.raw(id), sub) }
     suspend fun playlistSubscribed(id: String): Boolean = Plugins.callFor(id, "playlistSubscribed", Plugins.raw(id)) == true
@@ -179,7 +185,7 @@ object Ncm {
     suspend fun artistMvs(id: String): List<Mv> = arr(Plugins.callFor(id, "artistMvs", Plugins.raw(id))).map { Plugins.mvOf(Plugins.pidOf(id), it) }
     suspend fun recMvs(): List<Mv> = listFrom("recMvs", "推荐 MV").let { (p, v) -> arr(v).map { Plugins.mvOf(p, it) } }
     suspend fun topMvs(): List<Mv> = listFrom("topMvs", "MV 排行").let { (p, v) -> arr(v).map { Plugins.mvOf(p, it) } }
-    suspend fun mvUrl(id: String): String = Plugins.callFor(id, "mvUrl", Plugins.raw(id))?.toString() ?: throw NcmError("拿不到 MV 地址")
+    suspend fun mvUrl(id: String): String = Plugins.callFor(id, "mvUrl", Plugins.raw(id))?.toString() ?: throw SourceError("拿不到 MV 地址")
     suspend fun hotRadios(offset: Int): List<Radio> = listFrom("hotRadios", "播客电台", offset).let { (p, v) -> arr(v).map { Plugins.radioOf(p, it) } }
     /** 电台节目：每期节目背后是一首「歌」 */
     suspend fun radioPrograms(rid: String): List<Track> = tracks(Plugins.pidOf(rid), Plugins.callFor(rid, "radioPrograms", Plugins.raw(rid)))

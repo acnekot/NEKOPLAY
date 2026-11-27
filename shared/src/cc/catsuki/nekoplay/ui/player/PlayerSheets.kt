@@ -122,7 +122,7 @@ import androidx.compose.runtime.withFrameMillis
         busy = true
         scope.launch {
             try {
-                val (l, n) = Ncm.comments(t.id, hot, list.size, if (!hot) list.lastOrNull()?.time ?: 0 else 0)
+                val (l, n) = SourceApi.comments(t.id, hot, list.size, if (!hot) list.lastOrNull()?.time ?: 0 else 0)
                 list += l.filter { x -> list.none { it.id == x.id } }; total = n; if (l.isEmpty() || (total in 0..list.size)) end = true
             } catch (e: Exception) { err = e.message; end = true }
             busy = false
@@ -139,7 +139,7 @@ import androidx.compose.runtime.withFrameMillis
         val r = replyTo
         scope.launch {
             try {
-                Ncm.commentPost(t.id, v, r?.id)
+                SourceApi.commentPost(t.id, v, r?.id)
                 text = ""; replyTo = null; fm.clearFocus()
                 nav.toast = if (r != null) "回复已发送" else "评论已发送"
                 if (!hot) list.add(0, Comment(System.currentTimeMillis(), me.name, me.uid, me.avatar, v, 0, System.currentTimeMillis(), r?.let { "@${it.user}：${it.content}" }))
@@ -211,9 +211,9 @@ import androidx.compose.runtime.withFrameMillis
             Row(verticalAlignment = Alignment.CenterVertically) {
                 T(x.user, 13, p.s, 600, modifier = Modifier.weight(1f).press(onClick = onUser))
                 Row(Modifier.press(.9f, true) {
-                    if (!Ncm.loggedIn) { nav.toast = "登录后才能点赞"; return@press }
+                    if (!SourceApi.loggedIn) { nav.toast = "登录后才能点赞"; return@press }
                     val on = !liked; liked = on
-                    Store.run { try { Ncm.commentLike(songId, x.id, on) } catch (e: Exception) { liked = !on; nav.toast = "点赞失败：${e.message}" } }
+                    Store.run { try { SourceApi.commentLike(songId, x.id, on) } catch (e: Exception) { liked = !on; nav.toast = "点赞失败：${e.message}" } }
                 }.padding(start = 12.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     // 点了赞：红色实心；没点：空心
                     NIcon(if (liked) NIcons.heart else NIcons.heartLine, 15.dp, if (liked) LikeRed else p.s)
@@ -253,7 +253,7 @@ val LikeRed = Color(0xFFE5484D)
     fun more() {
         if (busy) return; busy = true
         scope.launch {
-            try { val (l, cur) = Ncm.commentFloor(songId, x.id, if (loadedOnce) cursor else -1); list = list + l.filter { a -> list.none { it.id == a.id } }; cursor = cur; loadedOnce = true }
+            try { val (l, cur) = SourceApi.commentFloor(songId, x.id, if (loadedOnce) cursor else -1); list = list + l.filter { a -> list.none { it.id == a.id } }; cursor = cur; loadedOnce = true }
             catch (e: Exception) { nav.toast = "回复加载失败：${e.message}" }
             busy = false
         }

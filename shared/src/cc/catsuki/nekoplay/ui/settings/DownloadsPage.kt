@@ -21,7 +21,7 @@ import cc.catsuki.nekoplay.LocalNav
 import cc.catsuki.nekoplay.NIcon
 import cc.catsuki.nekoplay.NIcons
 import cc.catsuki.nekoplay.Nav
-import cc.catsuki.nekoplay.Ncm
+import cc.catsuki.nekoplay.SourceApi
 import cc.catsuki.nekoplay.OutlineBtn
 import cc.catsuki.nekoplay.Plat
 import cc.catsuki.nekoplay.PrimaryBar
@@ -46,10 +46,10 @@ fun downloadSheet(nav: Nav, list: List<Track>) {
     if (todo.isEmpty()) { nav.toast = "都已经下载过了"; return }
     val cur = Downloads.lastQuality
     nav.sheet = SheetSpec(if (todo.size == 1) "下载「${todo[0].title}」" else "下载 ${todo.size} 首", "选择音质；拿不到时自动降一档",
-        listOf(SheetItem((if (cur < 0) "✓  " else "    ") + "跟随播放音质（${Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]}）") {
+        listOf(SheetItem((if (cur < 0) "✓  " else "    ") + "跟随播放音质（${SourceApi.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]}）") {
             Downloads.lastQuality = -1; Downloads.downloadAll(todo, Engine.quality); nav.toast = "已加入下载：${todo.size} 首"
-        }) + Ncm.LEVEL_LABELS.indices.reversed().map { q ->
-            SheetItem((if (cur == q) "✓  " else "    ") + Ncm.LEVEL_LABELS[q]) { Downloads.lastQuality = q; Downloads.downloadAll(todo, q); nav.toast = "已加入下载：${todo.size} 首" }
+        }) + SourceApi.LEVEL_LABELS.indices.reversed().map { q ->
+            SheetItem((if (cur == q) "✓  " else "    ") + SourceApi.LEVEL_LABELS[q]) { Downloads.lastQuality = q; Downloads.downloadAll(todo, q); nav.toast = "已加入下载：${todo.size} 首" }
         })
 }
 
@@ -91,7 +91,7 @@ fun downloadSheet(nav: Nav, list: List<Track>) {
                 val (t, q) = jobs[i]; val pr = act[t.id] ?: -1f
                 Column(Modifier.fillMaxWidth().bottomLine().padding(vertical = 10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) { T(t.title, 15, w = 600); T("${t.artist} · ${Ncm.LEVEL_LABELS[q.coerceIn(0, 4)]}", 12, p.s) }
+                        Column(Modifier.weight(1f)) { T(t.title, 15, w = 600); T("${t.artist} · ${SourceApi.LEVEL_LABELS[q.coerceIn(0, 4)]}", 12, p.s) }
                         T(if (pr < 0) "等待中" else "${(pr * 100f + 0.5f).toInt()}%", 12, if (pr < 0) p.s else p.p, 700, mono = true)
                         Box(Modifier.size(40.dp).press { Downloads.cancel(t.id) }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp, p.s) }
                     }

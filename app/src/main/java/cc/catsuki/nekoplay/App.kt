@@ -21,7 +21,7 @@ class App : Application(), SingletonImageLoader.Factory {
 
     // 图片：内存缓存 24MB，磁盘缓存 200MB；网易云 / B 站图片带浏览器请求头，避免 403
     override fun newImageLoader(context: PlatformContext): ImageLoader {
-        val client = Ncm.http.newBuilder().addInterceptor { ch ->
+        val client = SourceApi.http.newBuilder().addInterceptor { ch ->
             val r = ch.request()
             val h = r.url.host
             ch.proceed(when {

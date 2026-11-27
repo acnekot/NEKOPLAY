@@ -7,7 +7,7 @@ import java.io.File
 class StressTest {
     private fun ensurePlat() {
         runCatching { Plat.impl }.onFailure { Plat.impl = DesktopPlat() }
-        Ncm.init()
+        SourceApi.init()
     }
 
     @Test

@@ -51,7 +51,7 @@ fun main() {
         }.apply { isDaemon = true; name = "perf-bench" }.start()
     }
     SingletonImageLoader.setSafe { ctx ->
-        val client = Ncm.http.newBuilder().addInterceptor { ch ->
+        val client = SourceApi.http.newBuilder().addInterceptor { ch ->
             val r = ch.request()
             val h = r.url.host
             ch.proceed(when {

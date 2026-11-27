@@ -83,7 +83,7 @@ private var recCache: List<Playlist>? = null
                 }
             }
             "foryou" -> {
-                val l by produceState(recCache) { if (value == null) runCatching { value = Ncm.recPlaylists().also { recCache = it } } }
+                val l by produceState(recCache) { if (value == null) runCatching { value = SourceApi.recPlaylists().also { recCache = it } } }
                 Tag("FOR YOU"); Spacer(Modifier.height(10.dp))
                 val pl = l?.firstOrNull()
                 Column(Modifier.press { if (pl != null) { SharedHero.capture("pl:${pl.id}", pl.cover, pl.name); nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) } }) {

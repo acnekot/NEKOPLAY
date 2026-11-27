@@ -25,7 +25,7 @@ class PluginGuardTest {
         val got = JsSource.readCapped(small.toResponseBody("application/octet-stream".toMediaType()), 1L shl 20)
         assertTrue(small.contentEquals(got))
         val big = ByteArray((1 shl 20) + 1)
-        assertFailsWith<NcmError> { JsSource.readCapped(big.toResponseBody(), 1L shl 20) }
+        assertFailsWith<SourceError> { JsSource.readCapped(big.toResponseBody(), 1L shl 20) }
     }
 
     @Test fun redactMasksSecrets() {

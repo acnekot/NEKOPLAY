@@ -36,7 +36,7 @@ import kotlin.math.roundToInt
     val lls by LocalLib.lists.collectAsState()
     val main = Plugins.main()
     val subAlbums by produceState<List<Album>>(emptyList(), prof, main?.id) {
-        if (prof != null && main?.has("subAlbums") == true) runCatching { value = Ncm.subAlbums() }
+        if (prof != null && main?.has("subAlbums") == true) runCatching { value = SourceApi.subAlbums() }
     }
 
     var filter by remember { mutableIntStateOf(0) } // 0 全部 / 1 专辑 / 2 歌单 / 3 最近
@@ -146,8 +146,8 @@ import kotlin.math.roundToInt
         sideLoading = true
         sideTracks = runCatching {
             when (it.kind) {
-                "album" -> Ncm.album(it.id).second
-                "pl" -> Ncm.playlistTracks(it.id)
+                "album" -> SourceApi.album(it.id).second
+                "pl" -> SourceApi.playlistTracks(it.id)
                 else -> emptyList()
             }
         }.getOrDefault(emptyList())
@@ -314,7 +314,8 @@ import kotlin.math.roundToInt
                 onPlay = {
                     if (curItem.presetTracks != null && curItem.presetTracks.isNotEmpty()) { Engine.playList(curItem.presetTracks, 0); nav.player = true }
                     else scope.launch {
-                        val ts = runCatching { when (curItem.kind) { "album" -> Ncm.album(curItem.id).second; "pl" -> Ncm.playlistTracks(curItem.id); else -> emptyList() } }.getOrDefault(emptyList())
+                        val ts = runCatching {
+                            when (curItem.kind) { "album" -> SourceApi.album(curItem.id).second; "pl" -> SourceApi.playlistTracks(curItem.id); else -> emptyList() } }.getOrDefault(emptyList())
                         if (ts.isNotEmpty()) { Engine.playList(ts, 0); nav.player = true } else nav.toast = "暂无可播曲目"
                     }
                 },

@@ -63,7 +63,7 @@ fun trackActions(nav: Nav, t: Track, fromPl: String? = null) {
         add(SheetItem("添加到歌单…") { addToPlaylist(nav, t) })
         if (fromPl != null) add(SheetItem("从这个歌单删除", danger = true) {
             if (fromPl.startsWith("lpl:")) { LocalLib.remove(fromPl, t.id); nav.toast = "已从歌单删除"; return@SheetItem }
-            Store.run { try { Ncm.playlistTracks(fromPl, "del", listOf(t.id)); nav.toast = "已从歌单删除"; Store.refreshPlaylists(fromPl) } catch (e: Exception) { nav.toast = "删除失败：${e.message}" } }
+            Store.run { try { SourceApi.playlistTracks(fromPl, "del", listOf(t.id)); nav.toast = "已从歌单删除"; Store.refreshPlaylists(fromPl) } catch (e: Exception) { nav.toast = "删除失败：${e.message}" } }
         })
         if (Downloads.has(t.id)) add(SheetItem("删除下载", danger = true) { Downloads.delete(t.id); nav.toast = "已删除下载" })
         else if (Features.on("dl")) add(SheetItem("下载…") { downloadSheet(nav, listOf(t)) })
@@ -79,10 +79,10 @@ fun trackActions(nav: Nav, t: Track, fromPl: String? = null) {
 /** 选择要加入的歌单：账号里自己创建的（同一个来源才能加）和本地歌单，或新建一个 */
 fun addToPlaylist(nav: Nav, t: Track) {
     // 账号歌单只能放同一个插件的歌
-    val sameSrc = Ncm.loggedIn && Plugins.isPlugin(t.id) && Plugins.pidOf(t.id) == Plugins.main()?.id && Plugins.main()?.has("editPlaylist") == true
+    val sameSrc = SourceApi.loggedIn && Plugins.isPlugin(t.id) && Plugins.pidOf(t.id) == Plugins.main()?.id && Plugins.main()?.has("editPlaylist") == true
     val mine = if (sameSrc) Store.playlists.value.filter { it.mine } else emptyList()
     fun add(pl: Playlist) = Store.run {
-        try { Ncm.playlistTracks(pl.id, "add", listOf(t.id)); nav.toast = "已加入「${if (pl.liked) "我喜欢" else pl.name}」"; Store.refreshPlaylists(pl.id) }
+        try { SourceApi.playlistTracks(pl.id, "add", listOf(t.id)); nav.toast = "已加入「${if (pl.liked) "我喜欢" else pl.name}」"; Store.refreshPlaylists(pl.id) }
         catch (e: Exception) { nav.toast = "添加失败：${e.message}" }
     }
     fun addLocal(id: String, name: String) { nav.toast = if (LocalLib.add(id, listOf(t)) > 0) "已加入「$name」" else "「$name」里已经有这首" }
@@ -90,7 +90,8 @@ fun addToPlaylist(nav: Nav, t: Track) {
         add(SheetItem("＋ 新建本地歌单") { nav.input = InputSpec("新建本地歌单", "歌单名称") { name -> addLocal(LocalLib.create(name).id, name) } })
         if (sameSrc) add(SheetItem("＋ 新建${Plugins.main()?.name}歌单") {
             nav.input = InputSpec("新建歌单", "歌单名称") { name ->
-                Store.run { try { val id = Ncm.createPlaylist(name, false); add(Playlist(id, name, 0, null)); Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "新建失败：${e.message}" } }
+                Store.run {
+                    try { val id = SourceApi.createPlaylist(name, false); add(Playlist(id, name, 0, null)); Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "新建失败：${e.message}" } }
             }
         })
         LocalLib.lists.value.forEach { l -> add(SheetItem("本地 · " + l.name) { addLocal(l.id, l.name) }) }
@@ -100,11 +101,11 @@ fun addToPlaylist(nav: Nav, t: Track) {
 
 /** 新建歌单（曲库页用）：没有账号或主插件不支持时直接建本地的 */
 fun newPlaylist(nav: Nav) {
-    if (!Ncm.loggedIn || Plugins.main()?.has("createPlaylist") != true) { newLocalPlaylist(nav); return }
+    if (!SourceApi.loggedIn || Plugins.main()?.has("createPlaylist") != true) { newLocalPlaylist(nav); return }
     nav.sheet = SheetSpec("新建歌单", "", listOf(
         SheetItem("${Plugins.main()?.name}歌单") {
             nav.input = InputSpec("新建歌单", "歌单名称") { name ->
-                Store.run { try { Ncm.createPlaylist(name, false); nav.toast = "已新建「$name」"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "新建失败：${e.message}" } }
+                Store.run { try { SourceApi.createPlaylist(name, false); nav.toast = "已新建「$name」"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "新建失败：${e.message}" } }
             }
         },
         SheetItem("本地歌单") { newLocalPlaylist(nav) },
@@ -127,10 +128,10 @@ fun playlistActions(nav: Nav, pl: Playlist) {
     nav.sheet = SheetSpec(pl.name, "${pl.count} 首", listOf(
         if (pl.mine) SheetItem("删除歌单", danger = true) {
             nav.sheet = SheetSpec("确定删除「${pl.name}」？", "删除后无法恢复", listOf(SheetItem("删除", danger = true) {
-                Store.run { try { Ncm.deletePlaylist(pl.id); nav.toast = "已删除"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "删除失败：${e.message}" } }
+                Store.run { try { SourceApi.deletePlaylist(pl.id); nav.toast = "已删除"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "删除失败：${e.message}" } }
             }))
         } else SheetItem("取消收藏", danger = true) {
-            Store.run { try { Ncm.subscribePlaylist(pl.id, false); nav.toast = "已取消收藏"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "操作失败：${e.message}" } }
+            Store.run { try { SourceApi.subscribePlaylist(pl.id, false); nav.toast = "已取消收藏"; Store.refreshPlaylists() } catch (e: Exception) { nav.toast = "操作失败：${e.message}" } }
         }
     ))
 }
@@ -237,11 +238,11 @@ fun openArtists(nav: Nav, t: Track) {
 
 fun cellQualitySheet(nav: Nav) {
     nav.sheet = SheetSpec("流量音质", "用手机流量时自动换成这个档位，省流量", listOf(SheetItem((if (Engine.qualityCell < 0) "✓  " else "    ") + "和 Wi-Fi 一样") { Engine.changeCellQuality(-1); nav.toast = "流量音质：和 Wi-Fi 一样" }) +
-        Ncm.LEVEL_LABELS.mapIndexed { i, l -> SheetItem((if (i == Engine.qualityCell) "✓  " else "    ") + l) { Engine.changeCellQuality(i); nav.toast = "流量音质：$l" } }.reversed())
+        SourceApi.LEVEL_LABELS.mapIndexed { i, l -> SheetItem((if (i == Engine.qualityCell) "✓  " else "    ") + l) { Engine.changeCellQuality(i); nav.toast = "流量音质：$l" } }.reversed())
 }
 
 fun qualitySheet(nav: Nav) {
-    nav.sheet = SheetSpec("选择音质", "选中的档位拿不到时会自动降一档；无损和 Hi-Res 需要会员", Ncm.LEVEL_LABELS.mapIndexed { i, l ->
+    nav.sheet = SheetSpec("选择音质", "选中的档位拿不到时会自动降一档；无损和 Hi-Res 需要会员", SourceApi.LEVEL_LABELS.mapIndexed { i, l ->
         SheetItem((if (i == Engine.quality) "✓  " else "    ") + l) { Engine.changeQuality(i); nav.toast = "音质：$l" }
     }.reversed())
 }

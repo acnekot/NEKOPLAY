@@ -47,7 +47,7 @@ data class CarPlayPlaylist(
 
 /**
  * CarPlay 桥接层（供 Swift 端 CarPlaySceneDelegate 调用）：
- * - 复用共享层 Engine / Store / LocalLib / Ncm，零重复播放逻辑
+ * - 复用共享层 Engine / Store / LocalLib / SourceApi，零重复播放逻辑
  * - 即使 iPhone 主界面尚未打开，接入车载 CarPlay 时也能独立唤醒内核并播放音乐
  */
 object CarPlayBridge {
@@ -108,7 +108,7 @@ object CarPlayBridge {
                 playlistId == "local:liked" -> LocalLib.liked.value
                 playlistId == "local:all" -> LocalMusic.list.value
                 playlistId.startsWith("lpl:") -> LocalLib.lists.value.firstOrNull { it.id == playlistId }?.tracks ?: emptyList()
-                else -> runCatching { withContext(Dispatchers.IO) { Ncm.playlistTracks(playlistId) } }.getOrDefault(emptyList())
+                else -> runCatching { withContext(Dispatchers.IO) { SourceApi.playlistTracks(playlistId) } }.getOrDefault(emptyList())
             }
             loadedLists[playlistId] = tracks
             onResult(tracks.take(100).map { it.toCp() })
@@ -118,7 +118,7 @@ object CarPlayBridge {
     /** 异步加载每日推荐曲目 */
     fun loadDailyTracks(onResult: (List<CarPlayTrack>) -> Unit) {
         mainScope.launch {
-            val tracks = runCatching { withContext(Dispatchers.IO) { Ncm.daily() } }.getOrDefault(emptyList())
+            val tracks = runCatching { withContext(Dispatchers.IO) { SourceApi.daily() } }.getOrDefault(emptyList())
             loadedLists["__daily__"] = tracks
             onResult(tracks.take(60).map { it.toCp() })
         }

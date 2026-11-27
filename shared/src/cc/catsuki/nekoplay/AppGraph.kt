@@ -12,7 +12,7 @@ data class PlayerConfig(
  * 将原本分散的全局有状态服务收口到单一入口，便于启动编排与单元测试替换。
  */
 class AppGraph(
-    val ncm: Ncm = Ncm,
+    val ncm: SourceApi = SourceApi,
     val plugins: Plugins = Plugins,
     val store: Store = Store,
     val localLib: LocalLib = LocalLib,

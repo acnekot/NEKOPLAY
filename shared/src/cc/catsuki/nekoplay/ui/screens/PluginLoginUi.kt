@@ -51,10 +51,10 @@ import kotlinx.coroutines.launch
         if (m == null || web || cookieTab || s == null) return@LaunchedEffect
         img = null; qrInfo = null; status = "正在获取二维码…"
         try {
-            val q = s.call("loginQr", m.optString("id")) as? org.json.JSONObject ?: throw NcmError("插件不支持扫码登录")
+            val q = s.call("loginQr", m.optString("id")) as? org.json.JSONObject ?: throw SourceError("插件不支持扫码登录")
             val bytes = q.optString("image").takeIf { it.isNotEmpty() }?.let { kotlin.io.encoding.Base64.decode(it) }
             img = if (bytes != null) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { val f = java.io.File(Plat.impl.cacheDir, "plugin_qr"); f.writeBytes(bytes); Plat.impl.decodeImage(f.path, 600) }
-                else q.optString("text").takeIf { it.isNotEmpty() }?.let { qrBitmap(it) } ?: throw NcmError("插件没有给出二维码")
+                else q.optString("text").takeIf { it.isNotEmpty() }?.let { qrBitmap(it) } ?: throw SourceError("插件没有给出二维码")
             qrInfo = q
             status = q.optString("hint").ifEmpty { "扫码并在手机上确认" }
             val key = q.optString("key")

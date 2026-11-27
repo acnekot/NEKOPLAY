@@ -117,7 +117,7 @@ object Downloads {
     private suspend fun runOne(t: Track, quality: Int) {
         val tmp = File(dir, ".${t.id}.part")
         try {
-            val s = Ncm.stream(t.id, quality)
+            val s = SourceApi.stream(t.id, quality)
             if (isHlsUrl(s.url)) {
                 throw Exception("HLS 流媒体暂不支持离线下载")
             }
@@ -125,7 +125,7 @@ object Downloads {
             val base = safe("${t.artist} - ${t.title}")
             var f = File(dir, "$base.$ext")
             if (f.exists()) f = File(dir, "$base (${t.id}).$ext")
-            Ncm.http.newCall(Request.Builder().url(s.url).header("User-Agent", "Mozilla/5.0").header("Referer", "https://music.163.com/").build()).execute().use { r ->
+            SourceApi.http.newCall(Request.Builder().url(s.url).header("User-Agent", "Mozilla/5.0").header("Referer", "https://music.163.com/").build()).execute().use { r ->
                 if (!r.isSuccessful) throw Exception("HTTP ${r.code}")
                 val body = r.body ?: throw Exception("空响应")
                 val total = body.contentLength()
@@ -149,7 +149,7 @@ object Downloads {
             if (!tmp.renameTo(f)) { tmp.copyTo(f, true); tmp.delete() }
             // 歌词：有翻译就合并成双语 LRC
             runCatching {
-                val d = Ncm.lyricFull(t.id)
+                val d = SourceApi.lyricFull(t.id)
                 if (d.lrc.isNotBlank()) File(dir, f.nameWithoutExtension + ".lrc").writeText(if (d.tr.isNullOrBlank()) d.lrc else d.lrc + "\n" + d.tr)
             }
             Plat.impl.mediaScan(f)

@@ -116,8 +116,8 @@ import kotlinx.coroutines.withContext
        }
        "lyric" -> settingsLyricSection(nav, p)
        "play" -> {
-        item { NavRow(if (Plat.isDesktop) "音质" else "Wi-Fi 音质", "在线播放的档位，拿不到时自动降一档", Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav) } }
-        if (!Plat.isDesktop) item { NavRow("流量音质", "用手机流量时换成这个档位", if (Engine.qualityCell < 0) "同 Wi-Fi" else Ncm.LEVEL_LABELS[Engine.qualityCell]) { cellQualitySheet(nav) } }
+        item { NavRow(if (Plat.isDesktop) "音质" else "Wi-Fi 音质", "在线播放的档位，拿不到时自动降一档", SourceApi.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)]) { qualitySheet(nav) } }
+        if (!Plat.isDesktop) item { NavRow("流量音质", "用手机流量时换成这个档位", if (Engine.qualityCell < 0) "同 Wi-Fi" else SourceApi.LEVEL_LABELS[Engine.qualityCell]) { cellQualitySheet(nav) } }
         if (Features.on("fx")) item { NavRow("效果器", "10 段均衡器、低音增强、环绕、响度", if (FxStore.fx.on) FxStore.fx.preset else "关") { nav.push(Page.Effects) } }
         if (Features.on("vst")) Plat.impl.vst?.let { v ->
             item { NavRow("VST 插件 (Beta)", "实验性：加载 VST3 / VST2 音效与可视化仪（如 MiniMeters），支持置顶浮窗", if (v.enabled) "${v.chain.size} 个运行中" else if (v.chain.isNotEmpty()) "已停用（${v.chain.size}）" else "关") { nav.push(Page.Vst) } }

@@ -41,7 +41,7 @@ object PluginSubs {
         if (migrated != raw) save()
     }
     private fun save() { prefs.edit().putString("subs", urls.joinToString("\n")).apply() }
-    fun add(url: String) { val u = url.trim(); if (!u.startsWith("http")) throw NcmError("订阅地址要以 http:// 或 https:// 开头"); if (u !in urls) { urls = urls + u; save() } }
+    fun add(url: String) { val u = url.trim(); if (!u.startsWith("http")) throw SourceError("订阅地址要以 http:// 或 https:// 开头"); if (u !in urls) { urls = urls + u; save() } }
     fun remove(url: String) { urls = urls - url; subs = subs - url; save() }
 
     /** raw.githubusercontent.com 在有的网络打不开：同一个文件的 jsDelivr 地址当备用 */
@@ -54,13 +54,13 @@ object PluginSubs {
         var last: Exception? = null
         for (u in mirrors(url)) {
             try {
-                return@withContext Ncm.http.newCall(Request.Builder().url(u).header("Cache-Control", "no-cache").build()).execute().use { r ->
-                    if (!r.isSuccessful) throw NcmError("HTTP ${r.code}")
+                return@withContext SourceApi.http.newCall(Request.Builder().url(u).header("Cache-Control", "no-cache").build()).execute().use { r ->
+                    if (!r.isSuccessful) throw SourceError("HTTP ${r.code}")
                     r.body?.string() ?: ""
                 }
             } catch (e: Exception) { last = e }
         }
-        throw NcmError("下载失败：${last?.message}")
+        throw SourceError("下载失败：${last?.message}")
     }
     /** index.json 里的相对路径换成完整地址 */
     private fun resolve(base: String, u: String) = when {
@@ -107,7 +107,7 @@ object PluginSubs {
     suspend fun install(i: Item): JsSource {
         val text = fetch(i.url)
         val id = Regex("""^\s*//\s*@id\s+([A-Za-z0-9_\-]+)\s*$""", RegexOption.MULTILINE).find(text.take(4000))?.groupValues?.get(1)
-        if (id != i.id) throw NcmError("下载到的脚本 id 是「${id ?: "无"}」，和订阅里写的「${i.id}」不一致")
+        if (id != i.id) throw SourceError("下载到的脚本 id 是「${id ?: "无"}」，和订阅里写的「${i.id}」不一致")
         val wasOff = Plugins.get(id) != null && !Plugins.on(id)
         val s = Plugins.import(text)
         if (wasOff) Plugins.set(id, false)

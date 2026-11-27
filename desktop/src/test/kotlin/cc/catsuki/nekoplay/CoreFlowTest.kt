@@ -37,12 +37,12 @@ class CoreFlowTest {
         JsSource.timeoutOverride = { 300L }
         val s = Plugins.import(script)
         val t0 = System.currentTimeMillis()
-        val e = assertFailsWith<NcmError> { s.call("hang") }
+        val e = assertFailsWith<SourceError> { s.call("hang") }
         assertTrue("超时" in (e.message ?: ""), e.message)
         assertTrue(System.currentTimeMillis() - t0 < 3000, "超时应该按设定时间返回")
         // 超时后锁要释放，后续调用照常；脚本异常也不影响下一次
         assertEquals("ok", s.call("fast"))
-        assertFailsWith<NcmError> { s.call("boom") }
+        assertFailsWith<SourceError> { s.call("boom") }
         assertEquals("ok", s.call("fast"))
     }
 

@@ -24,7 +24,7 @@ NEKOPLAY 是一份 Kotlin + Compose Multiplatform 代码运行在三大平台（
 | 层 | 核心模块 | 依赖方向 |
 |---|---|---|
 | `core` | `Plat` / `PlatImpl`、`AppGraph`、`Version`、`Hash`（MD5 + 原子写盘）、`Features`（5 大关联功能集群）、`Backup`（可选 AES-256 加密）、`Updater`、`Perf`、`Debug` | 无 |
-| `data` | `Ncm`、`Plugin` / `Plugins` / `PluginSubs`（QuickJS API v2）、`Store`、`LocalLib`、`LocalMusic`、`Dav`、`Download`、`Stats`（异步防抖原子落盘） | `core` |
+| `data` | `SourceApi`（音源统一调用层，原 `Ncm`）、`Plugin` / `Plugins` / `PluginSubs`（QuickJS API v2）、`Store`、`LocalLib`、`LocalMusic`、`Dav`、`Download`、`Stats`（异步防抖原子落盘） | `core` |
 | `player` | `Engine` / `EngineQueue`（随机历史栈、FM、缓存检索）、`EngineScrub`（`@feature scrub` 插件槽位）、`Fx`、`Sleep`、`Lrc`、`DeskLyric` | `core`、`data` |
 | `ui` | `ui/Motion` / `ui/MotionEasings`（简单/高级分层 + `@type motion` 剥离）、`ui/InputBus`、`ui/RootNav`、`ui/components/`、`ui/player/`、`ui/screens/`、`ui/settings/` | 全部 |
 

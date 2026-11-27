@@ -71,7 +71,7 @@ import java.util.Calendar
     val mainId = Plugins.main()?.id
     val likedLists = homePl.mapNotNull { s -> allPls[s.id]?.firstOrNull { it.liked }?.let { s to it } }
     val showRec = HomeSrc.has("recPlaylists")
-    val recPl by produceState<List<Playlist>>(emptyList(), showRec) { if (showRec) runCatching { value = Ncm.recPlaylists() } }
+    val recPl by produceState<List<Playlist>>(emptyList(), showRec) { if (showRec) runCatching { value = SourceApi.recPlaylists() } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 24.dp)) {
         // 首页模块：按「首页布局」里的顺序和开关排列；只有网易云有的模块在别的来源下不显示
         HomeLayout.visible.forEachIndexed { mi, m ->
@@ -169,7 +169,7 @@ import java.util.Calendar
                             if (HomeSrc.has("newSongs")) add(Triple("新歌速递", "NEW SONGS") { nav.push(Page.Detail("newsong", "0", "新歌速递")) })
                             if (HomeSrc.has("recMvs")) add(Triple("MV 精选", "MUSIC VIDEO") { nav.push(Page.Mvs) })
                             if (HomeSrc.has("hotRadios")) add(Triple("播客电台", "PODCAST") { nav.push(Page.Radios) })
-                            if (Ncm.loggedIn && HomeSrc.has("historyDates")) add(Triple("历史日推", "HISTORY") { nav.push(Page.History) })
+                            if (SourceApi.loggedIn && HomeSrc.has("historyDates")) add(Triple("历史日推", "HISTORY") { nav.push(Page.History) })
                         }
                         tiles.chunked(2).forEach { row ->
                             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

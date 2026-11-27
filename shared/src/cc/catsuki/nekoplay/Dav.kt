@@ -37,9 +37,9 @@ object DavMusic {
     /** 列出一个文件夹：子文件夹在前，只留音乐文件 */
     suspend fun list(path: String): List<Entry> = withContext(Dispatchers.IO) {
         val body = """<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getcontentlength/></d:prop></d:propfind>"""
-        val text = Ncm.http.newCall(req(path).header("Depth", "1").method("PROPFIND", body.toRequestBody("application/xml".toMediaType())).build()).execute().use { r ->
-            if (r.code == 401) throw NcmError("账号或密码不对")
-            if (!r.isSuccessful) throw NcmError("WebDAV 出错：HTTP ${r.code}")
+        val text = SourceApi.http.newCall(req(path).header("Depth", "1").method("PROPFIND", body.toRequestBody("application/xml".toMediaType())).build()).execute().use { r ->
+            if (r.code == 401) throw SourceError("账号或密码不对")
+            if (!r.isSuccessful) throw SourceError("WebDAV 出错：HTTP ${r.code}")
             r.body?.string() ?: ""
         }
         val self = path.trimEnd('/')
@@ -74,7 +74,7 @@ object DavMusic {
     /** 同名 .lrc 歌词 */
     suspend fun lyric(src: String): String? = withContext(Dispatchers.IO) {
         val path = src.removePrefix("dav:").substringBeforeLast('.') + ".lrc"
-        runCatching { Ncm.http.newCall(req(path).build()).execute().use { r -> if (r.isSuccessful) r.body?.string() else null } }.getOrNull()
+        runCatching { SourceApi.http.newCall(req(path).build()).execute().use { r -> if (r.isSuccessful) r.body?.string() else null } }.getOrNull()
     }
 
     /** 百分号解码（不把 + 当空格），iOS 也能用 */

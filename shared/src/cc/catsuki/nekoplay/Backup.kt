@@ -140,12 +140,12 @@ object Backup {
     suspend fun upload(password: String = cryptPass) = withContext(Dispatchers.IO) {
         val payload = seal(dump(), password)
         val body = payload.toString().toRequestBody("application/json".toMediaType())
-        Ncm.http.newCall(req(target()).put(body).build()).execute().use { r -> if (!r.isSuccessful) throw Exception("HTTP ${r.code}") }
+        SourceApi.http.newCall(req(target()).put(body).build()).execute().use { r -> if (!r.isSuccessful) throw Exception("HTTP ${r.code}") }
         last = System.currentTimeMillis(); save()
     }
 
     suspend fun restore(password: String = cryptPass): Long = withContext(Dispatchers.IO) {
-        val text = Ncm.http.newCall(req(target()).get().build()).execute().use { r -> if (!r.isSuccessful) throw Exception(if (r.code == 404) "还没有备份" else "HTTP ${r.code}"); r.body!!.string() }
+        val text = SourceApi.http.newCall(req(target()).get().build()).execute().use { r -> if (!r.isSuccessful) throw Exception(if (r.code == 404) "还没有备份" else "HTTP ${r.code}"); r.body!!.string() }
         val root = unseal(JSONObject(text), password)
         apply(root)
     }

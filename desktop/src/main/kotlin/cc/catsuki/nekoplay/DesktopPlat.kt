@@ -153,7 +153,7 @@ class DesktopPlat : PlatImpl {
     })
     private fun decodeFrames(url: String): List<Pair<ImageBitmap, Int>> {
         val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0").header("Referer", "https://music.163.com/").build()
-        val bytes = Ncm.http.newCall(req).execute().use { it.body!!.bytes() }
+        val bytes = SourceApi.http.newCall(req).execute().use { it.body!!.bytes() }
         val codec = org.jetbrains.skia.Codec.makeFromData(org.jetbrains.skia.Data.makeFromBytes(bytes))
         val n = codec.frameCount.coerceIn(1, 120)
         val info = codec.framesInfo

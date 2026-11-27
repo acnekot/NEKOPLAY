@@ -34,10 +34,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
     val nav = LocalNav.current
     val st by Engine.state.collectAsState()
     var err by remember { mutableStateOf<String?>(null) }
-    val info by produceState<Artist?>(null, pg.id) { try { value = Ncm.artist(pg.id) } catch (e: Exception) { err = e.message } }
-    val albums by produceState<List<Album>>(emptyList(), pg.id) { runCatching { value = Ncm.artistAlbums(pg.id) } }
-    val mvs by produceState<List<Mv>>(emptyList(), pg.id) { runCatching { value = Ncm.artistMvs(pg.id) } }
-    val simi by produceState<List<Artist>>(emptyList(), pg.id) { if (Ncm.loggedIn) runCatching { value = Ncm.simiArtists(pg.id) } }
+    val info by produceState<Artist?>(null, pg.id) { try { value = SourceApi.artist(pg.id) } catch (e: Exception) { err = e.message } }
+    val albums by produceState<List<Album>>(emptyList(), pg.id) { runCatching { value = SourceApi.artistAlbums(pg.id) } }
+    val mvs by produceState<List<Mv>>(emptyList(), pg.id) { runCatching { value = SourceApi.artistMvs(pg.id) } }
+    val simi by produceState<List<Artist>>(emptyList(), pg.id) { if (SourceApi.loggedIn) runCatching { value = SourceApi.simiArtists(pg.id) } }
     var expand by remember { mutableStateOf(false) }
     val a = info
     val hot = a?.hot ?: emptyList()
@@ -64,9 +64,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
                 ActionRow {
                     PrimaryBar("播放热门歌曲", NIcons.play, Modifier.weight(1f)) { Engine.playList(hot, 0) }
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(hot, 0, shuffle = true) }
-                    if (Ncm.loggedIn && a != null) {
+                    if (SourceApi.loggedIn && a != null) {
                         Spacer(Modifier.width(10.dp))
-                        FollowBtn(a.followed, "关注", "已关注") { on -> Ncm.followArtist(pg.id, on) }
+                        FollowBtn(a.followed, "关注", "已关注") { on -> SourceApi.followArtist(pg.id, on) }
                     }
                 }
                 if (err != null) T("加载失败：$err", 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(vertical = 24.dp))
@@ -112,7 +112,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
     val nav = LocalNav.current
     val st by Engine.state.collectAsState()
     var err by remember { mutableStateOf<String?>(null) }
-    val data by produceState<Pair<Album, List<Track>>?>(null, pg.id) { try { value = Ncm.album(pg.id) } catch (e: Exception) { err = e.message } }
+    val data by produceState<Pair<Album, List<Track>>?>(null, pg.id) { try { value = SourceApi.album(pg.id) } catch (e: Exception) { err = e.message } }
     val list = data?.second ?: emptyList()
     val al = data?.first
     val p = c
@@ -136,9 +136,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
                 ActionRow {
                     PrimaryBar("播放", NIcons.play, Modifier.weight(1f)) { Engine.playList(list, 0) }
                     Spacer(Modifier.width(10.dp)); OutlineBtn("随机播放", pad = 14.dp) { Engine.playList(list, 0, shuffle = true) }
-                    if (Ncm.loggedIn) {
-                        val subbed by produceState<Boolean?>(null, pg.id) { value = runCatching { Ncm.subAlbums().any { it.id == pg.id } }.getOrDefault(false) }
-                        Spacer(Modifier.width(10.dp)); FollowBtn(subbed ?: false, "收藏", "已收藏", ready = subbed != null) { on -> Ncm.subAlbum(pg.id, on); Store.refreshPlaylists() }
+                    if (SourceApi.loggedIn) {
+                        val subbed by produceState<Boolean?>(null, pg.id) { value = runCatching { SourceApi.subAlbums().any { it.id == pg.id } }.getOrDefault(false) }
+                        Spacer(Modifier.width(10.dp)); FollowBtn(subbed ?: false, "收藏", "已收藏", ready = subbed != null) { on -> SourceApi.subAlbum(pg.id, on); Store.refreshPlaylists() }
                     }
                 }
                 Spacer(Modifier.height(12.dp)); Rule()
@@ -168,11 +168,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
             value = User(pg.uid, if (isMe) me.name else pg.name, if (isMe) me.avatar.ifEmpty { null } else null, null, "${src.name}未提供详细主页信息", 0, 0, 0, 0, false)
             return@produceState
         }
-        try { value = Ncm.user(pg.uid) } catch (e: Exception) { err = e.message }
+        try { value = SourceApi.user(pg.uid) } catch (e: Exception) { err = e.message }
     }
     val pls by produceState<List<Playlist>?>(null, pg.uid, canPls) {
         if (!canPls) { value = if (isMe) Store.playlists.value else emptyList(); return@produceState }
-        runCatching { value = Ncm.userPlaylists(pg.uid) }.onFailure { value = if (isMe) Store.playlists.value else emptyList() }
+        runCatching { value = SourceApi.userPlaylists(pg.uid) }.onFailure { value = if (isMe) Store.playlists.value else emptyList() }
     }
     val p = c
     val liked = pls?.firstOrNull { it.liked }
@@ -197,7 +197,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
                 Column(Modifier.offset(y = (-32).dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         T(u?.name ?: pg.name, Fs.HERO, w = 800, lh = 1.2f, modifier = Modifier.weight(1f))
-                        if (Ncm.loggedIn && u != null && !isMe && canFollow) FollowBtn(u!!.followed, "关注", "已关注") { on -> Ncm.followUser(pg.uid, on) }
+                        if (SourceApi.loggedIn && u != null && !isMe && canFollow) FollowBtn(u!!.followed, "关注", "已关注") { on -> SourceApi.followUser(pg.uid, on) }
                     }
                     if (!u?.signature.isNullOrBlank()) T(u!!.signature, 13, p.s, lines = 3, lh = 1.6f, modifier = Modifier.padding(top = 6.dp))
                     if (err != null) T("加载失败：$err", 13, p.bad, lines = if (Debug.on) 12 else 3, modifier = Modifier.padding(top = 10.dp))
@@ -260,7 +260,7 @@ private fun Modifier.drawBehindLines(col: Color, left: Boolean, top: Boolean) = 
     fun load() {
         if (busy || !more) return; busy = true
         scope.launch {
-            try { val (l, m) = Ncm.artistAlbumsPage(pg.id, list.size, 60); list = list + l.filter { a -> list.none { it.id == a.id } }; more = m && l.isNotEmpty(); err = null }
+            try { val (l, m) = SourceApi.artistAlbumsPage(pg.id, list.size, 60); list = list + l.filter { a -> list.none { it.id == a.id } }; more = m && l.isNotEmpty(); err = null }
             catch (e: Exception) { err = e.message }
             busy = false
         }

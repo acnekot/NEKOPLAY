@@ -145,14 +145,14 @@ class JsSource(val file: File) {
     /** 调用脚本里 source 对象的方法：参数和返回值都是 JSON */
     suspend fun call(fn: String, vararg args: Any?): Any? {
         lastUsedAt = System.currentTimeMillis()
-        if (js == null && !start()) throw NcmError("音源「$name」加载失败：$error")
+        if (js == null && !start()) throw SourceError("音源「$name」加载失败：$error")
         val argJson = JSONArray().apply { args.forEach { put(it ?: JSONObject.NULL) } }.toString()
         val t0 = System.currentTimeMillis()
         val d = kotlinx.coroutines.CompletableDeferred<Pair<Boolean, String?>>()
         var cid = 0L
         val (ok, out) = try {
             lock.withLock {
-                val q = js ?: throw NcmError("音源「$name」已关闭")
+                val q = js ?: throw SourceError("音源「$name」已关闭")
                 cid = ++seq; waiting[cid] = d
                 q.evaluate<Any?>("__call($cid, ${q(fn)}, ${q(argJson)})", filename = "call.js")
             }
@@ -165,7 +165,7 @@ class JsSource(val file: File) {
         if (!ok) {
             val msg = (out ?: "").substringBefore("\n").removePrefix("Error: ")
             Debug.log("js:$id.$fn", 0, System.currentTimeMillis() - t0, "error", Debug.redact(msg))
-            throw NcmError(msg)
+            throw SourceError(msg)
         }
         Debug.log("js:$id.$fn", 200, System.currentTimeMillis() - t0, "application/json", Debug.redact(out ?: "null"))
         if (out == null || out == "null") return null
@@ -204,9 +204,9 @@ class JsSource(val file: File) {
     /** {url, method, headers{}, body(字符串), form{}, json(对象), redirect:false, binary:true} → {status, url, headers{小写名:[值]}, body | bodyBase64} */
     @OptIn(ExperimentalEncodingApi::class)
     private suspend fun http(o: JSONObject): JSONObject = withContext(Dispatchers.IO) {
-        if (!canNetwork) throw NcmError("插件「$name」未声明 network 权限，已拦截网络请求")
+        if (!canNetwork) throw SourceError("插件「$name」未声明 network 权限，已拦截网络请求")
         val url = o.getString("url")
-        if (!canLan && isPrivateHost(hostOf(url))) throw NcmError("插件「$name」未声明 lan 权限，已拦截访问本机 / 局域网地址")
+        if (!canLan && isPrivateHost(hostOf(url))) throw SourceError("插件「$name」未声明 lan 权限，已拦截访问本机 / 局域网地址")
         val b = Request.Builder().url(url)
         o.optJSONObject("headers")?.let { h -> h.keys().forEach { k -> b.header(k, h.optString(k)) } }
         if (o.optJSONObject("headers")?.has("User-Agent") != true && o.optJSONObject("headers")?.has("user-agent") != true) b.header("User-Agent", UA)
@@ -219,7 +219,7 @@ class JsSource(val file: File) {
             else -> null
         }
         b.method(method, body)
-        val base = if (o.optBoolean("redirect", true)) Ncm.http else noRedirect
+        val base = if (o.optBoolean("redirect", true)) SourceApi.http else noRedirect
         // timeout：秒，长轮询（微信扫码状态）要等得久一点
         val client = o.optInt("timeout", 0).takeIf { it > 0 }?.let { t -> base.newBuilder().readTimeout(t.toLong(), java.util.concurrent.TimeUnit.SECONDS).build() } ?: base
         // 调用方取消（比如退出登录页）时把连接也断掉，不让长轮询挂着
@@ -234,7 +234,7 @@ class JsSource(val file: File) {
                 if (bin) res.put("bodyBase64", Base64.encode(bytes)) else res.put("body", bytes.decodeToString())
                 res
             }
-        } catch (e: java.io.IOException) { throw NcmError("网络错误：${e.message}") }
+        } catch (e: java.io.IOException) { throw SourceError("网络错误：${e.message}") }
     }
 
     /** {data(文本) | dataBase64, key, iv?, mode: cbc|ecb, padding: true, decrypt: false} → base64 */
@@ -282,12 +282,12 @@ class JsSource(val file: File) {
         /** 按上限读响应体；声明的长度或实际读到的超过上限就报错，不再继续读 */
         fun readCapped(body: okhttp3.ResponseBody, max: Long): ByteArray {
             val len = body.contentLength()
-            if (len > max) throw NcmError("响应过大（${len shr 20}MB，上限 ${max shr 20}MB）")
+            if (len > max) throw SourceError("响应过大（${len shr 20}MB，上限 ${max shr 20}MB）")
             val chunks = ArrayList<ByteArray>(); var total = 0L
             body.byteStream().use { ins ->
                 while (true) {
                     val b = ByteArray(64 * 1024); val n = ins.read(b, 0, b.size); if (n < 0) break
-                    total += n; if (total > max) throw NcmError("响应过大（超过 ${max shr 20}MB 上限）")
+                    total += n; if (total > max) throw SourceError("响应过大（超过 ${max shr 20}MB 上限）")
                     chunks += if (n == b.size) b else b.copyOf(n)
                 }
             }
@@ -296,7 +296,7 @@ class JsSource(val file: File) {
             return out
         }
         private const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
-        private val noRedirect: OkHttpClient by lazy { Ncm.http.newBuilder().followRedirects(false).followSslRedirects(false).build() }
+        private val noRedirect: OkHttpClient by lazy { SourceApi.http.newBuilder().followRedirects(false).followSslRedirects(false).build() }
         private fun q(s: String) = JSONObject.quote(s)
 
         /** 脚本运行前先注入的工具：nk.http / nk.md5 / nk.aes / nk.store / nk.log / nk.host，以及注册入口 */

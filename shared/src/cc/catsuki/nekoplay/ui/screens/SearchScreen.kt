@@ -61,7 +61,7 @@ private val SEARCH_KINDS = listOf("track", "album", "artist", "playlist", "user"
     var res by remember { mutableStateOf<SearchRes?>(null) }
     var busy by remember { mutableStateOf(false) }
     var sugg by remember { mutableStateOf<List<String>>(emptyList()) }
-    val hot by produceState<List<String>>(emptyList()) { runCatching { value = Ncm.hotSearch() } }
+    val hot by produceState<List<String>>(emptyList()) { runCatching { value = SourceApi.hotSearch() } }
     val scope = rememberCoroutineScope()
     val fr = remember { FocusRequester() }
     val fm = LocalFocusManager.current
@@ -70,7 +70,7 @@ private val SEARCH_KINDS = listOf("track", "album", "artist", "playlist", "user"
     // 输入时 250ms 防抖取联想词
     LaunchedEffect(q, res) {
         if (res != null || q.isBlank()) { sugg = emptyList(); return@LaunchedEffect }
-        delay(250); runCatching { sugg = Ncm.suggest(q.trim()).take(10) }
+        delay(250); runCatching { sugg = SourceApi.suggest(q.trim()).take(10) }
     }
     fun saveHistory(l: List<String>) { history = l; prefs.edit().putString("history", l.joinToString("\n")).apply() }
     fun run(k: String, t: Int) {
@@ -80,7 +80,7 @@ private val SEARCH_KINDS = listOf("track", "album", "artist", "playlist", "user"
         job?.cancel()
         job = scope.launch {
             try {
-                val pid = SearchSource.plugin ?: throw NcmError("没有可用的音源")
+                val pid = SearchSource.plugin ?: throw SourceError("没有可用的音源")
                 val kind = SEARCH_KINDS[t]
                 if (kind !in (Plugins.get(pid)?.searchTypes ?: emptySet())) { nav.toast = "${Plugins.nameOf(pid)}不支持搜${SEARCH_TYPES[t]}"; res = SearchRes(t); busy = false; return@launch }
                 @Suppress("UNCHECKED_CAST") val v = Plugins.search(pid, k, kind) as List<Any>

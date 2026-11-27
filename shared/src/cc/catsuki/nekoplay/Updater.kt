@@ -42,10 +42,10 @@ object Updater {
     val current: String get() = APP_VERSION + (BuildMeta.COMMIT.takeIf { it.length >= 7 }?.let { " · " + it.take(7) } ?: "")
 
     private suspend fun api(path: String): String = withContext(Dispatchers.IO) {
-        Ncm.http.newCall(Request.Builder().url("https://api.github.com/repos/$REPO/$path").header("Accept", "application/vnd.github+json").build()).execute().use { r ->
-            if (r.code == 404) throw NcmError("还没有发布过正式版")
-            if (r.code == 403) throw NcmError("GitHub 接口请求太频繁，过一会儿再试")
-            if (!r.isSuccessful) throw NcmError("GitHub 返回 HTTP ${r.code}")
+        SourceApi.http.newCall(Request.Builder().url("https://api.github.com/repos/$REPO/$path").header("Accept", "application/vnd.github+json").build()).execute().use { r ->
+            if (r.code == 404) throw SourceError("还没有发布过正式版")
+            if (r.code == 403) throw SourceError("GitHub 接口请求太频繁，过一会儿再试")
+            if (!r.isSuccessful) throw SourceError("GitHub 返回 HTTP ${r.code}")
             r.body?.string() ?: ""
         }
     }
@@ -97,7 +97,7 @@ object Updater {
     private suspend fun checkNightly(): Info {
         val arr = JSONArray(api("releases?per_page=20"))
         val list = (0 until arr.length()).map { arr.getJSONObject(it) }.filter { !it.optBoolean("draft") }
-        val o = list.firstOrNull { it.optBoolean("prerelease") } ?: throw NcmError("还没有发布过预发布版")
+        val o = list.firstOrNull { it.optBoolean("prerelease") } ?: throw SourceError("还没有发布过预发布版")
         val tag = o.optString("tag_name").removePrefix("v")
         val baseVer = tag.substringBefore('-')
         val pubTime = epoch(o.optString("published_at").ifEmpty { o.optString("created_at") })

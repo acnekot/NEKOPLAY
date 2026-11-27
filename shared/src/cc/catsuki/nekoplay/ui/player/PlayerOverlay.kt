@@ -228,7 +228,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                         T(t.artist, if (sh) 14 else 15, p.s, lh = 1.3f, lines = if (sh) 1 else 2, modifier = Modifier.press(onLong = { copy(t.artist, "歌手") }) { openArtists(nav, t) })
                         // 点音质这一行可以换音质
                         val ainfo by Engine.info.collectAsState()
-                        T(if (st.format.isEmpty()) Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)] + " ▾"
+                        T(if (st.format.isEmpty()) SourceApi.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)] + " ▾"
                           else (ainfo?.let { if (it.kbps == 0 && st.kbps > 0) it.copy(kbps = st.kbps) else it }?.line() ?: "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}") + "${if (st.cached) " · 缓存" else ""} ▾",
                             11, p.s, mono = true, ls = .06f, modifier = Modifier.padding(top = 6.dp).press { qualitySheet(nav) })
                     }
@@ -335,7 +335,7 @@ private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
                         T(t.title, Fs.PAGE, w = 800, lh = 1.25f, lines = 2, modifier = Modifier.press(onLong = { copy(t.title, "歌名") }) {})
                         T(t.artist, 15, p.s, lh = 1.3f, lines = 2, modifier = Modifier.press(onLong = { copy(t.artist, "歌手") }) { openArtists(nav, t) })
                         val ainfo by Engine.info.collectAsState()
-                        T(if (st.format.isEmpty()) Ncm.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)] + " ▾"
+                        T(if (st.format.isEmpty()) SourceApi.LEVEL_LABELS[Engine.quality.coerceIn(0, 4)] + " ▾"
                           else (ainfo?.let { if (it.kbps == 0 && st.kbps > 0) it.copy(kbps = st.kbps) else it }?.line() ?: "${st.format.uppercase()}  ${if (st.format == "flac") "无损" else "有损"}${if (st.kbps > 0) " · ${st.kbps} kbps" else ""}") + "${if (st.cached) " · 缓存" else ""} ▾",
                             11, p.s, mono = true, ls = .06f, modifier = Modifier.padding(top = 6.dp).press { qualitySheet(nav) })
                     }

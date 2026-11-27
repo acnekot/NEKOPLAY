@@ -166,13 +166,13 @@ object Store {
         if (Plugins.main() == null) { profile.value = null; return@launch }
         PluginStore.refresh().join()      // 先拿到各插件的登录状态
         loading.value = true
-        runCatching { Ncm.profile() }.onSuccess { p ->
+        runCatching { SourceApi.profile() }.onSuccess { p ->
             profile.value = p
             if (p != null) prefs.edit().putString("profile", JSONObject().put("u", p.uid).put("n", p.name).put("a", p.avatar).toString()).apply()
             else prefs.edit().remove("profile").apply()
         }
-        runCatching { Ncm.daily() }.onSuccess { daily.value = it; writeTracks("daily", it) }
-        if (Ncm.loggedIn) runCatching { Ncm.playlists() }.onSuccess { l ->
+        runCatching { SourceApi.daily() }.onSuccess { daily.value = it; writeTracks("daily", it) }
+        if (SourceApi.loggedIn) runCatching { SourceApi.playlists() }.onSuccess { l ->
             playlists.value = l
             runCatching { File(dir, "playlists.json").writeTextAtomic(JSONArray(l.map { JSONObject().put("id", it.id).put("n", it.name).put("c", it.count).put("cv", it.cover ?: "").put("l", it.liked).put("m", it.mine) }).toString()) }
             l.firstOrNull { it.liked }?.let { lp -> runCatching { tracksOf(lp.id, refresh = true) } }
@@ -183,7 +183,7 @@ object Store {
     /** 歌单曲目：内存里不常驻，读缓存或联网 */
     suspend fun tracksOf(id: String, refresh: Boolean = false): List<Track> = withContext(Dispatchers.IO) {
         if (!refresh) readTracks("pl_$id")?.let { return@withContext it }
-        val l = Ncm.playlistTracks(id)
+        val l = SourceApi.playlistTracks(id)
         writeTracks("pl_$id", l)
         if (playlists.value.firstOrNull { it.liked }?.id == id) {
             likedIds.value = l.map { it.id }.toSet() + LocalLib.liked.value.map { it.id }
@@ -194,7 +194,7 @@ object Store {
 
     /** 歌单增删改后：重新拉歌单列表，必要时刷新某个歌单的曲目缓存 */
     fun refreshPlaylists(changed: String? = null) = io.launch {
-        runCatching { Ncm.playlists() }.onSuccess { l ->
+        runCatching { SourceApi.playlists() }.onSuccess { l ->
             playlists.value = l
             runCatching { File(dir, "playlists.json").writeTextAtomic(JSONArray(l.map { JSONObject().put("id", it.id).put("n", it.name).put("c", it.count).put("cv", it.cover ?: "").put("l", it.liked).put("m", it.mine) }).toString()) }
         }
@@ -216,7 +216,7 @@ object Store {
         prefs.edit().putStringSet("liked", likedIds.value).apply()
         // 本机喜欢里有它（或者同步不了）就改本机的
         if (LocalLib.isLiked(t.id) != like && (LocalLib.isLiked(t.id) || !cloudLike(t))) { LocalLib.toggleLike(t); return }
-        io.launch { runCatching { Ncm.like(t.id, like) }.onFailure { onError("云端同步失败：${it.message}") } }
+        io.launch { runCatching { SourceApi.like(t.id, like) }.onFailure { onError("云端同步失败：${it.message}") } }
     }
 
     /** 写入一条播放历史：按本地日期分天保留、无条数上限；同日重复播放同一首歌置顶并刷新播放时间 */
@@ -244,7 +244,7 @@ object Store {
     }
 
     fun logout() = io.launch {
-        Ncm.logout(); profile.value = null; playlists.value = emptyList(); likedIds.value = emptySet()
+        SourceApi.logout(); profile.value = null; playlists.value = emptyList(); likedIds.value = emptySet()
         prefs.edit().remove("profile").remove("liked").apply()
         dir.listFiles()?.filter { it.name.startsWith("pl_") || it.name == "playlists.json" }?.forEach { it.delete() }
     }
