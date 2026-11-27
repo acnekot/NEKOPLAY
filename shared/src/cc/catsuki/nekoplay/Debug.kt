@@ -14,9 +14,15 @@ object Debug {
     fun set(v: Boolean) { on = v; Plat.prefs("ui").edit().putBoolean("debug", v).apply() }
     fun log(path: String, code: Int, ms: Long, type: String, body: String) {
         if (!on) return
-        reqs.value = (listOf(Req(System.currentTimeMillis(), path, code, ms, type, body.take(2000))) + reqs.value).take(80)
+        reqs.value = (listOf(Req(System.currentTimeMillis(), path, code, ms, type, redact(body.take(4000)).take(2000))) + reqs.value).take(80)
     }
+    /** 凭据字段打码：JSON 里的 "token": "…"、Cookie / Authorization 头、URL 参数里的 token=… 只留前 4 位 */
+    private val SECRET_KEYS = "(?:[a-z_]*token|cookie|set-cookie|authorization|password|passwd|secret|session(?:id)?|sid|csrf|ticket|music_u|musicu|uin)"
+    private val jsonSecret = Regex("(\"$SECRET_KEYS\"\\s*:\\s*)(\"[^\"]*\"|\\[[^\\]]*\\])", RegexOption.IGNORE_CASE)
+    private val kvSecret = Regex("((?<![a-z0-9])$SECRET_KEYS\\s*[=:]\\s*)([^&;,\\s\"]+)", RegexOption.IGNORE_CASE)
+    private fun mask(v: String): String { val t = v.trim('"'); return (if (v.startsWith("\"")) "\"" else "") + (if (t.length <= 4) "***" else t.take(4) + "***") + (if (v.endsWith("\"") && v.length > 1) "\"" else "") }
+    fun redact(s: String): String = if (s.isEmpty()) s else kvSecret.replace(jsonSecret.replace(s) { it.groupValues[1] + (if (it.groupValues[2].startsWith("[")) "[***]" else mask(it.groupValues[2])) }) { it.groupValues[1] + mask(it.groupValues[2]) }
     /** 拼到错误信息后面的真实数据（调试模式才有） */
     fun detail(path: String, code: Int, type: String, body: String): String =
-        if (!on) "" else "\n[$path] HTTP $code · ${type.ifEmpty { "无类型" }} · ${body.length} 字节\n" + body.take(400).replace(Regex("\\s+"), " ").ifEmpty { "（空响应）" }
+        if (!on) "" else "\n[$path] HTTP $code · ${type.ifEmpty { "无类型" }} · ${body.length} 字节\n" + redact(body.take(800)).take(400).replace(Regex("\\s+"), " ").ifEmpty { "（空响应）" }
 }

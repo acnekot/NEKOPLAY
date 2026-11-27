@@ -150,15 +150,18 @@ class JsSource(val file: File) {
                 cid = ++seq; waiting[cid] = d
                 q.evaluate<Any?>("__call($cid, ${q(fn)}, ${q(argJson)})", filename = "call.js")
             }
-            d.await()
+            kotlinx.coroutines.withTimeoutOrNull(callTimeout(fn)) { d.await() } ?: run {
+                lock.withLock { waiting.remove(cid) }
+                false to "插件「$name」响应超时（$fn 超过 ${callTimeout(fn) / 1000} 秒）"
+            }
         } catch (e: kotlinx.coroutines.CancellationException) { lock.withLock { waiting.remove(cid) }; throw e }
         catch (e: Throwable) { lock.withLock { waiting.remove(cid) }; false to (e.message ?: e.toString()) }
         if (!ok) {
             val msg = (out ?: "").substringBefore("\n").removePrefix("Error: ")
-            Debug.log("js:$id.$fn", 0, System.currentTimeMillis() - t0, "error", msg)
+            Debug.log("js:$id.$fn", 0, System.currentTimeMillis() - t0, "error", Debug.redact(msg))
             throw NcmError(msg)
         }
-        Debug.log("js:$id.$fn", 200, System.currentTimeMillis() - t0, "application/json", out ?: "null")
+        Debug.log("js:$id.$fn", 200, System.currentTimeMillis() - t0, "application/json", Debug.redact(out ?: "null"))
         if (out == null || out == "null") return null
         return when (out.firstOrNull()) { '{' -> JSONObject(out); '[' -> JSONArray(out); else -> JSONArray("[$out]").opt(0) }
     }
@@ -188,7 +191,7 @@ class JsSource(val file: File) {
             function("get") { args -> store.getString(args[0] as String, null) }
             function("set") { args -> store.edit().apply { val v = args.getOrNull(1); if (v == null) remove(args[0] as String) else putString(args[0] as String, v.toString()) }.apply(); null }
             function("lang") { _ -> I18n.active }
-            function("log") { args -> Debug.log("js:$id", 0, 0, "log", args.joinToString(" ")); null }
+            function("log") { args -> Debug.log("js:$id", 0, 0, "log", Debug.redact(args.joinToString(" "))); null }
         }
     }
 
@@ -218,7 +221,9 @@ class JsSource(val file: File) {
                 val hs = JSONObject()
                 r.headers.names().forEach { n -> hs.put(n.lowercase(), JSONArray(r.headers(n))) }
                 val res = JSONObject().put("status", r.code).put("url", r.request.url.toString()).put("headers", hs)
-                if (o.optBoolean("binary")) res.put("bodyBase64", Base64.encode(r.body?.bytes() ?: ByteArray(0))) else res.put("body", r.body?.string() ?: "")
+                val bin = o.optBoolean("binary")
+                val bytes = r.body?.let { readCapped(it, if (bin) MAX_BINARY else MAX_TEXT) } ?: ByteArray(0)
+                if (bin) res.put("bodyBase64", Base64.encode(bytes)) else res.put("body", bytes.decodeToString())
                 res
             }
         } catch (e: java.io.IOException) { throw NcmError("网络错误：${e.message}") }
@@ -237,6 +242,31 @@ class JsSource(val file: File) {
     }
 
     companion object {
+        /** 插件网络响应上限：防止插件把整个大文件读进内存撑爆手机 */
+        const val MAX_TEXT = 8L shl 20
+        const val MAX_BINARY = 32L shl 20
+        /** 插件方法调用超时：登录轮询 / 拉全部歌单这类长操作放宽 */
+        fun callTimeout(fn: String): Long = when {
+            fn.startsWith("login") -> 180_000L
+            fn == "myPlaylists" || fn == "playlist" || fn == "cloud" -> 120_000L
+            else -> 60_000L
+        }
+        /** 按上限读响应体；声明的长度或实际读到的超过上限就报错，不再继续读 */
+        fun readCapped(body: okhttp3.ResponseBody, max: Long): ByteArray {
+            val len = body.contentLength()
+            if (len > max) throw NcmError("响应过大（${len shr 20}MB，上限 ${max shr 20}MB）")
+            val chunks = ArrayList<ByteArray>(); var total = 0L
+            body.byteStream().use { ins ->
+                while (true) {
+                    val b = ByteArray(64 * 1024); val n = ins.read(b, 0, b.size); if (n < 0) break
+                    total += n; if (total > max) throw NcmError("响应过大（超过 ${max shr 20}MB 上限）")
+                    chunks += if (n == b.size) b else b.copyOf(n)
+                }
+            }
+            val out = ByteArray(total.toInt()); var at = 0
+            chunks.forEach { it.copyInto(out, at); at += it.size }
+            return out
+        }
         private const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
         private val noRedirect: OkHttpClient by lazy { Ncm.http.newBuilder().followRedirects(false).followSslRedirects(false).build() }
         private fun q(s: String) = JSONObject.quote(s)
