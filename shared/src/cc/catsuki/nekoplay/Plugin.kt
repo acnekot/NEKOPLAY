@@ -246,7 +246,10 @@ class JsSource(val file: File) {
         const val MAX_TEXT = 8L shl 20
         const val MAX_BINARY = 32L shl 20
         /** 插件方法调用超时：登录轮询 / 拉全部歌单这类长操作放宽 */
-        fun callTimeout(fn: String): Long = when {
+        fun callTimeout(fn: String): Long = timeoutOverride?.invoke(fn) ?: defaultTimeout(fn)
+        /** 测试用：把超时调短 */
+        @Volatile var timeoutOverride: ((String) -> Long)? = null
+        fun defaultTimeout(fn: String): Long = when {
             fn.startsWith("login") -> 180_000L
             fn == "myPlaylists" || fn == "playlist" || fn == "cloud" -> 120_000L
             else -> 60_000L

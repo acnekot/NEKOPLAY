@@ -51,27 +51,6 @@ import java.util.Calendar
 private val SEARCH_TYPES = listOf("单曲", "专辑", "歌手", "歌单", "用户", "歌词")
 private val SEARCH_KINDS = listOf("track", "album", "artist", "playlist", "user", "lyric")
 
-/** 一次搜索的结果：按类型放在不同的列表里 */
-private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), val albums: List<Album> = emptyList(), val artists: List<Artist> = emptyList(),
-                        val playlists: List<Playlist> = emptyList(), val users: List<UserBrief> = emptyList(),
-                        val mine: List<Playlist> = emptyList(), val page: Int = 1, val more: Boolean = false) {
-    val empty get() = tracks.isEmpty() && albums.isEmpty() && artists.isEmpty() && playlists.isEmpty() && users.isEmpty() && mine.isEmpty()
-    val size get() = tracks.size + albums.size + artists.size + playlists.size + users.size
-    /** 翻页：追加下一页并按 id 去重；新一页没有新条目就当作到底了 */
-    @Suppress("UNCHECKED_CAST")
-    fun plus(v: List<Any>, kind: String, p: Int): SearchRes {
-        val n = when (kind) {
-            "album" -> SearchRes(type, albums = (albums + v as List<Album>).distinctBy { it.id }); "artist" -> SearchRes(type, artists = (artists + v as List<Artist>).distinctBy { it.id })
-            "playlist" -> SearchRes(type, playlists = (playlists + v as List<Playlist>).distinctBy { it.id }); "user" -> SearchRes(type, users = (users + v as List<UserBrief>).distinctBy { it.uid })
-            else -> SearchRes(type, tracks = (tracks + v as List<Track>).distinctBy { it.id })
-        }
-        return SearchRes(type, n.tracks, n.albums, n.artists, n.playlists, n.users, mine, p, n.size > size)
-    }
-}
-
-/** 本地已有的歌单（主账号 + 其它音源曲库）里按名字匹配 */
-private fun myPlaylists(k: String): List<Playlist> = k.trim().lowercase().let { q -> if (q.isEmpty()) emptyList() else Store.playlists.value.filter { it.name.lowercase().contains(q) }.take(20) }
-
 @Composable fun SearchPage() {
     val nav = LocalNav.current
     val st by Engine.state.collectAsState()
@@ -118,7 +97,7 @@ private fun myPlaylists(k: String): List<Playlist> = k.trim().lowercase().let { 
         job = scope.launch {
             try { @Suppress("UNCHECKED_CAST") val v = Plugins.search(pid, k, kind, r.page + 1) as List<Any>; if (res === r) res = r.plus(v, kind, r.page + 1) }
             catch (e: kotlinx.coroutines.CancellationException) { throw e }
-            catch (e: Exception) { if (res === r) res = SearchRes(r.type, r.tracks, r.albums, r.artists, r.playlists, r.users, r.mine, r.page, false) }
+            catch (e: Exception) { if (res === r) res = r.stopped() }
             busy = false
         }
     }
