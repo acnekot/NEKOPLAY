@@ -5,6 +5,10 @@
 
 ## [未发布]
 
+### 架构与测试优化
+- **核心模块瘦身拆分**：将逼近 400 行架构上限的 `Motion.kt`（399 行）、`CoverFlowScreen.kt`（394 行）、`SettingsScreen.kt`（390 行）与 `Engine.kt`（385 行）分别拆出 `MotionProfile.kt` / `MotionCascade.kt`、`CoverFlowStage.kt`、`SettingsSections.kt` 与 `EngineFade.kt`，核心文件全面回落至安全余量区间。
+- **关键回归单测补齐**：在 `CoreStateTest` 新增 HLS（`.m3u8`）下载拦截判定、`@type motion` 动效插件互斥生效与 `@minHost` 版本守门单元测试。
+
 ## [0.6.8-nightly.20261127.3] - 2026-11-27
 
 预发布构建（全五端：Android / Windows / macOS / Linux / iOS）：补齐 Android 端 HLS（`.m3u8`）音频流原生播放、通用内嵌网页直接登录 + Cookie 自动捕获与多窗口 OAuth 弹窗支持。

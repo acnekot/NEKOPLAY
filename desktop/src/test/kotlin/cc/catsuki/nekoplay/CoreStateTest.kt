@@ -536,4 +536,57 @@ class CoreStateTest {
             Plugins.delete(s2.id)
         }
     }
+
+    @Test fun hlsUrlDetectionGuardsM3u8Downloads() {
+        assertTrue(Downloads.isHlsUrl("https://cdn.example.com/track/playlist.m3u8"))
+        assertTrue(Downloads.isHlsUrl("https://cdn.example.com/track/playlist.m3u8?expires=1795718369&Policy=abc"))
+        assertTrue(Downloads.isHlsUrl("https://cdn.example.com/HLS/MASTER.M3U8"))
+        assertFalse(Downloads.isHlsUrl("https://cdn.example.com/track/audio.mp3?token=123"))
+        assertFalse(Downloads.isHlsUrl("https://cdn.example.com/track/lossless.flac"))
+        assertFalse(Downloads.isHlsUrl("https://cdn.example.com/track/stream.m4a"))
+    }
+
+    @Test fun motionPluginsAreMutuallyExclusiveAndMinHostGateRejectsFuture() = runBlocking {
+        TestEnv.init()
+        val m1 = """
+            // @id _test_mot_a
+            // @name Motion A
+            // @type motion
+            // @version 1.0.0
+            // @api 2
+            nk.registerMotion({ profile() { return { name: 'A', page: { easing: 'outQuint', ms: 300 } }; } });
+        """.trimIndent()
+        val m2 = """
+            // @id _test_mot_b
+            // @name Motion B
+            // @type motion
+            // @version 1.0.0
+            // @api 2
+            nk.registerMotion({ profile() { return { name: 'B', page: { easing: 'outExpo', ms: 260 } }; } });
+        """.trimIndent()
+        val future = """
+            // @id _test_future_host
+            // @name Future Plugin
+            // @type feature
+            // @minHost 99.0.0
+            // @version 1.0.0
+            // @api 2
+            nk.registerFeature({ action() { return { message: 'hi' }; } });
+        """.trimIndent()
+        val a = Plugins.import(m1)
+        val b = Plugins.import(m2)
+        try {
+            assertTrue(Plugins.on(b.id))
+            assertFalse(Plugins.on(a.id), "导入第二个 @type motion 插件时应自动关闭前一个动效插件")
+            Plugins.set(a.id, true)
+            assertTrue(Plugins.on(a.id))
+            assertFalse(Plugins.on(b.id), "切换启用 @type motion 插件时应互斥关闭其它动效插件")
+            val err = runCatching { Plugins.import(future) }.exceptionOrNull()
+            assertTrue(err != null && err.message?.contains("99.0.0") == true, "应拦截高于当前宿主版本的 @minHost 插件，实际: $err")
+        } finally {
+            Plugins.delete(a.id)
+            Plugins.delete(b.id)
+            Plugins.delete("_test_future_host")
+        }
+    }
 }

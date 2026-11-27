@@ -1,6 +1,5 @@
 package cc.catsuki.nekoplay
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
@@ -8,24 +7,12 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameMillis
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.delay
 import org.json.JSONObject
 
 /** 全局动效速率档位：0 慢 / 1 标准 / 2 快 / 3 很快 */
@@ -51,19 +38,6 @@ data class MotionChannel(
     fun <T> spec(): FiniteAnimationSpec<T> =
         if (isSpring) spring(dampingRatio = damping, stiffness = Anim.stiff(stiffness))
         else tween(scaledMs(), easing = easing)
-}
-
-/** 由外部 @type motion 插件（如 osu_motion.js）下发的完整规范化动效配置包 */
-data class MotionPluginProfile(
-    val pluginId: String, val pluginName: String, val presetLabel: String,
-    val quick: MotionChannel, val standard: MotionChannel, val page: MotionChannel, val crossfade: MotionChannel, val hero: MotionChannel,
-    val hoverShiftDp: Float? = null, val hoverTint: Boolean? = null, val pressScale: Float? = null, val pageScale: Boolean? = null,
-    val listStaggerMs: Int? = null, val listSlideDp: Float? = null,
-    val originExpand: Boolean? = null, val originRipple: Boolean? = null, val originInherit: Boolean? = null,
-    val originCornerDp: Float? = null, val selectCoverScale: Float? = null, val selectFontScale: Float? = null,
-    val geom: GeomRevealConfig? = null,
-) {
-    val displayName: String get() = if (presetLabel.isNotBlank()) "$pluginName · $presetLabel" else pluginName
 }
 
 /** 空间微交互令牌（与曲线/时间引擎解耦；瀑布入场等重动效完全剥离至 @type motion 插件，未装插件时保持纯净轻量默认） */
@@ -155,49 +129,7 @@ object AnimStyle {
 
     /** 接收 @type motion 插件的 profile() JSON 并解析为原生 120fps 动效通道 */
     fun applyPlugin(pair: Pair<JsSource, JSONObject>?) {
-        if (pair == null) { pluginProfile = null; return }
-        val (src, o) = pair
-        val fx = o.optJSONObject("effects")
-        fun ch(key: String, defEase: Easing, defMs: Int): MotionChannel {
-            val c = o.optJSONObject(key) ?: return MotionChannel(defEase, defMs)
-            val ms = c.optInt("ms", defMs).coerceIn(40, 1200)
-            val easeName = c.optString("easing", "").lowercase()
-            if (easeName == "spring") {
-                return MotionChannel(FastOutSlowInEasing, ms, isSpring = true,
-                    damping = c.optDouble("damping", 0.82).toFloat().coerceIn(0.3f, 1f),
-                    stiffness = c.optDouble("stiffness", 420.0).toFloat().coerceIn(80f, 1400f))
-            }
-            val easing = if (easeName == "bezier" || c.has("x1")) {
-                SmoothBezierEasing(
-                    c.optDouble("x1", 0.16).toFloat(), c.optDouble("y1", 1.0).toFloat(),
-                    c.optDouble("x2", 0.30).toFloat(), c.optDouble("y2", 1.0).toFloat(),
-                )
-            } else MotionEasings.byName(easeName, defEase)
-            return MotionChannel(easing, ms)
-        }
-        pluginProfile = MotionPluginProfile(
-            pluginId = src.id,
-            pluginName = o.optString("name").ifBlank { src.name },
-            presetLabel = o.optString("presetLabel"),
-            quick = ch("quick", MotionEasings.OutExpo, 140),
-            standard = ch("standard", MotionEasings.OutQuint, 300),
-            page = ch("page", MotionEasings.OutQuint, 420),
-            crossfade = ch("crossfade", MotionEasings.OutQuint, 460),
-            hero = ch("hero", MotionEasings.OutElasticQuarter, 440),
-            hoverShiftDp = fx?.takeIf { it.has("hoverShiftDp") }?.optDouble("hoverShiftDp", 5.0)?.toFloat()?.coerceIn(0f, 12f),
-            hoverTint = fx?.takeIf { it.has("hoverTint") }?.optBoolean("hoverTint"),
-            pressScale = fx?.takeIf { it.has("pressScale") }?.optDouble("pressScale", 0.985)?.toFloat()?.coerceIn(0.92f, 1.0f),
-            pageScale = fx?.takeIf { it.has("pageScale") }?.optBoolean("pageScale"),
-            listStaggerMs = fx?.takeIf { it.has("listStaggerMs") }?.optInt("listStaggerMs", 24)?.coerceIn(0, 80),
-            listSlideDp = fx?.takeIf { it.has("listSlideDp") }?.optDouble("listSlideDp", 36.0)?.toFloat()?.coerceIn(0f, 80f),
-            originExpand = fx?.takeIf { it.has("originExpand") }?.optBoolean("originExpand"),
-            originRipple = fx?.takeIf { it.has("originRipple") }?.optBoolean("originRipple"),
-            originInherit = fx?.takeIf { it.has("originInherit") }?.optBoolean("originInherit"),
-            originCornerDp = fx?.takeIf { it.has("originCornerDp") }?.optDouble("originCornerDp", 18.0)?.toFloat()?.coerceIn(0f, 36f),
-            selectCoverScale = fx?.takeIf { it.has("selectCoverScale") }?.optDouble("selectCoverScale", 1.09)?.toFloat()?.coerceIn(1f, 1.25f),
-            selectFontScale = fx?.takeIf { it.has("selectFontScale") }?.optDouble("selectFontScale", 1.05)?.toFloat()?.coerceIn(1f, 1.18f),
-            geom = parseGeomReveal(fx),
-        )
+        pluginProfile = pair?.let { (src, o) -> parseMotionPluginProfile(src, o) }
     }
 
     private val k get() = Plat.prefs("ui")
@@ -302,98 +234,3 @@ object Motion {
 
 val sp: FiniteAnimationSpec<IntOffset> get() = Motion.hero()
 val spF: FiniteAnimationSpec<Float> get() = Motion.hero()
-
-internal class CascadeTicket {
-    var x: Float = 0f
-    var y: Float = 0f
-    var placed: Boolean = false
-    val placedSignal = CompletableDeferred<Unit>()
-    val delayMs = CompletableDeferred<Long>()
-}
-
-/**
- * 列表逐项瀑布错峰入场协调器（严格按屏幕视觉顺序从顶部依次展开）：
- * - 等待首次 onPlaced 落位到真实屏幕坐标后才参与排波，彻底屏蔽 LazyColumn 离屏 prefetch 抢跑；
- * - 同帧落位的全部列表项先按屏幕 Y 坐标升序（同行再按 X 升序）排序，保证始终从顶部第一项依次按顺序滑入，不会出现上下两股同时加载或乱序；
- * - 连续向下滚动时单调衔接尾项并封顶排队时长，既不抢跑也不留大段空白。
- */
-object ListStagger {
-    private val pending = ArrayList<CascadeTicket>()
-    private var lastTailStartMs = 0L
-
-    internal fun register(t: CascadeTicket, x: Float, y: Float) {
-        if (t.placed) return
-        t.x = x; t.y = y; t.placed = true
-        pending.add(t)
-        t.placedSignal.complete(Unit)
-    }
-
-    internal fun cancel(t: CascadeTicket) {
-        pending.remove(t)
-        if (!t.delayMs.isCompleted) t.delayMs.complete(0L)
-    }
-
-    internal fun flushBatch() {
-        if (pending.isEmpty()) return
-        val batch = ArrayList(pending)
-        pending.clear()
-        val step = (MotionEffects.listStaggerMs / Anim.f).toLong().coerceAtLeast(0L)
-        if (step <= 0L || AnimStyle.off) {
-            batch.forEach { if (!it.delayMs.isCompleted) it.delayMs.complete(0L) }
-            return
-        }
-        val inh = OriginBus.activeInherit()
-        if (inh != null) {
-            batch.sortBy { t -> val dx = t.x - inh.origin.x; val dy = t.y - inh.origin.y; dx * dx + dy * dy }
-        } else {
-            batch.sortWith(compareBy<CascadeTicket> { kotlin.math.round(it.y / 8f) }.thenBy { it.x })
-        }
-        val now = System.currentTimeMillis()
-        val minY = batch.first().y
-        val maxQueueLag = (step * 4L).coerceAtMost(140L)
-        val continueDown = batch.size <= 3 && minY > 400f && lastTailStartMs > now
-        val baseStart = if (continueDown) minOf(lastTailStartMs + step, now + maxQueueLag) else now
-        val maxSpan = step * 12L
-        var tail = baseStart
-        batch.forEachIndexed { idx, t ->
-            val startAt = (baseStart + idx * step).coerceAtMost(now + maxSpan)
-            tail = startAt
-            val d = (startAt - now).coerceAtLeast(0L)
-            if (!t.delayMs.isCompleted) t.delayMs.complete(d)
-        }
-        lastTailStartMs = tail
-    }
-}
-
-/** 外置动效插件驱动的列表逐项瀑布入场（未安装动效插件时直接返回原 Modifier，零开销；启用时严格按视觉从顶到底依次滑入） */
-@Composable fun Modifier.cascadeEnter(): Modifier {
-    if (AnimStyle.off || AnimStyle.pluginProfile == null) return this
-    val slideDp = MotionEffects.listSlideDp; val stagger = MotionEffects.listStaggerMs
-    if (stagger <= 0 && slideDp < 1f) return this
-    val ticket = remember { CascadeTicket() }
-    val prog = remember { Animatable(0f) }
-    DisposableEffect(ticket) { onDispose { ListStagger.cancel(ticket) } }
-    LaunchedEffect(ticket) {
-        ticket.placedSignal.await()
-        withFrameMillis { }
-        ListStagger.flushBatch()
-        val d = ticket.delayMs.await()
-        if (d > 0L) delay(d)
-        prog.animateTo(1f, Motion.page())
-    }
-    val inh = remember { OriginBus.activeInherit() }
-    val vxDp = inh?.vector?.x ?: slideDp
-    val vyDp = inh?.vector?.y ?: 0f
-    return this.onPlaced { coords ->
-        if (!ticket.placed) {
-            val pos = coords.positionInRoot()
-            ListStagger.register(ticket, pos.x - OriginBus.hostOrigin.x, pos.y - OriginBus.hostOrigin.y)
-        }
-    }.graphicsLayer {
-        val p = prog.value; val inv = 1f - p
-        alpha = p.coerceIn(0f, 1f)
-        translationX = inv * vxDp.dp.toPx()
-        if (vyDp != 0f) translationY = inv * vyDp.dp.toPx()
-        if (inh != null && inv > 0.001f) { val s = 1f - 0.04f * inv; scaleX = s; scaleY = s }
-    }
-}

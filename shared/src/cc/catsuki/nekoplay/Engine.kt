@@ -53,14 +53,13 @@ object Engine {
     fun pause() = fadePause()
 
     // ---------- 淡入淡出 ----------
+    private val fade = EngineFade(scope) { audio }
     /** 暂停 / 播放 / 切歌时音量渐变的时长（毫秒，0 = 关闭，默认关闭以避免与无缝播放冲突） */
-    var fadeMs by androidx.compose.runtime.mutableIntStateOf(0)
-    private var fadeJob: Job? = null
-    private var rampOnPlay = false
+    val fadeMs: Int get() = fade.fadeMs
     private var opened = false
     private var pendingStartMs = 0L
     private var errStreak = 0
-    fun setFade(ms: Int) { fadeMs = ms; prefs?.edit()?.putInt("fade", ms)?.apply() }
+    fun setFade(ms: Int) = fade.set(ms, prefs)
 
     // ---------- 无缝播放 ----------
     var gapless by androidx.compose.runtime.mutableStateOf(true)
@@ -113,35 +112,15 @@ object Engine {
         if (s.fm && ni + 3 >= s.queue.size) fmFill()
         prefetchNext()   // 预热再下一首的播放地址
     }
-    private suspend fun ramp(from: Float, to: Float, ms: Int) {
-        val steps = (ms / 16).coerceAtLeast(1)
-        for (i in 1..steps) { audio.volume = Vol.v * (from + (to - from) * i / steps); delay(16) }
-    }
-    fun fadePause() {
-        fadeJob?.cancel()
-        if (fadeMs == 0 || !audio.isPlaying) { audio.pause(); return }
-        fadeJob = scope.launch { ramp(1f, 0f, fadeMs); audio.pause(); audio.volume = Vol.v }
-    }
-    fun fadePlay() {
-        fadeJob?.cancel()
-        if (fadeMs == 0) { audio.volume = Vol.v; audio.play(); return }
-        audio.volume = 0f; audio.play()
-        fadeJob = scope.launch { ramp(0f, 1f, fadeMs) }
-    }
-
-    private fun startRampIn() {
-        if (!rampOnPlay) return
-        rampOnPlay = false
-        fadeJob?.cancel()
-        if (fadeMs == 0) audio.volume = Vol.v
-        else fadeJob = scope.launch { ramp(0f, 1f, fadeMs) }
-    }
+    fun fadePause() = fade.fadePause()
+    fun fadePlay() = fade.fadePlay()
+    private fun startRampIn() = fade.startRampIn()
 
     fun init() {
         prefs = Plat.prefs("ui")
         quality = prefs!!.getInt("q2", 3)
         qualityCell = prefs!!.getInt("qCell", -1)
-        fadeMs = prefs!!.getInt("fade", 0)
+        fade.load(prefs)
         gapless = prefs!!.getBoolean("gapless", true)
         audio.listener = object : Audio.Listener {
             override fun onPlaying(p: Boolean) {
@@ -176,7 +155,7 @@ object Engine {
                 if (!audio.idle && opened) {
                     val p = audio.position
                     if (audio.isPlaying || position.value != p) position.value = p
-                    if (audio.isPlaying && rampOnPlay) startRampIn()
+                    if (audio.isPlaying && fade.pendingRamp) startRampIn()
                 }
                 runCatching { buffered.value = if (state.value.cached) Long.MAX_VALUE else audio.buffered }
                 if (tick % 4 == 0) {
@@ -239,7 +218,7 @@ object Engine {
         Store.addRecent(t)
         loadJob?.cancel()
         // 切歌淡入：先静音，真正出声时再渐变上来
-        if (autoplay && fadeMs > 0) { fadeJob?.cancel(); audio.volume = 0f; rampOnPlay = true } else if (!rampOnPlay) audio.volume = Vol.v
+        fade.prepareLoad(autoplay)
         loadJob = scope.launch {
             try {
                 // 已经完整缓存过（同档位或更高档位）：直接读本地，不联网
@@ -282,7 +261,7 @@ object Engine {
     fun toggle() {
         val s = state.value; errStreak = 0
         if (s.loading) {
-            if (s.want) { loadJob?.cancel(); loadJob = null; state.value = s.copy(loading = false, want = false); rampOnPlay = false; fadeJob?.cancel(); audio.pause(); audio.volume = Vol.v }
+            if (s.want) { loadJob?.cancel(); loadJob = null; state.value = s.copy(loading = false, want = false); audio.pause(); fade.cancelImmediate() }
             else { state.value = s.copy(want = true); if (opened) fadePlay() else load(s.index, true, position.value) }
             return
         }

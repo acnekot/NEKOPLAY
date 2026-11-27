@@ -1,46 +1,29 @@
 package cc.catsuki.nekoplay
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlin.math.sign
 
 /** 经典 iOS 6 Apple Music Cover Flow 3D 封面墙：外包式透明 CD 塑料壳 + 镜面倒影 + 惯性甩动 + 点击铰链翻开 CD 盒看完整曲目 */
 @Composable fun CoverFlowPage() {
@@ -280,89 +263,41 @@ import kotlin.math.sign
             for (i in minI..maxI) {
                 val item = items[i]
                 key(item.key) {
-                val isCenter = i == curIdx
-                val z = 100f - abs(i - curIdx) * 10f
-
-                Column(
-                    Modifier.zIndex(z)
-                        .graphicsLayer {
-                            val d = i - pos.value
-                            val ad = abs(d)
-                            val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat()
-                            val wingAngle = -cfg.wingAngle * sign(d) * s
-                            val extraGap = (centerGapPx - stackStepPx) * kotlin.math.tanh((ad * 1.35f).toDouble()).toFloat()
-                            val tx = d * stackStepPx + sign(d) * extraGap
-                            val ep = expandState.value.coerceIn(0f, 1.05f)
-                            // 分段编排：先优雅 3D 旋身翻盖，再平滑舒展放大居中（旋转 → 放大）
-                            val zoomP = smoothStep(0.28f, 1.0f, ep)
-                            val shiftP = smoothStep(0.08f, 0.92f, ep)
-                            val swirl = kotlin.math.sin((ep.coerceIn(0f, 1f) * kotlin.math.PI)).toFloat()
-                            val sc = (1f - 0.20f * s) * (if (isCenter) 1f + (maxOpenScale - 1f) * zoomP else 1f)
-                            val centerWeight = (1f - s).coerceIn(0f, 1f)
-                            val tX = tiltX.floatValue; val tY = tiltY.floatValue
-                            val tiltDamp = 1f - 0.55f * ep.coerceAtMost(1f)
-                            val expX = if (isCenter) caseWPx * 0.50f * sc * shiftP else sign(d) * smoothStep(0f, 0.65f, ep) * 76f * density
-                            val liftY = if (isCenter) -14f * density * swirl else 0f
-                            translationX = tx + expX + tX * (10f * density * (0.35f + 0.65f * centerWeight) * tiltDamp)
-                            val baseY = coverPx * (if (ls) 0.08f else 0.14f)
-                            translationY = (if (isCenter) baseY + (caseHPx * 0.18f - baseY) * zoomP else baseY) + liftY + tY * (5f * density * centerWeight * tiltDamp)
-                            scaleX = sc; scaleY = sc
-                            rotationY = wingAngle + (if (isCenter) cfg.spinDeg * swirl else 0f) + tX * (4.5f + 7.5f * centerWeight) * tiltDamp
-                            rotationX = (if (isCenter) 8f * swirl else 0f) - tY * (3.2f + 5.8f * centerWeight) * tiltDamp
-                            rotationZ = if (isCenter) -3.2f * swirl else 0f
-                            transformOrigin = TransformOrigin(0.5f, 0.368f)
-                            cameraDistance = 18f * density
-                            val baseAlpha = if (ad <= 3.2f) 1f else (1f - (ad - 3.2f) * 0.48f).coerceIn(0f, 1f)
-                            alpha = if (isCenter) baseAlpha else baseAlpha * (1f - smoothStep(0f, 0.58f, ep))
-                        },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    // 实体 CD 塑料盒：外侧无缝挤出透明亚克力侧边厚度 + 右侧托盘 + 沿左铰链 180° 翻开的透明前盖
-                    val lidP = { if (isCenter) smoothStep(0.02f, 0.72f, expandState.value) else 0f }
-                    val heroKey = if (isCenter) when (item.kind) { "album" -> "alb:${item.id}"; "pl", "lpl" -> "pl:${item.id}"; else -> null } else null
-                    Box(Modifier.size(caseW, caseH).heroAnchor(heroKey, item.cover, item.title, border = false).cdThicknessEdge({ i - pos.value }, { tiltX.floatValue }, { tiltY.floatValue }, cfg.thicknessDp) { if (isCenter) (1f - smoothStep(0f, 0.45f, expandState.value)) else 1f }) {
-
-                        // 右侧 CD 托盘层（随前盖沿左铰链翻开自然显露，炫彩光盘随开合微转）
-                        if (isCenter && showTray) {
-                            Box(Modifier.matchParentSize().graphicsLayer { alpha = smoothStep(0.10f, 0.58f, expandState.value) }) {
-                                CdTrayTracklist(item, sideTracks, sideLoading, compact = ls || stageW < 640f * density, openProg = { expandState.value }, onClose = { expandedKey = null }, onOpenDetail = { openDetail(item) })
-                            }
-                        }
-
-                        // 透明亚克力前盖：以左缘铰链为轴翻开 -180°（手机竖屏点击直进专辑页，横屏/桌面点击翻开 CD 盒）
-                        Box(Modifier.matchParentSize()
-                            .graphicsLayer { rotationY = -180f * lidP(); transformOrigin = TransformOrigin(0f, 0.5f); cameraDistance = 18f * density }
-                            .pointerInput(item.key, isCenter, canExpand) {
-                                detectTapGestures {
-                                    if (isCenter) onCenterTap(item)
-                                    else if (expandedKey == null) snapTo(i)
-                                }
-                            }) {
-                            val sweep = { kotlin.math.sin((lidP() * kotlin.math.PI)).toFloat() }
-                            if (!isCenter || !lidPastHalf) {
-                                CdCaseFrontLid(item, coverDp, spineDp, rimDp, isCenter, { i - pos.value }, { tiltX.floatValue }, { tiltY.floatValue }, sweep)
-                            } else {
-                                CdCaseInnerLid(item, coverDp, spineDp, rimDp, sweep, onClose = { expandedKey = null })
-                            }
-                        }
-                    }
-                    // 轻量高效底部镜面倒影：精确对齐外包 CD 盒尺寸与左脊柱（翻开 CD 盒时平滑淡出）
-                    if (abs(i - curIdx) <= 3) Box(Modifier.size(caseW, reflH).clipToBounds()
-                        .graphicsLayer {
-                            alpha = if (isCenter) (1f - expandState.value * 1.6f).coerceIn(0f, 1f) else 1f
-                            compositingStrategy = CompositingStrategy.Offscreen
-                        }
-                        .drawWithContent {
-                            drawContent()
-                            drawRect(brush = reflMask, topLeft = Offset(-4f, -4f), size = Size(size.width + 8f, size.height + 8f), blendMode = BlendMode.DstIn)
-                        }) {
-                        Box(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).height(caseH).graphicsLayer { scaleY = -1f }.background(Color(0x1CFFFFFF)).border(1.dp, Color(0x38FFFFFF))) {
-                            Box(Modifier.width(spineDp).fillMaxHeight().background(Color(0x28FFFFFF)))
-                            Box(Modifier.padding(start = spineDp, top = rimDp, end = rimDp, bottom = rimDp)) { Cover(item.cover, coverDp, item.title, border = false, decodeSize = 200.dp) }
-                            Box(Modifier.matchParentSize().graphicsLayer { val ad = abs(i - pos.value); val s = kotlin.math.tanh((ad * 1.45f).toDouble()).toFloat(); alpha = (0.14f * s + 0.06f * (ad - 1f).coerceAtLeast(0f)).coerceAtMost(0.45f) }.background(Color.Black))
-                        }
-                    } else Spacer(Modifier.height(reflH))
-                }
+                    val isCenter = i == curIdx
+                    CoverFlowCard(
+                        index = i,
+                        curIdx = curIdx,
+                        item = item,
+                        posValue = { pos.value },
+                        expandState = expandState,
+                        tiltXValue = { tiltX.floatValue },
+                        tiltYValue = { tiltY.floatValue },
+                        cfg = cfg,
+                        ls = ls,
+                        density = density,
+                        stageW = stageW,
+                        coverDp = coverDp,
+                        coverPx = coverPx,
+                        spineDp = spineDp,
+                        rimDp = rimDp,
+                        caseW = caseW,
+                        caseH = caseH,
+                        caseWPx = caseWPx,
+                        caseHPx = caseHPx,
+                        maxOpenScale = maxOpenScale,
+                        centerGapPx = centerGapPx,
+                        stackStepPx = stackStepPx,
+                        reflH = reflH,
+                        reflMask = reflMask,
+                        canExpand = canExpand,
+                        showTray = showTray,
+                        lidPastHalf = lidPastHalf,
+                        sideTracks = sideTracks,
+                        sideLoading = sideLoading,
+                        onCloseExpand = { expandedKey = null },
+                        onOpenDetail = ::openDetail,
+                        onTap = { if (isCenter) onCenterTap(item) else if (expandedKey == null) snapTo(i) },
+                    )
                 }
             }
         }

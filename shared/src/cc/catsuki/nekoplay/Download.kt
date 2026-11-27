@@ -111,11 +111,14 @@ object Downloads {
         save()
     }
 
+    internal fun isHlsUrl(url: String): Boolean =
+        url.substringBefore('?').endsWith(".m3u8", ignoreCase = true) || ".m3u8" in url.lowercase()
+
     private suspend fun runOne(t: Track, quality: Int) {
         val tmp = File(dir, ".${t.id}.part")
         try {
             val s = Ncm.stream(t.id, quality)
-            if (s.url.substringBefore('?').endsWith(".m3u8", ignoreCase = true) || ".m3u8" in s.url.lowercase()) {
+            if (isHlsUrl(s.url)) {
                 throw Exception("HLS 流媒体暂不支持离线下载")
             }
             val ext = s.format.ifEmpty { "mp3" }
