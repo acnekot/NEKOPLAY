@@ -52,8 +52,14 @@ class JsSource(val file: File) {
     val apiVersion: Int get() = meta["api"]?.toIntOrNull() ?: 1
     val minHost: String get() = meta["minHost"].orEmpty()
     val permissions: Set<String> get() = meta["permissions"]?.split(',')?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
-    /** 网络权限守门：音源插件与未声明权限的 v1 旧脚本默认允许联网；声明了 @permissions 的功能/页面/动效插件必须显式包含 network */
-    val canNetwork: Boolean get() = isSource || permissions.isEmpty() || "network" in permissions || "net" in permissions || "http" in permissions
+    private val declaresNet get() = "network" in permissions || "net" in permissions || "http" in permissions
+    /**
+     * 网络权限守门：API v2 插件（任何类型）必须在 @permissions 里声明 network 才能联网；
+     * v1 旧脚本保持兼容：音源插件或没写 @permissions 的默认允许
+     */
+    val canNetwork: Boolean get() = if (apiVersion >= 2) declaresNet else isSource || permissions.isEmpty() || declaresNet
+    /** 访问本机 / 局域网地址：API v2 插件需额外声明 lan（自建服务器类插件用），v1 旧脚本不限制 */
+    val canLan: Boolean get() = apiVersion < 2 || "lan" in permissions || "local-network" in permissions
     val hostCompatible: Boolean get() = minHost.isEmpty() || !PluginSubs.newer(minHost, APP_VERSION)
     /** 功能插件绑定的扩展槽位标识（头注释 // @feature coverflow 等） */
     val featureSlot: String get() = meta["feature"]?.lowercase()?.trim().orEmpty()
@@ -199,7 +205,9 @@ class JsSource(val file: File) {
     @OptIn(ExperimentalEncodingApi::class)
     private suspend fun http(o: JSONObject): JSONObject = withContext(Dispatchers.IO) {
         if (!canNetwork) throw NcmError("插件「$name」未声明 network 权限，已拦截网络请求")
-        val b = Request.Builder().url(o.getString("url"))
+        val url = o.getString("url")
+        if (!canLan && isPrivateHost(hostOf(url))) throw NcmError("插件「$name」未声明 lan 权限，已拦截访问本机 / 局域网地址")
+        val b = Request.Builder().url(url)
         o.optJSONObject("headers")?.let { h -> h.keys().forEach { k -> b.header(k, h.optString(k)) } }
         if (o.optJSONObject("headers")?.has("User-Agent") != true && o.optJSONObject("headers")?.has("user-agent") != true) b.header("User-Agent", UA)
         val method = o.optString("method", "").uppercase().ifEmpty { if (o.has("body") || o.has("form") || o.has("json")) "POST" else "GET" }
@@ -242,6 +250,23 @@ class JsSource(val file: File) {
     }
 
     companion object {
+        /** 取 URL 的主机名（去掉协议、账号、端口、IPv6 方括号），解析失败返回空串 */
+        fun hostOf(url: String): String {
+            val rest = url.substringAfter("://", "").substringBefore('/').substringBefore('?').substringBefore('#').substringAfterLast('@')
+            return if (rest.startsWith("[")) rest.substringAfter('[').substringBefore(']').lowercase() else rest.substringBefore(':').lowercase()
+        }
+        /**
+         * 本机 / 局域网 / 链路本地地址（只看字面：主机名与 IP 字面量）。
+         * 说明：不做 DNS 解析，指向内网的公网域名拦不住，这里只防插件直接写内网地址。
+         */
+        fun isPrivateHost(h: String): Boolean {
+            if (h.isEmpty() || h == "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h.endsWith(".lan")) return true
+            if (':' in h) return h == "::1" || h == "::" || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80") || h.startsWith("::ffff:")
+            val p = h.split('.').map { it.toIntOrNull() ?: return false }
+            if (p.size != 4 || p.any { it !in 0..255 }) return false
+            return p[0] == 10 || p[0] == 127 || p[0] == 0 || (p[0] == 169 && p[1] == 254) || (p[0] == 172 && p[1] in 16..31) ||
+                (p[0] == 192 && p[1] == 168) || (p[0] == 100 && p[1] in 64..127)
+        }
         /** 插件网络响应上限：防止插件把整个大文件读进内存撑爆手机 */
         const val MAX_TEXT = 8L shl 20
         const val MAX_BINARY = 32L shl 20

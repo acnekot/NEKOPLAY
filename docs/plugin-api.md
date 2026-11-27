@@ -34,8 +34,10 @@ NEKOPLAY 本体完全中立，不内置任何在线音源与重型特色扩展�
 ```
 
 ### 权限声明与守门（`@permissions`）
-- 常用权限：`network`、`storage`、`library.read`、`player.control`、`sensor.tilt`、`ui.sidebar`、`motion.profile`。
-- **运行期守门**：`feature` / `page` / `motion` 插件若声明了 `@permissions` 且未包含 `network`，宿主会自动拦截 `nk.http` 请求，防止纯本地插件意外外联。
+- 常用权限：`network`、`lan`、`storage`、`library.read`、`player.control`、`sensor.tilt`、`ui.sidebar`、`motion.profile`。
+- **联网（`network`）**：`@api 2` 插件（含音源插件）必须声明 `network` 才能使用 `nk.http`，未声明时请求会被宿主拦截。`@api 1` 旧脚本保持兼容：音源插件或未写 `@permissions` 的脚本默认允许联网。
+- **本机 / 局域网（`lan`）**：`@api 2` 插件访问 `localhost`、`127.*`、`10.*`、`172.16–31.*`、`192.168.*`、`169.254.*`、`*.local` 等地址时需额外声明 `lan`（如连接自建音乐服务器的插件）。宿主只检查 URL 里直接写的地址，不做 DNS 解析。
+- **调用与响应上限**：单次插件方法调用超时为 60 秒（`myPlaylists` / `playlist` / `cloud` 为 120 秒，`login*` 为 180 秒）；`nk.http` 文本响应上限 8MB、`binary: true` 二进制响应上限 32MB。
 
 ---
 
