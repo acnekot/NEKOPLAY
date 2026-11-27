@@ -229,13 +229,13 @@ object Plugins {
     /** 调 id 所属插件的方法；插件没实现时返回 null */
     suspend fun callFor(id: String, fn: String, vararg args: Any?): Any? { val s = ofOrNull(id) ?: return null; if (!s.start() || !s.has(fn)) return null; return s.call(fn, *args) }
 
-    /** 主插件：账号、日推、FM 这类没有 id 的功能默认找它（首页来源 → 网易云 → 第一个有账号功能的） */
+    /** 主插件：账号、日推、FM 这类没有 id 的功能默认找它（首页来源 → 第一个有账号功能的 → 第一个音源），不偏向任何平台 */
     /** 主插件偏好提供者（由 UI 层注入，避免 data 层反向依赖界面偏好） */
     var preferredHomeId: () -> String = { "" }
     fun main(): JsSource? {
         val en = enabledSources
         val pref = preferredHomeId()
-        return en.firstOrNull { it.id == pref } ?: en.firstOrNull { it.id == "netease" } ?: en.firstOrNull { it.has("account") } ?: en.firstOrNull()
+        return en.firstOrNull { it.id == pref } ?: en.firstOrNull { it.has("account") } ?: en.firstOrNull()
     }
     /** 提供某个功能的音源插件：先看主插件，再找第一个实现了它的音源插件 */
     suspend fun provider(cap: String): JsSource? {
