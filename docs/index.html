@@ -540,6 +540,7 @@
         <a href="#download">全平台下载</a>
       </nav>
       <div class="top-actions">
+        <button id="langBtn" class="sq-btn mono" type="button" aria-label="Language">中</button>
         <button id="themeBtn" class="sq-btn mono" type="button">深色</button>
         <a class="sq-btn accent" href="https://github.com/acnekot/NEKOPLAY" target="_blank" rel="noopener">GitHub</a>
       </div>
@@ -551,7 +552,7 @@
     <section class="hero">
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
         <span class="tag">NEKOPLAY</span>
-        <span class="tag blue" id="verBadge">v0.6.8</span>
+        <span class="tag blue" id="verBadge">v0.6.9</span>
         <span class="tag">KOTLIN · COMPOSE MULTIPLATFORM</span>
       </div>
 
@@ -779,15 +780,162 @@
   </footer>
 
   <script>
+    // ---------- i18n：页面原文为简体中文，下表给出 [English, 日本語] ----------
+    const I18N = {
+      '界面预览': ['Preview', 'プレビュー'],
+      '核心特性': ['Features', '特長'],
+      '全平台下载': ['Download', 'ダウンロード'],
+      '深色': ['Dark', 'ダーク'],
+      '浅色': ['Light', 'ライト'],
+      '主导航': ['Main navigation', 'メインナビゲーション'],
+      '为听歌本身而生的跨平台播放器': ['A cross-platform player built for listening', '音楽を聴くことに集中したクロスプラットフォームプレーヤー'],
+      'Android、Windows、macOS、Linux、iOS 共用一套无边框 Compose 界面与原生音频内核。内置本地与 WebDAV 无损曲库、多风格逐字歌词引擎、自定义主题与可视化动效曲线，支持 QuickJS 插件按需扩展。': [
+        'Android, Windows, macOS, Linux and iOS share one borderless Compose interface on top of native audio engines. Lossless local and WebDAV libraries, word-by-word lyrics in several styles, custom themes and visual motion curves are built in, and QuickJS plugins extend it on demand.',
+        'Android・Windows・macOS・Linux・iOS で、ボーダーレスな Compose UI とネイティブ音声エンジンを共有。ローカル／WebDAV のロスレスライブラリ、多彩な逐語歌詞エンジン、カスタムテーマとモーションカーブを内蔵し、QuickJS プラグインで必要に応じて拡張できます。'],
+      '免费使用 · 零广告': ['Free · No ads', '無料 · 広告なし'],
+      '立即下载最新版': ['Download the latest version', '最新版をダウンロード'],
+      '实机预览': ['Live preview', '実機プレビュー'],
+      '覆盖平台': ['Platforms', '対応プラットフォーム'],
+      '端': ['OS', 'OS'],
+      '歌词引擎': ['Lyrics engine', '歌詞エンジン'],
+      '套风格': ['styles', 'スタイル'],
+      '主题与动效': ['Themes & motion', 'テーマとモーション'],
+      '可定制': ['customizable', 'カスタマイズ可'],
+      '内置在线音源': ['Built-in online sources', '内蔵オンライン音源'],
+      '个': ['', '個'],
+      '实机界面预览': ['Live screenshots', '実機スクリーンショット'],
+      '桌面主页': ['Desktop home', 'デスクトップ ホーム'],
+      '播放与歌词': ['Player & lyrics', '再生と歌詞'],
+      '移动端': ['Mobile', 'モバイル'],
+      '核心能力': ['Core features', '主な機能'],
+      '查看架构说明': ['Architecture notes', 'アーキテクチャ解説'],
+      '五端一套界面': ['One interface, five platforms', '5 つの OS にひとつの UI'],
+      'Android、Windows、macOS、Linux、iOS 共享 UI 与业务逻辑，窗口宽窄跨过 900dp 自动在手机布局与三栏宽屏间切换。': [
+        'Android, Windows, macOS, Linux and iOS share the UI and app logic. When the window crosses 900dp it switches between the phone layout and the three-column wide layout.',
+        'Android・Windows・macOS・Linux・iOS で UI とロジックを共有。ウィンドウ幅が 900dp を境に、スマートフォン用レイアウトと 3 カラムのワイドレイアウトを自動で切り替えます。'],
+      '原生内核与无缝播放': ['Native engines, gapless playback', 'ネイティブエンジンとギャップレス再生'],
+      '桌面端内置 libmpv、Android 用 ExoPlayer、iOS 用 AVPlayer；支持无缝切歌、1GB 播放缓存、10 段均衡器与真实采样率显示。': [
+        'libmpv on desktop, ExoPlayer on Android and AVPlayer on iOS, with gapless playback, a 1 GB playback cache, a 10-band equalizer and real sample-rate display.',
+        'デスクトップは libmpv、Android は ExoPlayer、iOS は AVPlayer。ギャップレス再生、1GB の再生キャッシュ、10 バンドイコライザー、実際のサンプルレート表示に対応。'],
+      '主题系统与可视化动效曲线': ['Themes and visual motion curves', 'テーマとビジュアルなモーションカーブ'],
+      '内置多套预设与可视化主题制作器，支持直接拖拽 cubic-bezier 动效曲线与弹簧参数，并可一键 JSON 导入导出分享。': [
+        'Several presets plus a visual theme maker. Drag cubic-bezier curves and spring parameters directly, then share themes with one-click JSON import and export.',
+        '複数のプリセットとビジュアルなテーマ作成ツールを内蔵。cubic-bezier カーブやスプリングをドラッグで調整し、JSON でワンクリックでインポート／エクスポートできます。'],
+      '本体纯粹，插件扩展': ['A clean core, extended by plugins', 'シンプルな本体、プラグインで拡張'],
+      '软件本体不内置任何在线音源、无需账号；需要时可在设置中通过文件、链接或订阅导入 QuickJS 脚本插件，沙箱隔离。': [
+        'The app ships with no online sources and needs no account. When you want more, import sandboxed QuickJS plugins in Settings from a file, a link or a subscription.',
+        '本体にオンライン音源は含まれず、アカウントも不要です。必要に応じて、設定からファイル・リンク・購読で QuickJS プラグインを追加できます（サンドボックスで実行）。'],
+      '本地曲库与 WebDAV': ['Local library and WebDAV', 'ローカルライブラリと WebDAV'],
+      '自动扫描本地音乐目录并匹配同名 .lrc 歌词；直连私有 WebDAV 网盘按目录播放，支持本机喜欢、本地歌单与全量配置备份。': [
+        'Scans your music folders and picks up matching .lrc lyrics. Connects straight to your own WebDAV server to play by folder, with local likes, local playlists and full settings backup.',
+        '音楽フォルダーを自動スキャンし、同名の .lrc 歌詞を読み込みます。自分の WebDAV サーバーに直接つないでフォルダー単位で再生でき、お気に入り・ローカルプレイリスト・設定の完全バックアップにも対応。'],
+      '多风格逐字歌词与桌面浮窗': ['Word-by-word lyrics and desktop lyrics', '逐語歌詞とデスクトップ歌詞'],
+      '支持逐字浮光上浮、平滑跟进滚动、渐进景深模糊与歌词样式 JSON 导入导出；桌面端配备高度可定制的透明悬浮歌词窗。': [
+        'Glowing word-by-word highlights, smooth follow scrolling, progressive depth blur and JSON import/export of lyric styles. Desktop adds a highly customizable transparent floating lyrics window.',
+        '逐語のハイライト、なめらかな追従スクロール、段階的な被写界深度ブラー、歌詞スタイルの JSON インポート／エクスポートに対応。デスクトップでは自由にカスタマイズできる透明なフローティング歌詞ウィンドウも使えます。'],
+      '所有版本 Releases': ['All releases', 'すべてのリリース'],
+      '未签名 .ipa': ['Unsigned .ipa', '未署名 .ipa'],
+      '内置纯音频 libmpv 内核，支持自选安装目录与单实例托盘唤醒。': [
+        'Bundled audio-only libmpv engine, a choosable install folder and single-instance tray wake-up.',
+        '音声専用 libmpv エンジンを内蔵。インストール先の選択と、単一インスタンスのトレイ復帰に対応。'],
+      'Metal 120fps 渲染、原生硬件圆角与内置 libmpv 播放内核。': [
+        'Metal rendering at 120 fps, native rounded corners and a bundled libmpv engine.',
+        'Metal による 120fps 描画、ネイティブの角丸ウィンドウ、libmpv エンジン内蔵。'],
+      'ExoPlayer 原生解码、媒体库扫描与通知栏播控。': [
+        'Native ExoPlayer decoding, media library scanning and notification controls.',
+        'ExoPlayer によるネイティブデコード、メディアライブラリのスキャン、通知からの再生操作。'],
+      '轻量低内存占用，支持 libmpv2 与系统托盘。': [
+        'Lightweight and low on memory, with libmpv2 and system tray support.',
+        '軽量で省メモリ。libmpv2 とシステムトレイに対応。'],
+      'AVPlayer 原生播放，下载后可使用自签工具安装。': [
+        'Native AVPlayer playback. Install it with a sideloading tool after download.',
+        'AVPlayer によるネイティブ再生。ダウンロード後、サイドロードツールでインストールできます。'],
+      '下载 Windows': ['Download for Windows', 'Windows 版をダウンロード'],
+      '下载 macOS': ['Download for macOS', 'macOS 版をダウンロード'],
+      '下载 Android': ['Download for Android', 'Android 版をダウンロード'],
+      '下载 Linux': ['Download for Linux', 'Linux 版をダウンロード'],
+      '下载 iOS': ['Download for iOS', 'iOS 版をダウンロード'],
+      '插件 API': ['Plugin API', 'プラグイン API'],
+      '更新日志': ['Changelog', '更新履歴'],
+      '隐私政策': ['Privacy', 'プライバシーポリシー'],
+      '免责声明：NEKOPLAY 为个人学习与技术研究用途的本地音乐播放器，本体不提供、不存储、不分发任何音乐内容，与任何在线音乐服务无关联。作者保留全部所有权（All Rights Reserved），不提供 Fork 或二次开发授权。请仅从本仓库 Releases 下载。': [
+        'Disclaimer: NEKOPLAY is a local music player made for personal learning and technical research. The app itself does not provide, store or distribute any music content and is not affiliated with any online music service. All Rights Reserved; no license is granted to fork or build derivative works. Please download only from this repository\'s Releases.',
+        '免責事項：NEKOPLAY は個人の学習・技術研究を目的としたローカル音楽プレーヤーです。本体は音楽コンテンツを提供・保存・配布せず、いかなるオンライン音楽サービスとも関係ありません。All Rights Reserved。フォークや二次開発の許諾は行っていません。ダウンロードは本リポジトリの Releases からのみ行ってください。'],
+      '桌面端 · 宽屏主页': ['Desktop · Wide home', 'デスクトップ · ワイドホーム'],
+      '无边框色块分层，支持首页模块自由排序、左侧歌单栏与底部播控栏。': [
+        'Borderless layered color blocks, freely reorderable home sections, a playlist sidebar and a bottom player bar.',
+        'ボーダーレスな色面レイアウト。ホームのモジュールを自由に並べ替えられ、左にプレイリスト、下に再生バーを配置。'],
+      '桌面端 · 全屏播放与歌词': ['Desktop · Full-screen player and lyrics', 'デスクトップ · 全画面再生と歌詞'],
+      '展示真实解码格式与采样率/位深（FLAC 48k/24bit），搭配逐字浮光与景深模糊歌词。': [
+        'Shows the real decoded format and sample rate / bit depth (FLAC 48k/24bit), with glowing word-by-word lyrics and depth blur.',
+        '実際のデコード形式とサンプルレート／ビット深度（FLAC 48k/24bit）を表示し、逐語ハイライトと被写界深度ブラーの歌詞を組み合わせます。'],
+      '移动端 · 响应式布局': ['Mobile · Responsive layout', 'モバイル · レスポンシブレイアウト'],
+      '与桌面端共用同一份 Compose 代码，窗口收窄或运行于手机时自动切换为底部导航。': [
+        'Shares the same Compose code as desktop and switches to bottom navigation on narrow windows and phones.',
+        'デスクトップと同じ Compose コードを共有し、ウィンドウが狭いときやスマートフォンでは下部ナビゲーションに切り替わります。'],
+      '← / → 切换': ['← / → to switch', '← / → で切り替え'],
+    };
+    const LANGS = ['zh', 'en', 'ja'];
+    const LANG_LABEL = { zh: '中', en: 'EN', ja: '日' };
+    const HTML_LANG = { zh: 'zh-CN', en: 'en', ja: 'ja' };
+    const norm = s => s.replace(/\s+/g, ' ').trim();
+    const I18N_N = Object.fromEntries(Object.entries(I18N).map(([k, v]) => [norm(k), v]));
+    let lang = 'zh';
+    function t(zh) {
+      if (lang === 'zh') return zh;
+      const v = I18N_N[norm(zh)];
+      return v ? v[lang === 'en' ? 0 : 1] : zh;
+    }
+    function pickLang() {
+      const q = new URLSearchParams(location.search).get('lang');
+      if (LANGS.includes(q)) return q;
+      try { const s = localStorage.getItem('nekoplay_lang'); if (LANGS.includes(s)) return s; } catch (e) {}
+      const n = (navigator.languages && navigator.languages[0] || navigator.language || 'zh').toLowerCase();
+      return n.startsWith('zh') ? 'zh' : n.startsWith('ja') ? 'ja' : 'en';
+    }
+    // 记住每个文本节点 / 属性的中文原文，切换语言时都从原文翻译
+    const textNodes = [];
+    (function collect(el) {
+      for (const n of el.childNodes) {
+        if (n.nodeType === 3) { if (I18N_N[norm(n.nodeValue)]) textNodes.push([n, n.nodeValue]); }
+        else if (n.nodeType === 1 && n.tagName !== 'SCRIPT' && n.tagName !== 'STYLE') collect(n);
+      }
+    })(document.body);
+    const attrNodes = [...document.querySelectorAll('[aria-label]')].map(e => [e, e.getAttribute('aria-label')]);
+    const privacyLink = document.querySelector('a[href^="privacy.html"]');
+    const metaDesc = document.querySelector('meta[name="description"]');
+    const DESC = {
+      zh: metaDesc.content,
+      en: 'NEKOPLAY is a cross-platform music player built with Kotlin + Compose Multiplatform for Android, Windows, macOS, Linux and iOS.',
+      ja: 'NEKOPLAY は Kotlin + Compose Multiplatform で作られた、Android・Windows・macOS・Linux・iOS 対応のクロスプラットフォーム音楽プレーヤーです。'
+    };
+    const langBtn = document.getElementById('langBtn');
+    function applyLang(l, save) {
+      lang = l;
+      document.documentElement.lang = HTML_LANG[l];
+      metaDesc.content = DESC[l];
+      textNodes.forEach(([n, zh]) => { n.nodeValue = zh.includes(norm(zh)) ? zh.replace(norm(zh), t(zh)) : t(zh); });
+      attrNodes.forEach(([e, zh]) => e.setAttribute('aria-label', t(zh)));
+      if (privacyLink) privacyLink.href = l === 'zh' ? 'privacy.html' : `privacy.html#${l}`;
+      langBtn.textContent = LANG_LABEL[l];
+      langBtn.title = { zh: '切换语言', en: 'Change language', ja: '言語を切り替え' }[l];
+      if (save) { try { localStorage.setItem('nekoplay_lang', l); } catch (e) {} }
+      if (typeof refreshDynamic === 'function') refreshDynamic();
+    }
+    langBtn.addEventListener('click', () => applyLang(LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length], true));
+    applyLang(pickLang(), false);
+
     // ---------- Theme Toggle (Default: iconic NEKOPLAY Light) ----------
     const root = document.documentElement;
     const themeBtn = document.getElementById('themeBtn');
-    function applyTheme(t) {
-      root.setAttribute('data-theme', t);
-      themeBtn.textContent = t === 'dark' ? '浅色' : '深色';
-      localStorage.setItem('nekoplay_flat_theme', t);
+    function applyTheme(t0) {
+      root.setAttribute('data-theme', t0);
+      themeBtn.textContent = t(t0 === 'dark' ? '浅色' : '深色');
+      try { localStorage.setItem('nekoplay_flat_theme', t0); } catch (e) {}
     }
-    applyTheme(localStorage.getItem('nekoplay_flat_theme') || 'light');
+    let savedTheme = 'light';
+    try { savedTheme = localStorage.getItem('nekoplay_flat_theme') || 'light'; } catch (e) {}
+    applyTheme(savedTheme);
     themeBtn.addEventListener('click', () => {
       applyTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
     });
@@ -798,21 +946,21 @@
         src: 'demo/desktop-home-light.png',
         title: '桌面端 · 宽屏主页',
         desc: '无边框色块分层，支持首页模块自由排序、左侧歌单栏与底部播控栏。',
-        res: '1920 × 1200 · ← / → 切换',
+        res: '1920 × 1200',
         mobile: false
       },
       {
         src: 'demo/desktop-player-dark.png',
         title: '桌面端 · 全屏播放与歌词',
         desc: '展示真实解码格式与采样率/位深（FLAC 48k/24bit），搭配逐字浮光与景深模糊歌词。',
-        res: '1920 × 1200 · ← / → 切换',
+        res: '1920 × 1200',
         mobile: false
       },
       {
         src: 'demo/mobile-home.png',
         title: '移动端 · 响应式布局',
         desc: '与桌面端共用同一份 Compose 代码，窗口收窄或运行于手机时自动切换为底部导航。',
-        res: '780 × 1688 · ← / → 切换',
+        res: '780 × 1688',
         mobile: true
       }
     ];
@@ -835,13 +983,17 @@
       demoImg.style.opacity = '0.3';
       setTimeout(() => {
         demoImg.src = d.src;
-        demoImg.alt = d.title;
         demoImg.classList.toggle('mobile-shot', d.mobile);
-        demoTitle.textContent = d.title;
-        demoDesc.textContent = d.desc;
-        demoRes.textContent = d.res;
+        demoText();
         demoImg.style.opacity = '1';
       }, 90);
+    }
+    function demoText() {
+      const d = demos[cur];
+      demoImg.alt = t(d.title);
+      demoTitle.textContent = t(d.title);
+      demoDesc.textContent = t(d.desc);
+      demoRes.textContent = `${d.res} · ${t('← / → 切换')}`;
     }
     tabs.forEach(t => t.addEventListener('click', () => setDemo(Number(t.dataset.idx))));
     window.addEventListener('keydown', e => {
@@ -859,7 +1011,13 @@
 
     const osNames = { windows: 'Windows', macos: 'macOS', android: 'Android', linux: 'Linux', ios: 'iOS' };
     document.querySelector(`.dl-card[data-os="${os}"]`)?.classList.add('recommended');
-    document.getElementById('primaryDlText').textContent = `立即下载 ${osNames[os]} 版`;
+    const DL_FMT = { zh: n => `立即下载 ${n} 版`, en: n => `Download for ${n}`, ja: n => `${n} 版をダウンロード` };
+    var refreshDynamic = () => {
+      document.getElementById('primaryDlText').textContent = DL_FMT[lang](osNames[os]);
+      themeBtn.textContent = t(root.getAttribute('data-theme') === 'dark' ? '浅色' : '深色');
+      demoText();
+    };
+    refreshDynamic();
     document.getElementById('osHint').textContent = `${osNames[os].toUpperCase()} · 48kHz / 24-BIT`;
 
     fetch('https://api.github.com/repos/acnekot/NEKOPLAY/releases/latest')
