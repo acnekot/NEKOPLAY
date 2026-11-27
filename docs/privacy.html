@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>隐私政策 · NEKOPLAY</title>
+  <meta name="description" content="NEKOPLAY 隐私政策：本应用如何处理你的数据。">
+  <link rel="icon" type="image/png" href="demo/icon.png">
+  <style>
+    :root {
+      --bg: #DCEAF0; --surface: #E7F1F5; --ink: #0E1117; --muted: #46505E; --accent: #1A4BE0; --line: #B7C7CF;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Hiragino Sans", "Noto Sans SC", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #262C34; --surface: #2F3640; --ink: #E8EDF2; --muted: #A9B4C0; --accent: #7C9BFF; --line: #38404C; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.75 var(--sans); }
+    main { max-width: 760px; margin: 0 auto; padding: 48px 16px 80px; }
+    h1 { font-size: 30px; line-height: 1.3; margin: 0 0 6px; letter-spacing: .01em; }
+    h2 { font-size: 19px; margin: 36px 0 8px; }
+    p, li { color: var(--ink); }
+    .meta { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+    .lang { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0 8px; }
+    .lang a { padding: 4px 12px; background: var(--surface); border-radius: 999px; font-size: 14px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    section { border-top: 1px solid var(--line); margin-top: 48px; padding-top: 8px; }
+    ul { padding-left: 1.3em; }
+    code { font-size: .92em; background: var(--surface); padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+    .back { display: inline-block; margin-top: 40px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>NEKOPLAY 隐私政策</h1>
+  <div class="meta">生效日期：2026 年 11 月 27 日 · 适用于 NEKOPLAY 全部版本（Android / Windows / macOS / Linux / iOS，含 Microsoft Store 版）</div>
+  <nav class="lang"><a href="#zh">简体中文</a><a href="#en">English</a><a href="#ja">日本語</a></nav>
+
+  <div id="zh">
+    <h2>概述</h2>
+    <p>NEKOPLAY 是一款本地优先的音乐播放器。<strong>开发者不运营任何收集用户数据的服务器，应用不包含统计分析、广告或遥测组件，也不会把你的个人信息发送给开发者。</strong></p>
+
+    <h2>保存在你设备上的数据</h2>
+    <p>以下数据只保存在你的设备上（Windows：<code>%APPDATA%\NEKOPLAY</code>；macOS / Linux：<code>~/.nekoplay</code>；手机端为应用私有目录），卸载应用或删除该目录即可清除：</p>
+    <ul>
+      <li>应用设置、主题与界面偏好；</li>
+      <li>播放队列、播放历史、收听统计、喜欢的歌曲与歌单缓存；</li>
+      <li>你安装的插件及其配置；</li>
+      <li>你在插件中登录第三方服务后产生的登录凭据（如 Cookie / Token），仅供对应插件访问该服务时使用；</li>
+      <li>音频缓存与离线下载的文件。</li>
+    </ul>
+
+    <h2>应用会发起的网络连接</h2>
+    <ul>
+      <li><strong>检查更新</strong>（官网 / GitHub 直装版）：访问 GitHub 获取最新版本信息。Microsoft Store 版由商店负责更新，不进行此连接。</li>
+      <li><strong>插件订阅</strong>：你添加的插件订阅地址（如 GitHub 及其 jsDelivr 镜像）用于下载插件列表与插件文件。</li>
+      <li><strong>插件</strong>：插件由你自行选择安装，插件会按其功能连接第三方服务（例如获取曲目信息、歌词、封面或音频）。这些请求直接从你的设备发往该服务，<strong>开发者无法看到其内容</strong>。第三方服务如何处理你的数据，以该服务自己的隐私政策和条款为准。插件需要声明网络权限，访问本机或局域网地址需要额外声明。</li>
+      <li><strong>WebDAV</strong>（可选）：如果你配置了 WebDAV 服务器，应用会连接该服务器读取音乐或备份 / 恢复你的设置与数据。</li>
+      <li><strong>Discord 状态</strong>（可选，仅桌面端）：开启后，应用会通过你电脑上的 Discord 客户端展示正在播放的歌曲信息。</li>
+    </ul>
+
+    <h2>数据共享</h2>
+    <p>开发者不会出售、出租或共享你的个人信息。除上面列出的、由你主动开启或安装的功能外，应用不会把你的数据发送给任何第三方。</p>
+
+    <h2>应用商店提供的数据</h2>
+    <p>如果你通过应用商店（如 Microsoft Store）安装，商店可能会按其自身政策向开发者提供汇总的下载统计和崩溃报告。开发者仅用这些信息修复问题和改进应用；其中如包含个人信息，会在 30 天内删除。</p>
+
+    <h2>备份与导出</h2>
+    <p>你可以在 设置 → 备份 中导出数据，并可选择用密码加密。导出文件由你自行保管。</p>
+
+    <h2>儿童</h2>
+    <p>本应用不面向 13 岁以下儿童，也不会有意收集儿童的个人信息。</p>
+
+    <h2>政策变更与联系方式</h2>
+    <p>本政策如有变更，会更新此页面并修改生效日期。有任何疑问，请在 <a href="https://github.com/acnekot/NEKOPLAY/issues" rel="noopener">GitHub Issues</a> 联系我们。</p>
+  </div>
+
+  <section id="en">
+    <h2>NEKOPLAY Privacy Policy (English)</h2>
+    <p>Effective date: November 27, 2026. Applies to all editions of NEKOPLAY, including the Microsoft Store edition.</p>
+    <p><strong>NEKOPLAY is a local-first music player. The developer does not operate any server that collects user data. The app contains no analytics, advertising or telemetry, and does not send your personal information to the developer.</strong></p>
+    <p><strong>Data stored on your device:</strong> settings, play queue and history, listening statistics, liked songs and playlist cache, installed plugins and their settings, sign-in credentials (cookies / tokens) created when you sign in to a third-party service through a plugin (used only by that plugin), and audio cache / downloads. This data stays on your device (Windows: <code>%APPDATA%\NEKOPLAY</code>; macOS / Linux: <code>~/.nekoplay</code>; app-private storage on mobile) and is removed when you uninstall the app or delete that folder.</p>
+    <p><strong>Network connections:</strong> update checks against GitHub (direct-download editions only; the Microsoft Store edition is updated by the Store); plugin subscription URLs you add (such as GitHub and its jsDelivr mirror); plugins you choose to install, which connect directly from your device to third-party services according to their function (the developer cannot see this traffic, and each service's own privacy policy applies); an optional WebDAV server you configure; and optional Discord status on desktop, which uses the Discord client on your computer.</p>
+    <p><strong>Sharing:</strong> the developer does not sell, rent or share your personal information. App stores may give the developer aggregated download statistics and crash reports under their own policies; these are used only to fix bugs, and any personal information in them is deleted within 30 days.</p>
+    <p><strong>Children:</strong> the app is not directed at children under 13. <strong>Changes and contact:</strong> changes are posted on this page with a new effective date. Contact us via <a href="https://github.com/acnekot/NEKOPLAY/issues" rel="noopener">GitHub Issues</a>.</p>
+  </section>
+
+  <section id="ja">
+    <h2>NEKOPLAY プライバシーポリシー（日本語）</h2>
+    <p>施行日：2026 年 11 月 27 日。Microsoft Store 版を含む NEKOPLAY の全エディションに適用されます。</p>
+    <p><strong>NEKOPLAY はローカル優先の音楽プレーヤーです。開発者はユーザーデータを収集するサーバーを運営しておらず、アプリには分析・広告・テレメトリー機能は含まれず、個人情報を開発者に送信することはありません。</strong></p>
+    <p><strong>端末に保存されるデータ：</strong>設定、再生キューと履歴、再生統計、お気に入りとプレイリストのキャッシュ、インストールしたプラグインとその設定、プラグイン経由で外部サービスにログインした際の認証情報（Cookie / トークン。該当プラグインのみが使用）、音声キャッシュとダウンロード。これらは端末内にのみ保存され、アンインストールまたは保存フォルダの削除で消去されます。</p>
+    <p><strong>通信：</strong>GitHub への更新確認（直接配布版のみ。Microsoft Store 版はストアが更新）、追加したプラグイン購読 URL、ユーザーが選んでインストールしたプラグインによる外部サービスへの直接通信（開発者は内容を確認できず、各サービスのポリシーが適用されます）、任意で設定した WebDAV サーバー、デスクトップ版の任意機能「Discord ステータス」。</p>
+    <p><strong>共有：</strong>開発者は個人情報を販売・貸与・共有しません。ストアから提供される集計統計やクラッシュレポートは不具合修正のみに使用し、個人情報が含まれる場合は 30 日以内に削除します。お問い合わせは <a href="https://github.com/acnekot/NEKOPLAY/issues" rel="noopener">GitHub Issues</a> へ。</p>
+  </section>
+
+  <a class="back" href="./">← 返回 NEKOPLAY 主页</a>
+</main>
+</body>
+</html>

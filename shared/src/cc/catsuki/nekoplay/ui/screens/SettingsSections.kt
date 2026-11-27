@@ -147,15 +147,16 @@ internal fun LazyListScope.settingsAdvSection(
 
 internal fun LazyListScope.settingsAboutSection(nav: Nav, p: Pal, scope: CoroutineScope) {
     item { NavRow("版本", null, Updater.current, clickable = false) {} }
-    item { SwitchRow("启动时检查更新", "打开应用时自动检查新版本并弹窗提醒", Updater.autoOn) { Updater.setAuto(it) } }
-    item {
+    if (Edition.store) item { NavRow("更新", "此版本由 Microsoft Store 自动更新", null, clickable = false) {} }
+    if (Edition.selfUpdate) item { SwitchRow("启动时检查更新", "打开应用时自动检查新版本并弹窗提醒", Updater.autoOn) { Updater.setAuto(it) } }
+    if (Edition.selfUpdate) item {
         Column(Modifier.fillMaxWidth().padding(vertical = 10.dp).bottomLine().padding(bottom = 12.dp)) {
             T(tr("更新通道"), 16); T(tr("正式版：GitHub Release；测试版：GitHub Pre-release 预发布包"), 13, p.s, lines = 2, lh = 1.4f)
             Spacer(Modifier.height(10.dp))
             ChipRow(listOf("正式版", "测试版"), if (Updater.nightly) 1 else 0) { Updater.useNightly(it == 1) }
         }
     }
-    item {
+    if (Edition.selfUpdate) item {
         val uri = androidx.compose.ui.platform.LocalUriHandler.current
         val info = Updater.latest
         Column(Modifier.fillMaxWidth().padding(vertical = 10.dp).bottomLine().padding(bottom = 12.dp)) {
@@ -181,6 +182,10 @@ internal fun LazyListScope.settingsAboutSection(nav: Nav, p: Pal, scope: Corouti
                 if (Updater.nightly) T(tr("预发布包包含最新修复与试验功能，直接下载对应平台安装包即可"), 11, p.s, modifier = Modifier.padding(top = 6.dp))
             }
         }
+    }
+    item {
+        val uri = androidx.compose.ui.platform.LocalUriHandler.current
+        NavRow("隐私政策", "本应用如何处理你的数据", null) { runCatching { uri.openUri(Edition.PRIVACY_URL) }.onFailure { nav.toast = "打不开浏览器" } }
     }
     item { NavRow("源代码", "github.com/acnekot/NEKOPLAY", null, clickable = false) {} }
 }

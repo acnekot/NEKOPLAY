@@ -35,7 +35,7 @@ object PluginSubs {
         if (loaded) return
         loaded = true
         val raw = prefs.getString("subs", null)?.split('\n')?.filter { it.isNotBlank() }
-        if (raw == null) { urls = listOf(OFFICIAL); return }
+        if (raw == null) { urls = Edition.defaultSubs; return }
         val migrated = raw.map { if (it == LEGACY_OFFICIAL) OFFICIAL else it }.distinct()
         urls = migrated
         if (migrated != raw) save()

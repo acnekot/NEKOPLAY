@@ -180,6 +180,24 @@ jobs:
         if: failure()
         shell: bash
         run: find desktop/build/compose/logs -type f -exec sh -c 'echo "== $1"; cat "$1"' _ {} \; || true
+      # Microsoft Store 版：渠道标记改为 store 重新打免安装目录，再用 makeappx 打成 MSIX（不签名，上传后由微软签名）
+      - name: 打包 Microsoft Store 版 MSIX（Windows）
+        if: runner.os == 'Windows'
+        continue-on-error: true   # 商店包失败不影响直装版安装包发布
+        shell: pwsh
+        env:
+          NEKOPLAY_CHANNEL: store
+          MSSTORE_IDENTITY_NAME: ${{ vars.MSSTORE_IDENTITY_NAME }}
+          MSSTORE_PUBLISHER: ${{ vars.MSSTORE_PUBLISHER }}
+          MSSTORE_PUBLISHER_DISPLAY: ${{ vars.MSSTORE_PUBLISHER_DISPLAY }}
+        run: |
+          $app = 'desktop/build/compose/binaries/main/app'
+          Remove-Item -Recurse -Force $app -ErrorAction SilentlyContinue
+          Push-Location desktop; ./gradlew createDistributable --no-daemon; if ($LASTEXITCODE -ne 0) { exit 1 }; Pop-Location
+          ./desktop/msix/build-msix.ps1 -AppDir "$app/NEKOPLAY" -Out store/NEKOPLAY-store-x64.msix
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with: { name: store-msix, path: store/*.msix, if-no-files-found: warn }
       - name: 收集安装包
         if: always()
         shell: bash
@@ -217,7 +235,8 @@ jobs:
           [ -s notes.md ] || echo "见 CHANGELOG.md" > notes.md
           cat notes.md
       - uses: actions/download-artifact@v4
-        with: { path: dist, merge-multiple: true }
+        # 只收 NEKOPLAY-* 安装包；商店版 MSIX（store-msix）不进 GitHub Release，单独手动上传到 Partner Center
+        with: { path: dist, pattern: "NEKOPLAY-*", merge-multiple: true }
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.v }}

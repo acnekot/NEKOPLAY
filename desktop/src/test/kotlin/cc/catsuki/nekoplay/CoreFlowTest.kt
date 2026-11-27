@@ -118,4 +118,14 @@ class CoreFlowTest {
             Plat.impl = real
         }
     }
+
+    @Test fun editionSwitchesSubscriptionsAndSelfUpdate() {
+        try {
+            Edition.override = null
+            assertEquals("direct", Edition.channel, "本地 / 直装构建默认是 direct 渠道")
+            assertEquals(listOf(PluginSubs.OFFICIAL), Edition.defaultSubs); assertTrue(Edition.selfUpdate)
+            Edition.override = "store"
+            assertTrue(Edition.store); assertTrue(Edition.defaultSubs.isEmpty(), "商店版不默认订阅插件源"); assertFalse(Edition.selfUpdate)
+        } finally { Edition.override = null }
+    }
 }

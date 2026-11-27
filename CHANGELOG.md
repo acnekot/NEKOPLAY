@@ -5,6 +5,10 @@
 
 ## [未发布]
 
+### Microsoft Store 版
+- **新增商店版构建渠道**（`NEKOPLAY_CHANNEL=store`）：首次启动不默认订阅插件源、不内置音源插件，关闭应用内检查更新（由商店负责更新）；CI 在 Windows 上额外产出未签名的 `NEKOPLAY-store-x64.msix` 供上传 Partner Center，不进入 GitHub Release。
+- **隐私政策**：新增官网隐私政策页面（简体中文 / English / 日本語），设置 → 关于 与官网页脚均有入口。
+
 ## [0.6.8-nightly.20261127.5] - 2026-11-27
 
 预发布构建（全五端：Android / Windows / macOS / Linux / iOS）：Android 安装包改用固定正式签名，此后可直接覆盖升级；同时带上插件调用超时、响应大小上限、调试日志凭据打码与插件网络权限收紧。

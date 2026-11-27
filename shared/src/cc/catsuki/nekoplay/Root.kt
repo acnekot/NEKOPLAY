@@ -139,7 +139,7 @@ object Boot {
     val nav = remember { Nav() }
     LaunchedEffect(Unit) { Downloads.onMessage = { nav.toast = it } }
     // 启动自动检查更新：首页渲染稳定后静默请求，有新版本弹出带动效的更新提示框
-    LaunchedEffect(Unit) { delay(2500); Updater.autoCheck() }
+    LaunchedEffect(Unit) { if (Edition.selfUpdate) { delay(2500); Updater.autoCheck() } }
     SideEffect { Keys.nav = nav }
     LaunchedEffect(Unit) { withFrameNanos { Perf.markHomeReady() } }
     val st by Engine.state.collectAsState()

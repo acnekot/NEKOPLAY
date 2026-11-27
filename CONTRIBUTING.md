@@ -98,6 +98,21 @@ for f in plugins/*.js; do node --check "$f"; done
 
 不打标签时，在 Actions 里手动运行「打包全部版本」并选 `main`，就是测试版（nightly）。
 
+## Microsoft Store 版
+
+商店版与直装版是同一份代码，打包时用环境变量 `NEKOPLAY_CHANNEL=store` 切换渠道（见 `shared/src/cc/catsuki/nekoplay/Edition.kt`）：
+
+- 首次启动**不默认订阅任何插件源**，由用户自行添加；不内置任何音源插件
+- 关闭应用内检查更新，设置页显示「由 Microsoft Store 自动更新」
+- 「打包全部版本」工作流在 Windows 上会额外产出 `store-msix` 构建产物（`NEKOPLAY-store-x64.msix`，未签名，上传 Partner Center 后由微软签名），**不会**进入 GitHub Release
+- MSIX 身份信息在仓库 **Variables**（不是 Secrets）里配置，值取自 Partner Center → 产品管理 → 产品标识：
+  - `MSSTORE_IDENTITY_NAME`：Package/Identity/Name
+  - `MSSTORE_PUBLISHER`：Package/Identity/Publisher（形如 `CN=XXXXXXXX-XXXX-…`）
+  - `MSSTORE_PUBLISHER_DISPLAY`：Package/Properties/PublisherDisplayName
+  - 未配置时用占位身份打包，只能验证结构，不能上传
+- 商店要求版本号单调递增：MSIX 版本为 `1.次版本.修订.0`（与 msi / exe 相同），同一版本号只能提交一次，因此只用正式版提交商店
+- 隐私政策页面：`docs/privacy.html`（官网 `/privacy.html`），设置 → 关于 中有入口
+
 ## 安全
 
 - 不要提交 `*.keystore`、`*.jks`、`local.properties` 等密钥和本机配置（`.gitignore` 已经排除）
