@@ -66,6 +66,27 @@ NEKOPLAY 本体完全中立，不内置任何在线音源与重型特色扩展�
 
 ---
 
+### 媒体规则（`media`，宿主 0.6.9+）
+
+宿主不内置任何平台的 CDN 规则。如果音源的封面、音频或视频地址需要特定请求头（否则返回 403），或者封面可以通过改地址取不同尺寸的缩略图，在注册对象里声明 `media`：
+
+```js
+nk.register({
+  media: [
+    { hosts: ['img.example.com', 'cdn.example.net'],
+      headers: { Referer: 'https://www.example.com/', Origin: 'https://www.example.com' },
+      image: { query: 'size={s}x{s}', sizes: [160, 256, 512, 768] } },
+    { hosts: ['pic.example.org'], image: { from: '/480/', to: '/{s}/', sizes: [150, 240, 480] } },
+  ],
+  async search(q, type, page) { /* … */ },
+});
+```
+
+- `hosts`：按域名后缀匹配（`example.net` 也匹配 `a.example.net`），不能是本机或局域网地址。
+- `headers`：只允许 `Referer`、`Origin`、`User-Agent`，用于图片加载、音频 / 视频播放和离线下载。
+- `image`：封面缩略图改写方式。`from` / `to` 为子串替换（地址里要包含 `from`）；没有 `from` 时用 `query` 替换原查询串。`{s}` 会换成 `sizes` 中不小于显示像素的最小值。可选 `contains` 进一步限定地址必须包含的子串；`keepHttp: true` 时不把 `http` 升级为 `https`。同一域名有多条 `image` 规则时按声明顺序取第一条命中的。
+- 规则在插件首次启动时读取并缓存，插件未运行时封面请求也能使用；只对已启用的音源插件生效。
+
 ## 功能 / 页面 / 动效插件（API v2）
 
 ### 1. 功能槽位（`@feature <slot>`）与热更新 `config()`

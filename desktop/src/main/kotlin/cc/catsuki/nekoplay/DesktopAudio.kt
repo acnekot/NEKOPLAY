@@ -52,7 +52,6 @@ internal class MpvAudio : Audio {
         lib.mpv_set_option_string(h, "keep-open", "yes")
         lib.mpv_set_option_string(h, "idle", "yes")
         lib.mpv_set_option_string(h, "user-agent", "Mozilla/5.0")
-        lib.mpv_set_option_string(h, "referrer", "https://music.163.com/")
         lib.mpv_set_option_string(h, "cache", "yes")
         lib.mpv_set_option_string(h, "demuxer-max-bytes", "8MiB")
         lib.mpv_set_option_string(h, "demuxer-max-back-bytes", "2MiB")
@@ -108,12 +107,13 @@ internal class MpvAudio : Audio {
     private fun num(n: String): Double { val r = DoubleByReference(); return if (lib!!.mpv_get_property(h!!, n, 5, r) >= 0) r.value else 0.0 }
     private fun cmd(vararg a: String) { lib?.mpv_command(h!!, arrayOf(*a, null)) }
 
+    /** 每首歌按地址取音源插件声明的 CDN 请求头（MediaHeaders），没有就恢复默认 */
     private fun applyStreamHeaders(url: String) {
         val hh = h ?: return
-        val u = url.lowercase()
-        val isBili = "bilivideo" in u || "hdslb" in u || "bilibili" in u || "akamaized" in u
-        lib?.mpv_set_property_string(hh, "referrer", if (isBili) "https://www.bilibili.com/" else "https://music.163.com/")
-        lib?.mpv_set_property_string(hh, "user-agent", if (isBili) "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" else "Mozilla/5.0")
+        val hs = MediaHeaders.forUrl(url)
+        lib?.mpv_set_property_string(hh, "referrer", hs["Referer"] ?: "")
+        lib?.mpv_set_property_string(hh, "user-agent", hs["User-Agent"] ?: "Mozilla/5.0")
+        lib?.mpv_set_property_string(hh, "http-header-fields", mpvHeaderFields(hs))
     }
 
     override fun open(url: String?, cacheKey: String, startMs: Long, autoplay: Boolean, meta: Track) {
@@ -208,3 +208,7 @@ internal class MpvAudio : Audio {
         cmd("ao-reload")
     }
 }
+
+/** mpv 的 http-header-fields：Referer / User-Agent 有专门选项，其余（如 Origin）拼成 "Key: Value" 列表；值里有逗号的跳过（mpv 用逗号分隔） */
+internal fun mpvHeaderFields(hs: Map<String, String>): String =
+    hs.filterKeys { it != "Referer" && it != "User-Agent" }.filterValues { ',' !in it }.entries.joinToString(",") { "${it.key}: ${it.value}" }

@@ -125,7 +125,8 @@ object Downloads {
             val base = safe("${t.artist} - ${t.title}")
             var f = File(dir, "$base.$ext")
             if (f.exists()) f = File(dir, "$base (${t.id}).$ext")
-            SourceApi.http.newCall(Request.Builder().url(s.url).header("User-Agent", "Mozilla/5.0").header("Referer", "https://music.163.com/").build()).execute().use { r ->
+            val req = Request.Builder().url(s.url).header("User-Agent", "Mozilla/5.0").apply { MediaHeaders.forUrl(s.url).forEach { (k, v) -> header(k, v) } }.build()
+            SourceApi.http.newCall(req).execute().use { r ->
                 if (!r.isSuccessful) throw Exception("HTTP ${r.code}")
                 val body = r.body ?: throw Exception("空响应")
                 val total = body.contentLength()

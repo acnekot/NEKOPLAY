@@ -90,6 +90,9 @@ class JsSource(val file: File) {
     /** 脚本实现了哪些接口（search / stream / lyric …），界面按这个决定显示什么；优先从本地缓存恢复以实现按需启动 */
     private val capsKey get() = "caps_${id}_${version}"
     var caps by mutableStateOf<Set<String>>(Plat.prefs("plugins").getStringSet(capsKey, null) ?: emptySet()); private set
+    /** 插件声明的媒体请求头规则（见 MediaHeaders），同样缓存下来，插件未启动时也能给封面 / 音频请求用 */
+    private val mediaKey get() = "media_${id}_${version}"
+    @kotlin.concurrent.Volatile var media: List<MediaHeaders.Rule> = MediaHeaders.parse(Plat.prefs("plugins").getString(mediaKey, null) ?: "[]"); private set
     var error by mutableStateOf<String?>(null); private set
     val isRunning get() = js != null
     fun has(cap: String) = cap in caps
@@ -104,7 +107,9 @@ class JsSource(val file: File) {
             q.evaluate<Any?>(prelude(), filename = "prelude.js")
             q.evaluate<Any?>(file.readText(), filename = file.name)
             val c = JSONArray(q.evaluate<String>("__caps()")).let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
-            caps = c; Plat.prefs("plugins").edit().putStringSet(capsKey, c).apply()
+            val m = q.evaluate<String>("__media()")
+            caps = c; media = MediaHeaders.parse(m)
+            Plat.prefs("plugins").edit().putStringSet(capsKey, c).putString(mediaKey, m).apply()
             js = q; error = null
             Plugins.bump()
             true
@@ -323,6 +328,7 @@ class JsSource(val file: File) {
               host: { version: '${APP_VERSION}', platform: '${Plat.impl.name}', get lang() { return __host.lang(); } },
             };
             globalThis.console = { log: nk.log, warn: nk.log, error: nk.log };
+            globalThis.__media = () => JSON.stringify(Array.isArray((globalThis.source || {}).media) ? globalThis.source.media : []);
             globalThis.__caps = () => JSON.stringify(Object.keys(globalThis.source || {}).filter(k => typeof globalThis.source[k] === 'function'));
             globalThis.__invoke = async (fn, args) => {
               const s = globalThis.source;

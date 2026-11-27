@@ -41,12 +41,11 @@ class ExoAudio(private val c: Context) : Audio {
     init {
         val lc = DefaultLoadControl.Builder().setBufferDurationsMs(15_000, 25_000, 1_500, 4_000).setTargetBufferBytes(4 * 1024 * 1024).build()
         val http = DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0").setConnectTimeoutMs(10_000).setReadTimeoutMs(15_000)
-        // 地址里带账号密码（WebDAV 音乐 https://用户:密码@主机/…）：去掉并改成 Basic 认证头；特定 CDN 自动补 Referer 防 403
+        // 地址里带账号密码（WebDAV 音乐 https://用户:密码@主机/…）：去掉并改成 Basic 认证头；
+        // 音源插件声明的 CDN 请求头（MediaHeaders：Referer / Origin / UA）在这里附加，防 403
         upstream = androidx.media3.datasource.ResolvingDataSource.Factory(http) { spec ->
-            val host = spec.uri.host.orEmpty().lowercase()
-            val s0 = if ("bilivideo" in host || "hdslb" in host || "bilibili" in host || "akamaized" in host) {
-                spec.withAdditionalHeaders(mapOf("Referer" to "https://www.bilibili.com/", "Origin" to "https://www.bilibili.com"))
-            } else spec
+            val hs = MediaHeaders.forHost(spec.uri.host.orEmpty())
+            val s0 = if (hs.isEmpty()) spec else spec.withAdditionalHeaders(hs)
             val ui = s0.uri.encodedUserInfo
             if (ui.isNullOrEmpty()) s0
             else s0.withUri(s0.uri.buildUpon().encodedAuthority(s0.uri.encodedAuthority!!.substringAfter('@')).build())
@@ -86,7 +85,7 @@ class ExoAudio(private val c: Context) : Audio {
         }
     }
     private fun isHls(url: String?) = url != null && (url.substringBefore('?').endsWith(".m3u8", ignoreCase = true) || ".m3u8" in url.lowercase())
-    private fun artworkUri(cover: String?) = cover?.let { android.net.Uri.parse(if ("music.126.net" in it && '?' !in it) "$it?param=512y512" else it) }
+    private fun artworkUri(cover: String?) = cover?.let { android.net.Uri.parse(MediaHeaders.resize(it, 512)) }
     override fun open(url: String?, cacheKey: String, startMs: Long, autoplay: Boolean, meta: Track) {
         val hls = isHls(url)
         val item = item(url, cacheKey, meta, withCacheKey = !hls)

@@ -129,7 +129,11 @@ class DesktopPlat : PlatImpl {
     @Composable override fun VideoPlayer(url: String?, modifier: Modifier, onState: (Boolean, Long, Long, String?) -> Unit, control: VideoControl) {
         LaunchedEffect(url) {
             if (url == null) return@LaunchedEffect
-            val ok = runCatching { ProcessBuilder("mpv", "--force-window=yes", "--title=NEKOPLAY MV", "--referrer=https://music.163.com/", url).start() }.isSuccess
+            val hs = MediaHeaders.forUrl(url)
+            val args = listOf("mpv", "--force-window=yes", "--title=NEKOPLAY MV") +
+                listOfNotNull(hs["Referer"]?.let { "--referrer=$it" }, hs["User-Agent"]?.let { "--user-agent=$it" }) +
+                mpvHeaderFields(hs).takeIf { it.isNotEmpty() }?.let { listOf("--http-header-fields=$it") }.orEmpty() + url
+            val ok = runCatching { ProcessBuilder(args).start() }.isSuccess
             onState(false, 0, 0, if (ok) "已在 mpv 窗口中播放" else "需要安装 mpv 才能播放 MV")
         }
     }
@@ -152,7 +156,7 @@ class DesktopPlat : PlatImpl {
         override fun removeEldestEntry(e: MutableMap.MutableEntry<String, List<Pair<ImageBitmap, Int>>>?) = size > 8
     })
     private fun decodeFrames(url: String): List<Pair<ImageBitmap, Int>> {
-        val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0").header("Referer", "https://music.163.com/").build()
+        val req = okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0").apply { MediaHeaders.forUrl(url).forEach { (k, v) -> header(k, v) } }.build()
         val bytes = SourceApi.http.newCall(req).execute().use { it.body!!.bytes() }
         val codec = org.jetbrains.skia.Codec.makeFromData(org.jetbrains.skia.Data.makeFromBytes(bytes))
         val n = codec.frameCount.coerceIn(1, 120)

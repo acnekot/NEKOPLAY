@@ -342,8 +342,11 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
     @Composable override fun VideoPlayer(url: String?, modifier: Modifier, onState: (Boolean, Long, Long, String?) -> Unit, control: VideoControl) {
         val c = LocalContext.current
         val player = remember {
-            ExoPlayer.Builder(c).setMediaSourceFactory(DefaultMediaSourceFactory(
-                DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0").setDefaultRequestProperties(mapOf("Referer" to "https://music.163.com/")))).build()
+            val http = DefaultHttpDataSource.Factory().setUserAgent("Mozilla/5.0")
+            val ds = androidx.media3.datasource.ResolvingDataSource.Factory(http) { spec ->
+                MediaHeaders.forHost(spec.uri.host.orEmpty()).let { hs -> if (hs.isEmpty()) spec else spec.withAdditionalHeaders(hs) }
+            }
+            ExoPlayer.Builder(c).setMediaSourceFactory(DefaultMediaSourceFactory(ds)).build()
         }
         var err by remember { mutableStateOf<String?>(null) }
         DisposableEffect(Unit) {

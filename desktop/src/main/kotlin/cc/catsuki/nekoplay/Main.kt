@@ -52,17 +52,10 @@ fun main() {
     }
     SingletonImageLoader.setSafe { ctx ->
         val client = SourceApi.http.newBuilder().addInterceptor { ch ->
+            // 图片 CDN 需要的 Referer / UA 由音源插件声明（MediaHeaders），宿主不写死任何平台
             val r = ch.request()
-            val h = r.url.host
-            ch.proceed(when {
-                h.endsWith("126.net") -> r.newBuilder()
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-                    .header("Referer", "https://music.163.com/").build()
-                h.endsWith("hdslb.com") || h.endsWith("bilibili.com") -> r.newBuilder()
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-                    .header("Referer", "https://www.bilibili.com/").build()
-                else -> r
-            })
+            val hs = MediaHeaders.forHost(r.url.host)
+            ch.proceed(if (hs.isEmpty()) r else r.newBuilder().apply { hs.forEach { (k, v) -> header(k, v) } }.build())
         }.build()
         ImageLoader.Builder(ctx)
             .memoryCache { MemoryCache.Builder().maxSizeBytes((if (UiPref.lowMem) 16L else 64L) * 1024 * 1024).build() }

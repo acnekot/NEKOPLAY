@@ -185,17 +185,8 @@ import kotlinx.coroutines.launch
     }
 }
 
-/** 封面图片按显示尺寸取合适缩略图（兼容各图床尺寸参数） */
-fun img(url: String?, px: Int): String? {
-    if (url == null) return null
-    if (url.startsWith("http://") && !url.contains("music.126.net")) return img("https://" + url.removePrefix("http://"), px)
-    val b = when { px <= 160 -> 160; px <= 256 -> 256; px <= 512 -> 512; else -> 768 }
-    val base = url.substringBefore('?')
-    if (base.contains("kugou.com") && base.contains("/480/")) { val q = when { px <= 160 -> 150; px <= 256 -> 240; else -> 480 }; return base.replace("/480/", "/$q/") }
-    if (base.contains("gtimg.cn") && base.contains("R500x500")) { val q = when { px <= 160 -> 150; px <= 300 -> 300; px <= 512 -> 500; else -> 800 }; return base.replace("R500x500", "R${q}x$q") }
-    if (!base.contains("music.126.net")) return url
-    return if (base.contains("/obj/")) "$base?imageView=1&thumbnail=${b}x$b&type=webp" else "$base?param=${b}y$b"
-}
+/** 封面图片按显示尺寸取合适缩略图：各图床的尺寸参数由音源插件声明（MediaHeaders.resize），宿主不写死任何平台 */
+fun img(url: String?, px: Int): String? = url?.let { MediaHeaders.resize(it, px) }
 
 /** 定位到正在播放：当前曲目不在可见视口内时右下角显示定位按钮 */
 @Composable fun BoxScope.LocateBtn(ls: LazyListState, target: Int, bottom: Dp = 16.dp) {

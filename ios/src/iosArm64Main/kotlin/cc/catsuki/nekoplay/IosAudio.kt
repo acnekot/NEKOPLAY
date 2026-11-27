@@ -239,7 +239,7 @@ class IosAudio(cacheRoot: File) : Audio {
 
     private fun loadArtwork(t: Track) {
         val cover = t.cover ?: return
-        val sized = if ("music.126.net" in cover && '?' !in cover) "$cover?param=512y512" else cover
+        val sized = MediaHeaders.resize(cover, 512)
         val u = NSURL.URLWithString(sized) ?: return
         NSURLSession.sharedSession.dataTaskWithURL(u) { data, _, _ ->
             val img = data?.let { UIImage.imageWithData(it) } ?: return@dataTaskWithURL

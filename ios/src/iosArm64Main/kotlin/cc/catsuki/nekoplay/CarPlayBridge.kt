@@ -184,7 +184,7 @@ object CarPlayBridge {
 
     private fun loadNowPlayingArtwork(t: Track) {
         val cover = t.cover ?: return
-        val sized = if ("music.126.net" in cover && '?' !in cover) "$cover?param=512y512" else cover
+        val sized = MediaHeaders.resize(cover, 512)
         val url = NSURL.URLWithString(sized) ?: return
         NSURLSession.sharedSession.dataTaskWithURL(url) { data, _, _ ->
             val img = data?.let { UIImage.imageWithData(it) } ?: return@dataTaskWithURL

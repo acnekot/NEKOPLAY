@@ -184,17 +184,18 @@ jobs:
       - name: 打包 Microsoft Store 版 MSIX（Windows）
         if: runner.os == 'Windows'
         continue-on-error: true   # 商店包失败不影响直装版安装包发布
-        shell: pwsh
+        shell: bash
         env:
           NEKOPLAY_CHANNEL: store
           MSSTORE_IDENTITY_NAME: ${{ vars.MSSTORE_IDENTITY_NAME }}
           MSSTORE_PUBLISHER: ${{ vars.MSSTORE_PUBLISHER }}
           MSSTORE_PUBLISHER_DISPLAY: ${{ vars.MSSTORE_PUBLISHER_DISPLAY }}
         run: |
-          $app = 'desktop/build/compose/binaries/main/app'
-          Remove-Item -Recurse -Force $app -ErrorAction SilentlyContinue
-          Push-Location desktop; ./gradlew createDistributable --no-daemon; if ($LASTEXITCODE -ne 0) { exit 1 }; Pop-Location
-          ./desktop/msix/build-msix.ps1 -AppDir "$app/NEKOPLAY" -Out store/NEKOPLAY-store-x64.msix
+          set -e
+          app=desktop/build/compose/binaries/main/app
+          rm -rf "$app"
+          (cd desktop && ./gradlew createDistributable --no-daemon)
+          pwsh -NoProfile -File desktop/msix/build-msix.ps1 -AppDir "$app/NEKOPLAY" -Out store/NEKOPLAY-store-x64.msix
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with: { name: store-msix, path: store/*.msix, if-no-files-found: warn }
