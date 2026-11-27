@@ -1,0 +1,65 @@
+{
+ "zh-cn": {
+  "short": "简约风格的本地音乐播放器：播放你自己电脑里或自己网盘（WebDAV）中的音乐，无需账号、无广告、无统计。",
+  "description": "NEKOPLAY 是一款简约风格的本地音乐播放器。\n\n它播放你自己设备上的音乐，或你自己 WebDAV 网盘里的音乐。喜欢和歌单都保存在本机，不需要注册账号，也不包含任何广告、统计或遥测。\n\n本软件本身不提供、不存储、不分发任何音乐内容，也不内置任何在线音乐服务。\n\n【本地与网盘】\n· 自动扫描「音乐」文件夹，读取同名 .lrc 歌词\n· 直接浏览 WebDAV 网盘文件夹并播放，支持无损格式\n· 本机喜欢、本地歌单、播放历史与听歌统计\n\n【播放】\n· 无缝切歌、音质显示、定时关闭\n· 10 段均衡器与音效\n· 关闭窗口后在系统托盘继续后台播放\n\n【歌词与界面】\n· 逐字歌词多种动效风格、双语翻译、歌词偏移\n· 可高度自定义的桌面悬浮歌词\n· 宽屏三栏布局、主题系统（可导入导出）、可视化动效曲线编辑器、动态取色与自定义背景\n\n【插件（可选）】\n支持用户自行安装的 JavaScript 插件，用于扩展音源、页面与动效。商店版默认不安装、不订阅任何插件，只有你在 设置 → 插件 中主动添加后才会下载和运行。插件在沙箱中运行，必须声明网络权限才能联网，访问本机或局域网地址需要额外声明；插件访问第三方服务时，以该服务对你开放的权限与其条款为准。\n\n隐私政策：https://nekoplay.catsuki.cc/privacy.html",
+  "features": [
+   "播放本机「音乐」文件夹与 WebDAV 网盘中的音乐，支持无损格式",
+   "无需账号，无广告、无统计、无遥测",
+   "逐字歌词、双语翻译与桌面悬浮歌词",
+   "10 段均衡器、无缝切歌、定时关闭",
+   "主题系统、动效曲线编辑器与动态取色",
+   "可选的 JavaScript 插件扩展（默认不安装）"
+  ],
+  "keywords": [
+   "音乐播放器",
+   "本地音乐",
+   "WebDAV",
+   "歌词",
+   "无损",
+   "FLAC",
+   "桌面歌词"
+  ]
+ },
+ "en-us": {
+  "short": "A clean, local-first music player for the music on your own PC or your own WebDAV server. No account, no ads, no tracking.",
+  "description": "NEKOPLAY is a clean, local-first music player.\n\nIt plays music stored on your own device or on your own WebDAV server. Likes and playlists are saved locally, no account is needed, and the app contains no ads, analytics or telemetry.\n\nNEKOPLAY itself does not provide, store or distribute any music content, and it does not include any built-in online music service.\n\nLOCAL & WEBDAV\n• Scans your Music folder and picks up matching .lrc lyrics\n• Browse and play folders on your WebDAV server directly, including lossless formats\n• Local likes, playlists, play history and listening statistics\n\nPLAYBACK\n• Gapless playback, audio quality info, sleep timer\n• 10-band equalizer and audio effects\n• Keeps playing in the background from the system tray when the window is closed\n\nLYRICS & INTERFACE\n• Word-by-word lyrics with several animation styles, translations and offset control\n• Highly customizable floating desktop lyrics\n• Wide three-column layout, theme system with import/export, visual motion-curve editor, dynamic colors and custom backgrounds\n\nPLUGINS (OPTIONAL)\nNEKOPLAY supports optional user-installed JavaScript plugins that add sources, pages and motion effects. The Store edition ships with no plugins and no plugin subscriptions; nothing is downloaded or run until you add a plugin yourself in Settings > Plugins. Plugins run in a sandbox, must declare a network permission to go online, and need an extra permission to reach local-network addresses. When a plugin accesses a third-party service, that service's own permissions and terms apply.\n\nPrivacy policy: https://nekoplay.catsuki.cc/privacy.html",
+  "features": [
+   "Play music from your Music folder and your own WebDAV server, including lossless formats",
+   "No account, no ads, no analytics, no telemetry",
+   "Word-by-word lyrics, translations and floating desktop lyrics",
+   "10-band equalizer, gapless playback and sleep timer",
+   "Themes, motion-curve editor and dynamic colors",
+   "Optional JavaScript plugins (none installed by default)"
+  ],
+  "keywords": [
+   "music player",
+   "local music",
+   "WebDAV",
+   "lyrics",
+   "lossless",
+   "FLAC",
+   "desktop lyrics"
+  ]
+ },
+ "ja-jp": {
+  "short": "シンプルなローカル音楽プレーヤー。PC 内や自分の WebDAV サーバーの音楽を再生。アカウント不要、広告・トラッキングなし。",
+  "description": "NEKOPLAY はシンプルなローカル優先の音楽プレーヤーです。\n\nお使いのデバイスや、ご自身の WebDAV サーバーにある音楽を再生します。お気に入りやプレイリストは端末内に保存され、アカウントは不要です。広告・分析・テレメトリーは一切含まれていません。\n\n本アプリ自体は音楽コンテンツを提供・保存・配布せず、オンライン音楽サービスも内蔵していません。\n\n【ローカル & WebDAV】\n・「ミュージック」フォルダーを自動スキャンし、同名の .lrc 歌詞を読み込み\n・WebDAV サーバーのフォルダーを直接参照して再生（ロスレス対応）\n・ローカルのお気に入り、プレイリスト、再生履歴、再生統計\n\n【再生】\n・ギャップレス再生、音質表示、スリープタイマー\n・10 バンドイコライザーとエフェクト\n・ウィンドウを閉じてもシステムトレイでバックグラウンド再生\n\n【歌詞とインターフェース】\n・複数のアニメーションスタイルに対応した逐語歌詞、翻訳、タイミング調整\n・自由にカスタマイズできるデスクトップ歌詞\n・ワイド 3 カラムレイアウト、テーマ（インポート／エクスポート）、モーションカーブエディター、ダイナミックカラー、カスタム背景\n\n【プラグイン（任意）】\nユーザーが自分でインストールする JavaScript プラグインで、音源・ページ・モーションを拡張できます。Store 版にはプラグインもプラグイン購読も含まれておらず、設定 → プラグイン で自分で追加するまで何もダウンロード・実行されません。プラグインはサンドボックス内で動作し、ネットワーク接続には権限の宣言が必要で、ローカルネットワークへのアクセスには追加の宣言が必要です。外部サービスへのアクセス時は、そのサービスの権限と規約が適用されます。\n\nプライバシーポリシー：https://nekoplay.catsuki.cc/privacy.html",
+  "features": [
+   "「ミュージック」フォルダーと自分の WebDAV サーバーの音楽を再生（ロスレス対応）",
+   "アカウント不要、広告・分析・テレメトリーなし",
+   "逐語歌詞、翻訳、デスクトップ歌詞",
+   "10 バンドイコライザー、ギャップレス再生、スリープタイマー",
+   "テーマ、モーションカーブエディター、ダイナミックカラー",
+   "任意の JavaScript プラグイン（初期状態では未インストール）"
+  ],
+  "keywords": [
+   "音楽プレーヤー",
+   "ローカル音楽",
+   "WebDAV",
+   "歌詞",
+   "ロスレス",
+   "FLAC",
+   "デスクトップ歌詞"
+  ]
+ }
+}
