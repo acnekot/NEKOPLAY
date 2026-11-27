@@ -5,6 +5,10 @@
 
 ## [未发布]
 
+## [0.6.8-nightly.20261127.3] - 2026-11-27
+
+预发布构建（全五端：Android / Windows / macOS / Linux / iOS）：补齐 Android 端 HLS（`.m3u8`）音频流原生播放、通用内嵌网页直接登录 + Cookie 自动捕获与多窗口 OAuth 弹窗支持。
+
 ### 新增与修复
 - **全端 HLS（`.m3u8`）音频流兼容增强**：
   - Android 端引入 `media3-exoplayer-hls` 并在 `ExoAudio` 中为 HLS 流直连 `HlsMediaSource`（自动绕过单文件 `SimpleCache` 键值冲突），解决插件返回 `.m3u8` 分段音频流时 Android 无法播放或误判已缓存的问题

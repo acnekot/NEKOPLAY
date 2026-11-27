@@ -264,9 +264,17 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
                         }
                         override fun onPageFinished(v: android.webkit.WebView, pageUrl: String?) {
                             if (!cookieUrl.isNullOrBlank()) {
-                                runCatching { android.webkit.CookieManager.getInstance().getCookie(cookieUrl) }
-                                    .getOrNull()?.takeIf { it.isNotBlank() }?.let { cookieCb(it) }
+                                val cm = android.webkit.CookieManager.getInstance()
+                                val ck = runCatching { cm.getCookie(cookieUrl) }.getOrNull()
+                                    ?: pageUrl?.let { runCatching { cm.getCookie(it) }.getOrNull() }
+                                if (!ck.isNullOrBlank()) cookieCb(ck)
                             }
+                        }
+                        override fun onReceivedError(v: android.webkit.WebView, r: android.webkit.WebResourceRequest, e: android.webkit.WebResourceError) {
+                            if (r.isForMainFrame) info("弹窗加载失败：${e.description}（${e.errorCode}）")
+                        }
+                        override fun onReceivedHttpError(v: android.webkit.WebView, r: android.webkit.WebResourceRequest, e: android.webkit.WebResourceResponse) {
+                            if (r.isForMainFrame) info("弹窗返回 HTTP ${e.statusCode} · ${r.url.host ?: ""}")
                         }
                     }
                 }
