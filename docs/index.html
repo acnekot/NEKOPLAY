@@ -478,6 +478,7 @@
       transition: background-color .14s ease;
     }
     .dl-btn:hover { background: var(--btn-sec-hover); }
+    .dl-btns { display: flex; flex-direction: column; gap: 6px; }
 
     /* ---------- Footer (Echo of bottom player bar) ---------- */
     footer {
@@ -715,7 +716,10 @@
             <div class="dl-fmt">.msi / .exe / .zip</div>
           </div>
           <p class="dl-note">内置纯音频 libmpv 内核，支持自选安装目录与单实例托盘唤醒。</p>
-          <a class="dl-btn dl-link" data-match="windows" href="https://github.com/acnekot/NEKOPLAY/releases/latest" target="_blank" rel="noopener">下载 Windows</a>
+          <div class="dl-btns">
+            <a class="dl-btn dl-link" data-match="windows" href="https://github.com/acnekot/NEKOPLAY/releases/latest" target="_blank" rel="noopener">下载 Windows</a>
+            <a class="dl-btn" href="https://apps.microsoft.com/detail/9P9B864R5DX2" target="_blank" rel="noopener">Microsoft Store 获取</a>
+          </div>
         </div>
 
         <div class="dl-card" data-os="macos">
@@ -850,6 +854,7 @@
       'AVPlayer 原生播放，下载后可使用自签工具安装。': [
         'Native AVPlayer playback. Install it with a sideloading tool after download.',
         'AVPlayer によるネイティブ再生。ダウンロード後、サイドロードツールでインストールできます。'],
+      'Microsoft Store 获取': ['Get it from Microsoft Store', 'Microsoft Store から入手'],
       '下载 Windows': ['Download for Windows', 'Windows 版をダウンロード'],
       '下载 macOS': ['Download for macOS', 'macOS 版をダウンロード'],
       '下载 Android': ['Download for Android', 'Android 版をダウンロード'],

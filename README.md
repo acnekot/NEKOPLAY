@@ -77,7 +77,9 @@ NEKOPLAY 是一个**本地音乐播放器**：播放你自己设备上或自己�
 | Linux | `.deb` |
 | iOS | 未签名 `.ipa`，需自行签名安装 |
 
-Windows / macOS 安装包目前**没有代码签名**，系统可能提示「无法验证发布者」或拦截运行（例如 Windows 的智能应用控制）。请只从本仓库的 Releases 下载。
+Windows 也可以在 [Microsoft Store](https://apps.microsoft.com/detail/9P9B864R5DX2) 安装：商店版由微软签名、随商店自动更新，首次启动不带任何插件和插件订阅，需要时在 设置 → 插件 中自行添加。
+
+GitHub Releases 里的 Windows / macOS 安装包目前**没有代码签名**，系统可能提示「无法验证发布者」或拦截运行（例如 Windows 的智能应用控制）。请只从本仓库的 Releases 下载。
 
 ## 目录
 

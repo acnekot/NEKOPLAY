@@ -11,6 +11,7 @@
 
 ### 官网
 - **官网多语言**：首页支持简体中文 / English / 日本語，按浏览器语言自动选择，右上角可切换并记住选择，也可用 `?lang=en` / `?lang=ja` 直接指定；页脚隐私政策链接跟随语言跳到对应章节。
+- **Microsoft Store 上架**：官网 Windows 下载卡片与 README 增加 [Microsoft Store](https://apps.microsoft.com/detail/9P9B864R5DX2) 入口。
 
 ### 修复与改进
 - **Windows 键盘媒体键**：支持键盘上的播放/暂停、下一首、上一首、停止键，窗口在后台或最小化到托盘时同样有效（某个键已被其他程序占用时自动跳过该键）。
