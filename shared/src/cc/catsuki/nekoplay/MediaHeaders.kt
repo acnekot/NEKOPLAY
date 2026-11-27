@@ -81,7 +81,7 @@ object MediaHeaders {
         val h = host.lowercase()
         if (h.isEmpty()) return emptyMap()
         val out = LinkedHashMap<String, String>()
-        for (r in rules()) if (r.matches(h)) r.headers.forEach { (k, v) -> out.putIfAbsent(k, v) }
+        for (r in rules()) if (r.matches(h)) r.headers.forEach { (k, v) -> if (k !in out) out[k] = v }
         return out
     }
     fun forUrl(url: String): Map<String, String> = forHost(JsSource.hostOf(url))
