@@ -225,8 +225,12 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
             val target = cookieUrl?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
             delay(800)
             while (true) {
-                val ck = runCatching { android.webkit.CookieManager.getInstance().getCookie(target) }.getOrNull()
-                if (!ck.isNullOrBlank()) cookieCb(ck)
+                val cm = android.webkit.CookieManager.getInstance()
+                val curUrl = mainRef[0]?.url?.takeIf { it.startsWith("http") }
+                val ck1 = runCatching { cm.getCookie(target) }.getOrNull().orEmpty()
+                val ck2 = if (curUrl != null && curUrl != target) runCatching { cm.getCookie(curUrl) }.getOrNull().orEmpty() else ""
+                val merged = listOf(ck1, ck2).filter { it.isNotBlank() }.joinToString("; ")
+                if (merged.isNotBlank()) cookieCb(merged)
                 delay(1200)
             }
         }
