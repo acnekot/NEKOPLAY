@@ -24,7 +24,10 @@ jobs:
       - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: 21, cache: gradle }
       - name: 安卓端编译校验
-        run: chmod +x gradlew && ./gradlew :app:compileReleaseKotlin --no-daemon
+        # 依赖仓库偶发拉取失败（Maven 404 / 仓库被临时禁用）时等 20 秒重试一次，真正的编译错误两次都会失败
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:compileReleaseKotlin --no-daemon || { echo "::warning::第一次失败，20 秒后重试"; sleep 20; ./gradlew :app:compileReleaseKotlin --no-daemon; }
 
   ios-compile:
     runs-on: macos-latest
