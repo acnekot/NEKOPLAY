@@ -53,9 +53,24 @@ private val SEARCH_KINDS = listOf("track", "album", "artist", "playlist", "user"
 
 /** 一次搜索的结果：按类型放在不同的列表里 */
 private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), val albums: List<Album> = emptyList(), val artists: List<Artist> = emptyList(),
-                        val playlists: List<Playlist> = emptyList(), val users: List<UserBrief> = emptyList()) {
-    val empty get() = tracks.isEmpty() && albums.isEmpty() && artists.isEmpty() && playlists.isEmpty() && users.isEmpty()
+                        val playlists: List<Playlist> = emptyList(), val users: List<UserBrief> = emptyList(),
+                        val mine: List<Playlist> = emptyList(), val page: Int = 1, val more: Boolean = false) {
+    val empty get() = tracks.isEmpty() && albums.isEmpty() && artists.isEmpty() && playlists.isEmpty() && users.isEmpty() && mine.isEmpty()
+    val size get() = tracks.size + albums.size + artists.size + playlists.size + users.size
+    /** 翻页：追加下一页并按 id 去重；新一页没有新条目就当作到底了 */
+    @Suppress("UNCHECKED_CAST")
+    fun plus(v: List<Any>, kind: String, p: Int): SearchRes {
+        val n = when (kind) {
+            "album" -> SearchRes(type, albums = (albums + v as List<Album>).distinctBy { it.id }); "artist" -> SearchRes(type, artists = (artists + v as List<Artist>).distinctBy { it.id })
+            "playlist" -> SearchRes(type, playlists = (playlists + v as List<Playlist>).distinctBy { it.id }); "user" -> SearchRes(type, users = (users + v as List<UserBrief>).distinctBy { it.uid })
+            else -> SearchRes(type, tracks = (tracks + v as List<Track>).distinctBy { it.id })
+        }
+        return SearchRes(type, n.tracks, n.albums, n.artists, n.playlists, n.users, mine, p, n.size > size)
+    }
 }
+
+/** 本地已有的歌单（主账号 + 其它音源曲库）里按名字匹配 */
+private fun myPlaylists(k: String): List<Playlist> = k.trim().lowercase().let { q -> if (q.isEmpty()) emptyList() else Store.playlists.value.filter { it.name.lowercase().contains(q) }.take(20) }
 
 @Composable fun SearchPage() {
     val nav = LocalNav.current
@@ -89,14 +104,20 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                 val pid = SearchSource.plugin ?: throw NcmError("没有可用的音源")
                 val kind = SEARCH_KINDS[t]
                 if (kind !in (Plugins.get(pid)?.searchTypes ?: emptySet())) { nav.toast = "${Plugins.nameOf(pid)}不支持搜${SEARCH_TYPES[t]}"; res = SearchRes(t); busy = false; return@launch }
-                val v = Plugins.search(pid, k, kind)
-                @Suppress("UNCHECKED_CAST")
-                res = when (kind) {
-                    "album" -> SearchRes(t, albums = v as List<Album>); "artist" -> SearchRes(t, artists = v as List<Artist>)
-                    "playlist" -> SearchRes(t, playlists = v as List<Playlist>); "user" -> SearchRes(t, users = v as List<UserBrief>)
-                    else -> SearchRes(t, tracks = v as List<Track>)
-                }
+                @Suppress("UNCHECKED_CAST") val v = Plugins.search(pid, k, kind) as List<Any>
+                res = SearchRes(t, mine = if (kind == "playlist") myPlaylists(k) else emptyList()).plus(v, kind, 1)
             } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { nav.toast = "搜索失败：${e.message}"; res = SearchRes(t) }
+            busy = false
+        }
+    }
+    /** 滚到底时拉下一页 */
+    fun more() {
+        val r = res ?: return; if (busy || !r.more) return
+        val pid = SearchSource.plugin ?: return; val kind = SEARCH_KINDS[r.type]; val k = q.trim()
+        busy = true
+        job = scope.launch {
+            try { @Suppress("UNCHECKED_CAST") val v = Plugins.search(pid, k, kind, r.page + 1) as List<Any>; if (res === r) res = r.plus(v, kind, r.page + 1) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { if (res === r) res = SearchRes(r.type, r.tracks, r.albums, r.artists, r.playlists, r.users, r.mine, r.page, false) }
             busy = false
         }
     }
@@ -132,16 +153,19 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                     .then(if (on) Modifier.background(p.p) else Modifier).nbf(1.dp, if (on) p.p else p.l2).padding(horizontal = 12.dp, vertical = 5.dp)) { T(l, 12, if (on) Color.White else p.s, 700) }
             }
         }
-        if (searching) LazyRow(Modifier.fillMaxWidth().padding(top = 10.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyRow(Modifier.fillMaxWidth().padding(top = 10.dp), contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             // 只列出当前来源能搜的类型
             val kinds = SearchSource.plugin?.let { Plugins.get(it)?.searchTypes } ?: emptySet()
             items(SEARCH_TYPES.indices.filter { SEARCH_KINDS[it] in kinds }) { i ->
                 val l = SEARCH_TYPES[i]
                 val on = i == type
-                Box(Modifier.press { if (!on) run(q.trim(), i) }.background(if (on) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(tr(l), 13, if (on) p.tagFg else p.k, 700) }
+                Box(Modifier.press { if (!on) { if (searching && q.isNotBlank()) run(q.trim(), i) else type = i } }.background(if (on) p.k else Color.Transparent).nbf(1.dp, p.k).padding(horizontal = 14.dp, vertical = 6.dp)) { T(tr(l), 13, if (on) p.tagFg else p.k, 700) }
             }
         }
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = if (searching) 8.dp else 18.dp, bottom = 24.dp)) {
+        val ls = rememberLazyListState()
+        val atEnd by remember { derivedStateOf { val li = ls.layoutInfo; li.totalItemsCount > 0 && (li.visibleItemsInfo.lastOrNull()?.index ?: 0) >= li.totalItemsCount - 4 } }
+        LaunchedEffect(atEnd, res) { if (atEnd) more() }
+        LazyColumn(Modifier.weight(1f), state = ls, contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 24.dp)) {
             if (!searching && q.isNotBlank() && sugg.isNotEmpty()) {
                 items(sugg, key = { "s$it" }) { k ->
                     Row(Modifier.fillMaxWidth().height(48.dp).press { go(k) }.bottomLine(), verticalAlignment = Alignment.CenterVertically) {
@@ -166,7 +190,12 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                     }
                 }
             } else {
-                if (busy) item { T("SEARCHING", 12, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 18.dp)) }
+                if (r != null && r.mine.isNotEmpty()) {
+                    item { TagRow("MY PLAYLISTS", 12.dp) }
+                    items(r.mine, key = { "m" + it.id }, contentType = { "row" }) { pl -> ListRow({ Cover(pl.cover, 56.dp, pl.name) }, pl.name, "${two(pl.count)} 首 · ${Plugins.sourceName(pl.id) ?: "我的"}") { nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) } }
+                    if (r.playlists.isNotEmpty()) item { Box(Modifier.padding(top = 18.dp)) { TagRow("ONLINE", 12.dp) } }
+                }
+                if (busy && (r == null || r.empty)) item { T("SEARCHING", 12, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 18.dp)) }
                 if (r != null && r.empty) item { T("NO RESULTS", 12, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 18.dp)) }
                 if (r != null) {
                     itemsIndexed(r.tracks, key = { i, t -> "$i${t.id}" }, contentType = { _, _ -> "track" }) { i, t -> TrackRow(t, st.current?.id == t.id, onLong = { trackActions(nav, t) }) { Engine.playList(r.tracks, i) } }
@@ -174,6 +203,7 @@ private class SearchRes(val type: Int, val tracks: List<Track> = emptyList(), va
                     items(r.artists, key = { "r" + it.id }, contentType = { "row" }) { ar -> ListRow({ Cover(ar.pic, 56.dp, ar.name) }, ar.name, "${two(ar.songs)} 首 · ${two(ar.albums)} 张专辑") { nav.push(Page.Artist(ar.id, ar.name)) } }
                     items(r.playlists, key = { "p" + it.id }, contentType = { "row" }) { pl -> ListRow({ Cover(pl.cover, 56.dp, pl.name) }, pl.name, "${two(pl.count)} 首") { nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) } }
                     items(r.users, key = { "u" + it.uid }, contentType = { "row" }) { u -> ListRow({ Cover(u.avatar, 56.dp, u.name) }, u.name, u.signature.ifBlank { "${Plugins.sourceName(u.uid) ?: "在线"}用户" }) { nav.push(Page.User(u.uid, u.name)) } }
+                    if (busy && !r.empty) item { T("LOADING", 12, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 18.dp)) }
                 }
             }
         }
