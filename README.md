@@ -81,6 +81,22 @@ Windows 也可以在 [Microsoft Store](https://apps.microsoft.com/detail/9P9B864
 
 GitHub Releases 里的 Windows / macOS 安装包目前**没有代码签名**，系统可能提示「无法验证发布者」或拦截运行（例如 Windows 的智能应用控制）。请只从本仓库的 Releases 下载。
 
+### 校验安装包
+
+GitHub Release 里的安装包都附带 OpenPGP 签名，源码仓库的提交也用同一把钥匙签名。公钥：[`docs/nekoplay.asc`](docs/nekoplay.asc)（官网 <https://nekoplay.catsuki.cc/nekoplay.asc>），指纹：
+
+```text
+66F7 3825 E5F5 4230 3807  4ABE 836E EEEE EEEE EEEE
+```
+
+```bash
+gpg --import nekoplay.asc
+gpg --verify SHA256SUMS.asc SHA256SUMS            # 校验清单本身的签名
+sha256sum -c SHA256SUMS --ignore-missing          # 核对下载的安装包（macOS 用 shasum -a 256 -c）
+```
+
+App 里的 设置 → 关于 也能看到这把公钥的指纹。
+
 ## 目录
 
 ```

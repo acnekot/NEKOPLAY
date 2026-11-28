@@ -238,6 +238,30 @@ jobs:
       - uses: actions/download-artifact@v4
         # 只收 NEKOPLAY-* 安装包；商店版 MSIX（store-msix）不进 GitHub Release，单独手动上传到 Partner Center
         with: { path: dist, pattern: "NEKOPLAY-*", merge-multiple: true }
+      - name: OpenPGP 签名（SHA256SUMS + 每个安装包的 .asc 分离签名；缺钥匙时拒绝发布未签名的包）
+        env:
+          GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASS: ${{ secrets.GPG_PASSPHRASE }}
+          FPR: 66F73825E5F5423038074ABE836EEEEEEEEEEEEE
+        run: |
+          if [ -z "$GPG_KEY" ]; then echo "::error::缺少 GPG_PRIVATE_KEY，拒绝发布未签名的安装包"; exit 1; fi
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"; mkdir -m 700 "$GNUPGHOME"
+          printf '%s\n' "$GPG_KEY" | gpg --batch --quiet --import
+          gpg --batch --list-secret-keys "$FPR" > /dev/null || { echo "::error::导入的钥匙不是 $FPR"; exit 1; }
+          cd dist
+          find . -maxdepth 1 -type f ! -name '*.asc' ! -name SHA256SUMS -printf '%f\n' | sort > ../files.txt
+          xargs -a ../files.txt sha256sum > SHA256SUMS
+          cat SHA256SUMS
+          for f in $(cat ../files.txt) SHA256SUMS; do
+            gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASS" --local-user "$FPR" --armor --detach-sign "$f"
+          done
+          gpg --batch --verify SHA256SUMS.asc SHA256SUMS
+          rm -rf "$GNUPGHOME"
+          {
+            echo; echo "---"; echo
+            echo "**校验**：安装包均由 OpenPGP 钥匙 \`${FPR}\` 签名（公钥：https://nekoplay.catsuki.cc/nekoplay.asc）。"
+            echo "下载 \`SHA256SUMS\` 与 \`SHA256SUMS.asc\` 后执行 \`gpg --verify SHA256SUMS.asc SHA256SUMS\`，再用 \`sha256sum -c SHA256SUMS --ignore-missing\` 核对安装包。"
+          } >> ../notes.md
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.v }}

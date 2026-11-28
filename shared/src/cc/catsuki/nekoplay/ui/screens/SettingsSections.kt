@@ -192,4 +192,20 @@ internal fun LazyListScope.settingsAboutSection(nav: Nav, p: Pal, scope: Corouti
         NavRow("隐私政策", "本应用如何处理你的数据", null) { runCatching { uri.openUri(Edition.PRIVACY_URL) }.onFailure { nav.toast = "打不开浏览器" } }
     }
     item { NavRow("源代码", "github.com/acnekot/NEKOPLAY", null, clickable = false) {} }
+    item {
+        // 发布签名公钥：git 提交与 Release 安装包都用它签名，指纹可和 gpg --fingerprint 逐段比对
+        val uri = androidx.compose.ui.platform.LocalUriHandler.current
+        @Suppress("DEPRECATION") val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+        Column(Modifier.fillMaxWidth().padding(vertical = 10.dp).bottomLine().padding(bottom = 12.dp)) {
+            T(tr("签名公钥（OpenPGP）"), 16)
+            T(tr("git 提交和 GitHub Release 安装包都用这把钥匙签名，可以用它校验下载的安装包是否被篡改"), 13, p.s, lines = 3, lh = 1.4f)
+            T(Signing.pretty, 13, p.k, 600, mono = true, lines = 2, lh = 1.5f, modifier = Modifier.padding(top = 8.dp))
+            T("ID ${Signing.longId}", 11, p.s, mono = true)
+            Row(Modifier.padding(top = 8.dp)) {
+                LinkBtn("复制指纹", 13) { clip.setText(androidx.compose.ui.text.AnnotatedString(Signing.FINGERPRINT)); nav.toast = "已复制公钥指纹" }
+                Spacer(Modifier.width(16.dp))
+                LinkBtn("查看公钥", 13) { runCatching { uri.openUri(Signing.PUBKEY_URL) }.onFailure { nav.toast = "打不开浏览器" } }
+            }
+        }
+    }
 }
