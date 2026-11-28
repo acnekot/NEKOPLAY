@@ -13,14 +13,18 @@ import org.json.JSONObject
 
 /**
  * 插件订阅：一个订阅地址指向 index.json，里面列出可安装的插件（地址可以写相对 index.json 的路径）。
- * 格式：{"name": "订阅名", "plugins": [{"id", "name", "version", "author"?, "desc"?, "url"}]}
+ * 格式：{"name": "订阅名", "plugins": [{"id", "name", "version", "author"?, "desc"?, "url", "details"?, "screenshots"?: [相对或完整地址], "minHost"?, "permissions"?}]}
  */
 object PluginSubs {
     /** 官方订阅：独立插件仓库里的 index.json（raw 打不开时自动换 jsDelivr） */
     const val OFFICIAL = "https://raw.githubusercontent.com/acnekot/NEKOPLAY_PLUGINS/main/index.json"
     private const val LEGACY_OFFICIAL = "https://raw.githubusercontent.com/acnekot/NEKOPLAY/main/plugins/index.json"
 
-    class Item(val id: String, val name: String, val version: String, val author: String, val desc: String, val url: String, val from: String, val type: String = "source") {
+    class Item(
+        val id: String, val name: String, val version: String, val author: String, val desc: String, val url: String, val from: String, val type: String = "source",
+        /** 详情页用：长介绍、展示图（已换成完整地址）、最低宿主版本、权限 */
+        val details: String = "", val screenshots: List<String> = emptyList(), val minHost: String = "", val permissions: String = "",
+    ) {
         val isFeature: Boolean get() = !type.equals("source", ignoreCase = true)
     }
     class Sub(val url: String, val name: String, val items: List<Item>, val error: String?)
@@ -50,12 +54,15 @@ object PluginSubs {
         val (o, r, b, p) = m.destructured
         return listOf(url, "https://cdn.jsdelivr.net/gh/$o/$r@$b/$p")
     }
+    /** 订阅地址 → 实际拉取成功的镜像地址（展示图跟着用能打开的那个） */
+    private val okMirror = HashMap<String, String>()
     private suspend fun fetch(url: String): String = withContext(Dispatchers.IO) {
         var last: Exception? = null
         for (u in mirrors(url)) {
             try {
                 return@withContext SourceApi.http.newCall(Request.Builder().url(u).header("Cache-Control", "no-cache").build()).execute().use { r ->
                     if (!r.isSuccessful) throw SourceError("HTTP ${r.code}")
+                    synchronized(okMirror) { okMirror[url] = u }
                     r.body?.string() ?: ""
                 }
             } catch (e: Exception) { last = e }
@@ -83,7 +90,13 @@ object PluginSubs {
                             val items = Plugins.arr(o.optJSONArray("plugins")).mapNotNull { p ->
                                 val id = p.optString("id"); val url = p.optString("url")
                                 if (id.isEmpty() || url.isEmpty()) null
-                                else Item(id, p.optString("name").ifEmpty { id }, p.optString("version", "0"), p.optString("author"), p.optString("desc"), resolve(u, url), name, p.optString("type", "source"))
+                                else {
+                                    val imgBase = synchronized(okMirror) { okMirror[u] } ?: u
+                                    val sa = p.optJSONArray("screenshots")
+                                    val shots = (0 until (sa?.length() ?: 0)).mapNotNull { sa?.optString(it)?.takeIf { x -> x.isNotBlank() } }.map { resolve(imgBase, it) }
+                                    Item(id, p.optString("name").ifEmpty { id }, p.optString("version", "0"), p.optString("author"), p.optString("desc"), resolve(u, url), name, p.optString("type", "source"),
+                                        p.optString("details"), shots, p.optString("minHost"), p.optString("permissions"))
+                                }
                             }
                             Sub(u, name, items, null)
                         } catch (e: Exception) { Sub(u, u, emptyList(), e.message ?: e.toString()) }
@@ -100,6 +113,15 @@ object PluginSubs {
         for (i in 0 until maxOf(x.size, y.size)) { val d = x.getOrElse(i) { 0 } - y.getOrElse(i) { 0 }; if (d != 0) return d > 0 }
         return false
     }
+    /** 订阅里这个插件的条目（详情页用） */
+    fun itemOf(id: String): Item? = subs.values.flatMap { it.items }.firstOrNull { it.id == id }
+    /** 已安装插件头注释里的展示图：相对地址按安装来源的脚本地址补全 */
+    fun shotsOf(s: JsSource): List<String> {
+        val src = prefs.getString("src_${s.id}", null)
+        return s.meta["screenshots"].orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            .mapNotNull { if (it.startsWith("http")) it else src?.let { b -> resolve(b, it) } }
+    }
+
     /** 订阅里比已装版本新的插件 */
     val updates: List<Item> get() = subs.values.flatMap { it.items }.filter { i -> Plugins.get(i.id)?.let { newer(i.version, it.version) } == true }.distinctBy { it.id }
 
@@ -109,6 +131,7 @@ object PluginSubs {
         val id = Regex("""^\s*//\s*@id\s+([A-Za-z0-9_\-]+)\s*$""", RegexOption.MULTILINE).find(text.take(4000))?.groupValues?.get(1)
         if (id != i.id) throw SourceError("下载到的脚本 id 是「${id ?: "无"}」，和订阅里写的「${i.id}」不一致")
         val wasOff = Plugins.get(id) != null && !Plugins.on(id)
+        prefs.edit().putString("src_$id", i.url).apply()
         val s = Plugins.import(text)
         if (wasOff) Plugins.set(id, false)
         return s

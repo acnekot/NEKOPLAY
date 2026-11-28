@@ -135,6 +135,8 @@ import cc.catsuki.nekoplay.trKnown
                     Box(Modifier.weight(1f)) {
                         SwitchRow(s.name, desc, on) { Plugins.set(s.id, it) }
                     }
+                    Spacer(Modifier.width(8.dp))
+                    LinkBtn("详情", 12) { nav.push(Page.PluginDetail(s.id)) }
                     if (on && s.has("render")) {
                         Spacer(Modifier.width(8.dp))
                         LinkBtn("设置", 12) { nav.push(Page.PluginPage(s.id)) }

@@ -46,6 +46,10 @@ class JsSource(val file: File) {
     /** 脚本开头注释里的信息：// @id xx  // @name xx  // @type source|feature|page|motion  // @version 1.0.0  // @minHost 0.6.8  // @permissions ... */
     val meta: Map<String, String> = Regex("""^\s*//\s*@(\w+)\s+(.+)$""", RegexOption.MULTILINE).findAll(file.readText().take(4000))
         .associate { it.groupValues[1] to it.groupValues[2].trim() }
+    /** 详情页长介绍：头注释里可以写多行 // @details …，按顺序拼成段落 */
+    val details: String by lazy {
+        Regex("""^\s*//\s*@details\s+(.+)$""", RegexOption.MULTILINE).findAll(file.readText().take(8000)).joinToString("\n") { it.groupValues[1].trim() }
+    }
     val id: String get() = meta["id"] ?: file.nameWithoutExtension
     val name: String get() = meta["name"] ?: id
     val version: String get() = meta["version"] ?: "0"

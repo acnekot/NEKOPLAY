@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
 /** 能力名 → 给人看的说明 */
-private val CAP_NAMES = linkedMapOf(
+internal val CAP_NAMES = linkedMapOf(
     "search" to "搜索", "stream" to "播放", "lyric" to "歌词", "playlist" to "歌单", "album" to "专辑", "artist" to "歌手",
     "toplists" to "排行榜", "myPlaylists" to "我的歌单", "like" to "收藏", "loginQr" to "扫码登录", "loginWeb" to "网页登录", "setCookie" to "Cookie 登录",
     "daily" to "每日推荐", "fm" to "私人 FM", "comments" to "评论", "recMvs" to "MV", "hotRadios" to "电台", "cloud" to "云盘",
@@ -88,7 +88,7 @@ internal fun confirmPluginNotice(nav: Nav, proceed: () -> Unit) {
             val on = Plugins.on(s.id)
             Column(Modifier.fillMaxWidth().cascadeEnter().bottomLine().padding(vertical = 14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
+                    Column(Modifier.weight(1f).press { nav.push(Page.PluginDetail(s.id)) }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             val badge = tr(when (s.kind) { PluginKind.MOTION -> "动效"; PluginKind.PAGE -> "页面"; PluginKind.FEATURE -> "功能"; PluginKind.SOURCE -> "音源" })
                             Box(Modifier.background(if (s.isFeature) p.k else p.p).padding(horizontal = 5.dp, vertical = 1.dp)) {
@@ -98,7 +98,8 @@ internal fun confirmPluginNotice(nav: Nav, proceed: () -> Unit) {
                             Spacer(Modifier.width(8.dp)); T("v" + s.version, 11, p.s, mono = true)
                         }
                         val sub = listOfNotNull(s.meta["author"]?.let { "${tr("作者")} $it" }, s.meta["desc"]).joinToString(" · ")
-                        if (sub.isNotEmpty()) T(sub, 12, p.s, lines = 3, lh = 1.4f)
+                        if (sub.isNotEmpty()) T(sub, 12, p.s, lines = 2, lh = 1.4f)
+                        T(tr("详情 ›"), 12, p.p, 700, modifier = Modifier.padding(top = 2.dp))
                     }
                     NSwitch(on) { v -> Plugins.set(s.id, v) }
                 }

@@ -84,6 +84,7 @@ sealed interface Page {
     data class LyricCard(val t: Track) : Page
     data object CoverFlow : Page
     data class PluginPage(val id: String) : Page
+    data class PluginDetail(val id: String) : Page
 }
 
 /** 全局界面状态 */

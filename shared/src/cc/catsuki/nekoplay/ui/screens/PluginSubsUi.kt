@@ -84,7 +84,7 @@ internal fun androidx.compose.foundation.lazy.LazyListScope.pluginSubsSection(na
                         val have = list.firstOrNull { it.id == i.id }
                         val upd = have != null && PluginSubs.newer(i.version, have.version)
                         Row(Modifier.fillMaxWidth().bottomLine().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
+                            Column(Modifier.weight(1f).press { nav.push(Page.PluginDetail(i.id)) }) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     val badge = tr(when (i.type.lowercase()) { "motion" -> "动效"; "page" -> "页面"; "feature" -> "功能"; else -> "音源" })
                                     Box(Modifier.background(if (i.isFeature) p.k else p.p).padding(horizontal = 5.dp, vertical = 1.dp)) {
@@ -94,6 +94,7 @@ internal fun androidx.compose.foundation.lazy.LazyListScope.pluginSubsSection(na
                                 }
                                 val line = listOfNotNull(i.author.takeIf { it.isNotEmpty() }?.let { "${tr("作者")} $it" }, i.desc.takeIf { it.isNotEmpty() }).joinToString(" · ")
                                 if (line.isNotEmpty()) T(line, 12, p.s, lines = 2, lh = 1.4f)
+                                T(tr("详情 ›"), 12, p.p, 700, modifier = Modifier.padding(top = 2.dp))
                             }
                             Spacer(Modifier.width(10.dp))
                             when {
