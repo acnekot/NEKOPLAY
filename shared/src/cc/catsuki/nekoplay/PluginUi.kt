@@ -4,14 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
 /** 能力名 → 给人看的说明 */
@@ -36,110 +32,102 @@ internal fun confirmPluginNotice(nav: Nav, proceed: () -> Unit) {
     )
 }
 
-/** 设置 → 插件：分为「音源插件」与「功能插件」两类管理 */
-@OptIn(ExperimentalLayoutApi::class)
+/** 插件中心当前标签：放在页面外面，进详情页再返回时停留在原来的标签 */
+private var pluginTab by mutableIntStateOf(0)
+
+internal fun kindLabel(kind: String): String = when (kind.lowercase()) { "motion" -> "动效插件"; "page" -> "页面插件"; "feature" -> "功能插件"; else -> "音源插件" }
+internal fun kindIcon(kind: String): String = when (kind.lowercase()) { "motion" -> NIcons.shift; "page" -> NIcons.image; "feature" -> NIcons.gear; else -> NIcons.disc }
+
+/** 设置 → 插件：已安装 / 发现 / 订阅与导入 三个标签；单个插件的能力、权限、登录、删除都放在详情页 */
 @Composable fun PluginsPage() {
     val nav = LocalNav.current
     val p = c
     val scope = rememberCoroutineScope()
     val list by Plugins.list.collectAsState()
-    var tab by remember { mutableIntStateOf(0) } // 0 全部 / 1 音源插件 / 2 功能插件
-    var url by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    val shown = remember(list, tab) { when (tab) { 1 -> list.filter { it.isSource }; 2 -> list.filter { it.isFeature }; else -> list } }
-    fun done(r: Result<JsSource>) { busy = false; r.onSuccess { nav.toast = "已导入${it.kind.label}「${it.name}」${it.version}"; Store.refreshAll() }.onFailure { nav.toast = "导入失败：${it.message}" } }
-    val picker = Plat.impl.filePicker { bytes -> busy = true; scope.launch { done(runCatching { Plugins.import(bytes.decodeToString()) }) } }
-    LazyColumn(Modifier.widthIn(max = 860.dp).fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 28.dp)) {
+    LaunchedEffect(Unit) { if (PluginSubs.subs.isEmpty()) runCatching { PluginSubs.refresh() } }
+    val avail = remember(PluginSubs.subs, list) { PluginSubs.subs.values.flatMap { it.items }.distinctBy { it.id }.filter { i -> list.none { it.id == i.id } } }
+    val ups = PluginSubs.updates
+    var updating by remember { mutableStateOf(false) }
+    LazyColumn(Modifier.widthIn(max = 860.dp).fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 32.dp)) {
         item {
             Column {
                 Tag("PLUGINS"); Spacer(Modifier.height(4.dp))
                 T(tr("插件"), Fs.HERO, w = 800, lh = 1.3f)
-                T(tr("插件分为「音源插件」（提供曲库、搜索、播放与歌词）和「功能插件」（监听播放状态、歌词后处理与扩展动作），本体不内置任何在线音源"), 13, p.s, lines = 4, lh = 1.5f)
-                Spacer(Modifier.height(12.dp))
-                ChipRow(listOf("${tr("全部")} (${list.size})", "${tr("音源插件")} (${list.count { it.isSource }})", "${tr("功能插件")} (${list.count { it.isFeature }})"), tab) { tab = it }
-                Spacer(Modifier.height(14.dp))
-                ActionRow {
-                    if (picker != null) PrimaryBar(if (busy) "导入中…" else "从文件导入", NIcons.plus, Modifier.weight(1f)) { if (!busy) confirmPluginNotice(nav) { picker() } }
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f).height(44.dp).nbf(1.dp, p.k).padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
-                        if (url.isEmpty()) T(tr("插件地址 https://…/xxx.js"), 13, p.s, mono = true)
-                        BasicTextField(url, { url = it }, Modifier.fillMaxWidth(), singleLine = true, textStyle = TextStyle(color = p.k, fontSize = 13.sp, fontFamily = Mono), cursorBrush = SolidColor(p.p))
+                T(tr("音源插件提供曲库、搜索和播放；功能插件给播放器加新本事。本体不内置任何在线音源。"), 14, p.s, lines = 3, lh = 1.5f)
+                if (ups.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(top = 16.dp).background(p.p.copy(alpha = .08f)).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        T(trKnown("${ups.size} 个插件有新版本"), 15, p.p, 700)
+                        T(ups.joinToString("、") { it.name }, 12, p.s, lines = 2)
                     }
-                    Spacer(Modifier.width(8.dp))
-                    OutlineBtn("从网址导入", pad = 14.dp) {
-                        if (busy || !url.trim().startsWith("http")) return@OutlineBtn
-                        confirmPluginNotice(nav) { busy = true; scope.launch { done(runCatching { Plugins.importUrl(url) }.onSuccess { url = "" }) } }
+                    OutlineBtn(if (updating) "更新中…" else "全部更新", height = 40.dp, size = 13, pad = 14.dp) {
+                        if (!updating) { updating = true; scope.launch {
+                            val r = ups.map { runCatching { PluginSubs.install(it) } }
+                            nav.toast = "已更新 ${r.count { it.isSuccess }} 个" + r.firstOrNull { it.isFailure }?.exceptionOrNull()?.let { "，失败：${it.message}" }.orEmpty()
+                            Store.refreshAll(); updating = false
+                        } }
                     }
                 }
-                Spacer(Modifier.height(18.dp)); Rule()
-            }
-        }
-        pluginSubsSection(nav, tab)
-        item {
-            Column {
-                val head = when (tab) { 1 -> "SOURCE PLUGINS · ${tr("音源插件")}"; 2 -> "FEATURE PLUGINS · ${tr("功能插件")}"; else -> "INSTALLED · ${tr("已安装")}" }
-                Column(Modifier.padding(top = 26.dp, bottom = 4.dp)) { TagRow(head, 12.dp) { T(trKnown("${two(shown.size)} 个"), 13, p.s, mono = true) } }
-                if (shown.isEmpty()) T(tr(if (tab == 2) "还没有功能插件。可在脚本开头声明 // @type feature 导入扩展功能插件" else "还没有插件。没有音源插件时只能播放本地音乐和 WebDAV 里的歌"), 13, p.s, lines = 3, modifier = Modifier.padding(vertical = 14.dp))
-            }
-        }
-        items(shown, key = { it.id }) { s ->
-            val on = Plugins.on(s.id)
-            Column(Modifier.fillMaxWidth().cascadeEnter().bottomLine().padding(vertical = 14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f).press { nav.push(Page.PluginDetail(s.id)) }) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val badge = tr(when (s.kind) { PluginKind.MOTION -> "动效"; PluginKind.PAGE -> "页面"; PluginKind.FEATURE -> "功能"; PluginKind.SOURCE -> "音源" })
-                            Box(Modifier.background(if (s.isFeature) p.k else p.p).padding(horizontal = 5.dp, vertical = 1.dp)) {
-                                T(badge, 9, if (s.isFeature) p.tagFg else androidx.compose.ui.graphics.Color.White, 800)
-                            }
-                            Spacer(Modifier.width(7.dp)); T(s.name, 16, if (on) p.k else p.s, 800, modifier = Modifier.weight(1f, fill = false))
-                            Spacer(Modifier.width(8.dp)); T("v" + s.version, 11, p.s, mono = true)
-                        }
-                        val sub = listOfNotNull(s.meta["author"]?.let { "${tr("作者")} $it" }, s.meta["desc"]).joinToString(" · ")
-                        if (sub.isNotEmpty()) T(sub, 12, p.s, lines = 2, lh = 1.4f)
-                        T(tr("详情 ›"), 12, p.p, 700, modifier = Modifier.padding(top = 2.dp))
-                    }
-                    NSwitch(on) { v -> Plugins.set(s.id, v) }
-                }
+                Spacer(Modifier.height(18.dp))
+                ChipRow(listOf("${tr("已安装")} ${list.size}", "${tr("发现")} ${avail.size}", tr("订阅与导入")), pluginTab) { pluginTab = it }
                 Spacer(Modifier.height(6.dp))
-                val caps = CAP_NAMES.filterKeys { s.has(it) }.values.map { tr(it) }
-                when {
-                    s.error != null -> T("${tr("出错")}：${s.error}", 12, p.bad, lines = 3)
-                    caps.isEmpty() -> T(tr("还没加载（用到时自动加载）"), 11, p.s, mono = true)
-                    else -> T(caps.joinToString(" · "), 11, p.s, mono = true, lines = 2)
-                }
-                if (s.permissions.isNotEmpty()) {
-                    val permText = "${tr("权限")}：" + s.permissions.joinToString(" · ") + if (!s.canNetwork) tr("（仅本地，无联网）") else ""
-                    T(permText, 10, p.s, mono = true, lines = 2, modifier = Modifier.padding(top = 3.dp))
-                }
-                FlowRow(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    val acc by PluginStore.accounts.collectAsState()
-                    if (on && s.canLogin) {
-                        if (acc[s.id] == null) LinkBtn("登录", 13) { nav.push(Page.PluginLogin(s.id)) }
-                        else LinkBtn("退出 ${acc[s.id]}", 13) { confirmLogout(nav, s.name) { scope.launch { runCatching { s.call("logout") }; PluginStore.refresh() } } }
-                    }
-                    if (on && s.has("render")) LinkBtn("打开页面", 13) { nav.push(Page.PluginPage(s.id)) }
-                    if (on && s.isFeature && s.has("action")) {
-                        LinkBtn("执行", 13) { scope.launch { runCatching { Plugins.runFeatureAction(s.id, Engine.state.value.current) }.onSuccess { r ->
-                            val op = r?.open
-                            if (op == "coverflow") nav.push(Page.CoverFlow) else if (op?.startsWith("plugin:") == true) nav.push(Page.PluginPage(op.removePrefix("plugin:")))
-                            r?.message?.let { nav.toast = it }
-                        }.onFailure { nav.toast = "执行失败：${it.message}" } } }
-                    }
-                    LinkBtn("重新加载", 13) { scope.launch { s.close().join(); if (s.start()) { Plugins.bump(); PluginStore.refresh().join(); Store.refreshAll(); nav.toast = "已重新加载" } else nav.toast = "加载失败：${s.error}" } }
-                    LinkBtn("删除", 13, p.bad) {
-                        nav.sheet = SheetSpec("删除插件「${s.name}」？", "删除后它提供的搜索、歌单等功能都会消失；以后可以重新导入", listOf(SheetItem("删除", danger = true) { Plugins.delete(s.id); nav.toast = "已删除" }))
-                    }
-                }
             }
         }
-        // 没加载过的插件进页面时顺便加载，好显示它的能力
+        when (pluginTab) {
+            0 -> installedSection(nav, list)
+            1 -> discoverSection(nav, avail)
+            else -> subsSection(nav)
+        }
+        // 没加载过的插件进页面时顺便加载，好显示状态
         item { LaunchedEffect(list) { list.filter { Plugins.on(it.id) && it.caps.isEmpty() && it.error == null }.forEach { it.start() } } }
     }
 }
 
+/** 已安装：按类型分组，每行只放名字、一句话简介、状态和开关 */
+private fun androidx.compose.foundation.lazy.LazyListScope.installedSection(nav: Nav, list: List<JsSource>) {
+    if (list.isEmpty()) item {
+        Column(Modifier.padding(vertical = 28.dp)) {
+            T(tr("还没有安装插件"), 16, w = 700)
+            T(tr("没有音源插件时只能播放本地音乐和 WebDAV 里的歌。到「发现」里一键安装。"), 13, c.s, lines = 3, lh = 1.5f, modifier = Modifier.padding(top = 4.dp))
+            Spacer(Modifier.height(14.dp)); OutlineBtn("去发现", height = 42.dp, size = 14, pad = 16.dp) { pluginTab = 1 }
+        }
+    }
+    listOf("source", "feature", "page", "motion").forEach { k ->
+        val g = list.filter { it.kind.name.lowercase() == k }
+        if (g.isEmpty()) return@forEach
+        item(key = "h_$k") { Column(Modifier.padding(top = 22.dp, bottom = 2.dp)) { TagRow(tr(kindLabel(k)), 12.dp) { T(two(g.size), 13, c.s, mono = true) } } }
+        items(g, key = { it.id }) { s -> InstalledRow(nav, s) }
+    }
+}
+
+@Composable private fun InstalledRow(nav: Nav, s: JsSource) {
+    val p = c
+    val on = Plugins.on(s.id)
+    val acc by PluginStore.accounts.collectAsState()
+    val upd = PluginSubs.itemOf(s.id)?.takeIf { PluginSubs.newer(it.version, s.version) }
+    val (status, tone) = when {
+        s.error != null -> tr("出错，点开查看") to p.bad
+        !on -> tr("已停用") to p.s
+        upd != null -> trKnown("有新版本 v${upd.version}") to p.p
+        s.canLogin && acc[s.id] == null -> tr("已启用 · 未登录") to p.s
+        s.canLogin -> trKnown("已登录 ${acc[s.id]}") to p.k
+        else -> tr("已启用") to p.k
+    }
+    Row(Modifier.fillMaxWidth().cascadeEnter().bottomLine().press { nav.push(Page.PluginDetail(s.id)) }.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconCover(kindIcon(s.kind.name), 48.dp, filled = on, iconSize = 20.dp)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                T(s.name, 16, if (on) p.k else p.s, 700, modifier = Modifier.weight(1f, fill = false)); Spacer(Modifier.width(8.dp)); T("v" + s.version, 11, p.s, mono = true)
+            }
+            s.meta["desc"]?.let { T(it, 13, p.s, lines = 2, lh = 1.45f, modifier = Modifier.padding(top = 2.dp)) }
+            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(6.dp).background(tone)); Spacer(Modifier.width(6.dp)); T(status, 12, tone, 600, lines = 1)
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        NSwitch(on) { v -> Plugins.set(s.id, v) }
+    }
+}
 /** 曲库里的插件区：登录了的显示歌单，没登录的显示登录入口 */
 fun androidx.compose.foundation.lazy.LazyListScope.pluginLibrary(nav: Nav, except: String? = null) {
     item {

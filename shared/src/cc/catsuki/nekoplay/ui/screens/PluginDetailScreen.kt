@@ -94,7 +94,21 @@ private val PERM_NAMES = linkedMapOf(
                 if (tooOld) T(tr("这个插件需要 NEKOPLAY $minHost 或更新版本"), 12, p.bad, modifier = Modifier.padding(top = 6.dp))
                 if (inst != null && on) FlowRow(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (inst.has("render")) LinkBtn("打开设置页", 14, p.p) { nav.push(Page.PluginPage(id)) }
-                    if (inst.canLogin) LinkBtn("登录", 14) { nav.push(Page.PluginLogin(id)) }
+                    if (inst.canLogin) {
+                        val acc by PluginStore.accounts.collectAsState()
+                        val who = acc[id]
+                        if (who == null) LinkBtn("登录", 14) { nav.push(Page.PluginLogin(id)) }
+                        else LinkBtn("退出登录（$who）", 14) { confirmLogout(nav, name) { scope.launch { runCatching { inst.call("logout") }; PluginStore.refresh() } } }
+                    }
+                    if (inst.has("action")) LinkBtn("执行", 14) {
+                        scope.launch {
+                            runCatching { Plugins.runFeatureAction(id, Engine.state.value.current) }.onSuccess { r ->
+                                val op = r?.open
+                                if (op == "coverflow") nav.push(Page.CoverFlow) else if (op?.startsWith("plugin:") == true) nav.push(Page.PluginPage(op.removePrefix("plugin:")))
+                                r?.message?.let { nav.toast = it }
+                            }.onFailure { nav.toast = "执行失败：${it.message}" }
+                        }
+                    }
                 }
                 inst?.error?.let { T("${tr("出错")}：$it", 12, p.bad, lines = 4, modifier = Modifier.padding(top = 10.dp)) }
             }
