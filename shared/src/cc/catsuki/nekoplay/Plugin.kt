@@ -281,7 +281,7 @@ class JsSource(val file: File) {
         @Volatile var timeoutOverride: ((String) -> Long)? = null
         fun defaultTimeout(fn: String): Long = when {
             fn.startsWith("login") -> 180_000L
-            fn == "myPlaylists" || fn == "playlist" || fn == "cloud" -> 120_000L
+            fn == "myPlaylists" || fn == "playlist" || fn == "cloud" || fn == "transformLyric" -> 120_000L
             else -> 60_000L
         }
         /** 按上限读响应体；声明的长度或实际读到的超过上限就报错，不再继续读 */

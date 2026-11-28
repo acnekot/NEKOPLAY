@@ -289,13 +289,18 @@ object Plugins {
         streamLock.withLock { streamCache.entries.removeAll { now - it.value.at >= STREAM_TTL }; streamCache[key] = CachedStream(st, now) }
         return st
     }
-    suspend fun lyric(id: String): LyricData {
+    /** 音源给的原始歌词（不经过功能插件后处理） */
+    suspend fun lyricRaw(id: String): LyricData {
         val o = callFor(id, "lyric", raw(id)) as? JSONObject ?: throw SourceError("暂无歌词")
         val l = LyricData(o.optString("lrc"), o.optString("tr").takeIf { it.isNotBlank() && it != "null" }, o.optString("yrc").takeIf { it.isNotBlank() && it != "null" })
         if (l.lrc.isBlank() && l.yrc == null) throw SourceError("暂无歌词")
-        val cur = Engine.state.value.current?.takeIf { it.id == id } ?: Track(id, "", "", "", 0, null)
-        return transformLyric(cur, l)
+        return l
     }
+    suspend fun lyric(id: String): LyricData = transformLyric(trackFor(id), lyricRaw(id))
+    /** 歌词后处理用的曲目信息：优先取队列里的（有歌名歌手，翻译插件可以拿来做上下文） */
+    fun trackFor(id: String): Track = Engine.state.value.let { st -> st.current?.takeIf { it.id == id } ?: st.queue.firstOrNull { it.id == id } }
+        ?: Track(id, "", "", "", 0, null)
+    fun hasLyricTransform(): Boolean = enabledFeatures.any { it.caps.isEmpty() || it.has("transformLyric") }
     suspend fun playlistTracks(id: String): List<Track> = tracksOf(pidOf(id), of(id).call("playlist", raw(id)))
     suspend fun album(id: String): Pair<Album, List<Track>> {
         val pid = pidOf(id); val r = of(id).call("album", raw(id)) as? JSONObject ?: JSONObject()

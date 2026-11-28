@@ -47,6 +47,7 @@ import org.json.JSONObject
         if (r == null) return
         Plugins.bump()
         r.optString("toast").takeIf { it.isNotEmpty() }?.let { nav.toast = it }
+        if (r.optBoolean("reloadLyrics")) LyricCache.clear()
         when (val op = r.optString("open")) {
             "coverflow" -> nav.push(Page.CoverFlow)
             "settings" -> nav.push(Page.Settings)
@@ -133,7 +134,15 @@ import org.json.JSONObject
         )
         "button" -> {
             val primary = node.optBoolean("primary", false)
-            Box(Modifier.press { act?.let { dispatch(it, payload) } }
+            // input：点按钮先弹输入框（如 API Key、模型名），确认后把输入值放进 payload.value 再派发
+            val nav = LocalNav.current
+            val inp = node.optJSONObject("input")
+            Box(Modifier.press {
+                act?.let { a ->
+                    if (inp == null) dispatch(a, payload)
+                    else nav.input = InputSpec(inp.optString("title", "输入"), inp.optString("hint")) { v -> dispatch(a, JSONObject((payload ?: JSONObject()).toString()).put("value", v)) }
+                }
+            }
                 .then(if (primary) Modifier.background(p.p) else Modifier.nbf(1.dp, p.k))
                 .padding(horizontal = 14.dp, vertical = 8.dp)) {
                 T(node.optString("text", "按钮"), 12, if (primary) Color.White else p.k, 700, lines = 2, lh = 1.3f)

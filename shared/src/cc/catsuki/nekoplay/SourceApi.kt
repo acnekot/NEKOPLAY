@@ -85,6 +85,7 @@ object SourceApi {
     suspend fun stream(id: String, quality: Int): Stream = Plugins.stream(id, quality)
     suspend fun lyric(id: String): Pair<String, String?> = Plugins.lyric(id).let { it.lrc to it.tr }
     suspend fun lyricFull(id: String): LyricData = Plugins.lyric(id)
+    suspend fun lyricRaw(id: String): LyricData = Plugins.lyricRaw(id)
     suspend fun like(id: String, like: Boolean) = Plugins.like(id, like)
 
     // ---------- 账号 ----------

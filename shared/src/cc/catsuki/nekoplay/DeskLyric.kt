@@ -130,8 +130,7 @@ fun LazyListScope.deskLyricSettings(p: Pal) {
     val t = st.current
     val offset = t?.let { LyricOffset.of(it.id) } ?: 0L
     DisposableEffect(Unit) { Engine.fastPos++; onDispose { Engine.fastPos-- } }
-    var lines by remember(t?.id) { mutableStateOf(t?.let { LyricCache.peek(it.id) }) }
-    LaunchedEffect(t?.id) { if (t != null && lines == null) lines = runCatching { LyricCache.get(t.id) }.getOrDefault(emptyList()) }
+    val lines by rememberLyricLines(t?.id)
     // 播放中按帧推算进度（漂移校正），暂停时监听 seek；now 仅在 derivedStateOf / drawWithContent 读取，扫光期间 0 重组
     val now = remember(t?.id) { mutableLongStateOf(Engine.position.value + offset) }
     LaunchedEffect(t?.id, st.playing, offset) {

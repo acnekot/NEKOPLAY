@@ -21,8 +21,7 @@ import kotlinx.coroutines.withContext
 @Composable fun LyricCardPage(t: Track) {
     val nav = LocalNav.current
     val p = c
-    var lines by remember(t.id) { mutableStateOf(LyricCache.peek(t.id)) }
-    LaunchedEffect(t.id) { if (lines == null) lines = runCatching { LyricCache.get(t.id) }.getOrDefault(emptyList()) }
+    val lines by rememberLyricLines(t.id)
     val all = lines.orEmpty().filter { it.text.isNotBlank() }
     // 默认勾上正在唱的那句
     val sel = remember(t.id) { mutableStateListOf<Int>() }

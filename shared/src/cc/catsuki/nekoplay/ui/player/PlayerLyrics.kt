@@ -51,28 +51,15 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.withFrameMillis
 
 // ======================= 迷你播放条 =======================
-object LyricCache {
-    // 最近用过的 30 首：读一次就挪到末尾，超出时丢掉最前面的（各平台通用写法）
-    private val map = LinkedHashMap<String, List<LyricLine>>()
-    private fun put(id: String, l: List<LyricLine>) = synchronized(this) {
-        map.remove(id); map[id] = l
-        while (map.size > 30) map.remove(map.keys.first())
+/** 取歌词并跟着后台插件处理（如翻译）的结果自动换新：先出原文，译文好了再刷上 */
+@Composable fun rememberLyricLines(id: String?): State<List<LyricLine>?> {
+    val st = remember(id) { mutableStateOf(id?.let { LyricCache.peek(it) }) }
+    LaunchedEffect(id) {
+        if (id == null) return@LaunchedEffect
+        if (st.value == null) st.value = runCatching { LyricCache.get(id) }.getOrDefault(emptyList())
+        LyricCache.rev.collect { LyricCache.peek(id)?.let { if (it !== st.value) st.value = it } }
     }
-    fun peek(id: String): List<LyricLine>? = synchronized(this) { map.remove(id)?.also { map[id] = it } }
-    suspend fun get(id: String): List<LyricLine> = peek(id) ?: run {
-        // 本地音乐：读同名 .lrc
-        if (id.startsWith("local:")) {
-            val src = LocalMusic.byId(id)?.src
-            val l = runCatching { val f = java.io.File(java.net.URI(src)); java.io.File(f.parentFile, f.nameWithoutExtension + ".lrc").takeIf { it.exists() }?.readText() }.getOrNull()
-                ?.let { Lrc.parse(it, null) } ?: emptyList()
-            put(id, l); return@run l
-        }
-        if (id.startsWith("dav:")) { val l = DavMusic.lyric(id)?.let { Lrc.parse(it, null) } ?: emptyList(); put(id, l); return@run l }
-        val d = SourceApi.lyricFull(id)
-        // 有逐字歌词就用逐字的，没有退回普通 LRC
-        val l = d.yrc?.let { Lrc.parseYrc(it, d.tr) }?.takeIf { it.isNotEmpty() } ?: Lrc.parse(d.lrc, d.tr)
-        put(id, l); l
-    }
+    return st
 }
 
 /** 歌词是否看得见（封面页时歌词透明挂在后面） */
@@ -83,8 +70,7 @@ val LocalLyricsActive = compositionLocalOf { true }
 
 @Composable private fun LyricsBody(t: Track, showTr: Boolean, active: Boolean, onBlank: (() -> Unit)?) {
     // 按歌重建状态：缓存里有就直接显示，没有才去拉
-    var lines by remember(t.id) { mutableStateOf(LyricCache.peek(t.id)) }
-    LaunchedEffect(t.id) { if (lines == null) lines = try { LyricCache.get(t.id) } catch (e: Exception) { emptyList() } }
+    val lines by rememberLyricLines(t.id)
     // 看得见时进度刷新加快（逐字高亮更顺），藏在封面后面时不加快
     DisposableEffect(active) { if (active) Engine.fastPos++; onDispose { if (active) Engine.fastPos-- } }
     val l = lines
