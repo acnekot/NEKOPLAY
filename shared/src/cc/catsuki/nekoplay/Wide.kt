@@ -52,7 +52,7 @@ import kotlinx.coroutines.launch
  */
 @Composable fun WideLayout() {
     val nav = LocalNav.current
-    val st by Engine.state.collectAsState()
+    val hasTrack by remember { Engine.state.map { it.current != null }.distinctUntilChanged() }.collectAsState(Engine.state.value.current != null)
     // 手机版里「打开队列」的操作，在宽屏上改为打开右侧队列面板
     LaunchedEffect(nav.queue) { if (nav.queue) { nav.side = if (nav.side == 2) 0 else 2; nav.queue = false } }
     val playerDepth = animateFloatAsState(if (nav.player && MotionEffects.pageScale && !AnimStyle.off) 1f else 0f, Motion.page(), label = "wpDepth")
@@ -74,10 +74,10 @@ import kotlinx.coroutines.launch
                 Box(Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
                     WideContent()
                     // 右栏（歌词 / 队列 / 评论）：纯 GPU 位移滑入滑出，不改变主内容区宽度，避免每帧全页重排掉帧
-                    androidx.compose.animation.AnimatedVisibility((nav.side != 0 || nav.comments != null) && st.current != null,
+                    androidx.compose.animation.AnimatedVisibility((nav.side != 0 || nav.comments != null) && hasTrack,
                         Modifier.align(Alignment.CenterEnd),
                         enter = androidx.compose.animation.slideInHorizontally(Motion.page()) { it } + fadeIn(Motion.standard()),
-                        exit = androidx.compose.animation.slideOutHorizontally(Motion.standard()) { it } + fadeOut(Motion.quick())) { SidePanel(st) }
+                        exit = androidx.compose.animation.slideOutHorizontally(Motion.standard()) { it } + fadeOut(Motion.quick())) { SidePanel() }
                 }
             }
             PlayerBar()
@@ -312,7 +312,8 @@ import kotlinx.coroutines.launch
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) { Box(Modifier.widthIn(max = 980.dp).fillMaxHeight()) { content() } }
 
 /** 右侧面板：歌词、播放队列与评论统一平滑切换 */
-@Composable private fun SidePanel(st: PlayState) {
+@Composable private fun SidePanel() {
+    val st by Engine.state.collectAsState()
     val nav = LocalNav.current
     val p = c
     val t = st.current ?: return
@@ -366,7 +367,7 @@ import kotlinx.coroutines.launch
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
         LazyColumn(Modifier.fillMaxSize(), ls, contentPadding = PaddingValues(start = 18.dp, end = 10.dp, bottom = 12.dp)) {
-            itemsIndexed(st.queue, key = { i, x -> "$i${x.id}" }, contentType = { _, _ -> "track" }) { i, x ->
+            itemsIndexed(st.queue, key = { i, x -> "$i:${x.id}" }, contentType = { _, _ -> "track" }) { i, x ->
                 TrackRow(x, i == st.index, null) { Engine.playAt(i) }
             }
         }

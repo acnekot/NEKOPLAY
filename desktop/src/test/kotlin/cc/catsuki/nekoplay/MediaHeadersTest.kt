@@ -61,4 +61,11 @@ class MediaHeadersTest {
             } finally { Plugins.delete(s.id) }
         }
     }
+
+    @Test fun mpvFileOptionsQuoteEachValue() {
+        val o = mpvFileOptions(mapOf("Referer" to "https://a.example/x,y", "User-Agent" to "UA/1.0 (中)", "Origin" to "https://a.example"))
+        val ua = "UA/1.0 (中)"
+        assertEquals("referrer=%21%https://a.example/x,y,user-agent=%${ua.encodeToByteArray().size}%$ua,http-header-fields=%25%Origin: https://a.example", o)
+        assertEquals("referrer=%0%,user-agent=%11%Mozilla/5.0,http-header-fields=%0%", mpvFileOptions(emptyMap()))
+    }
 }

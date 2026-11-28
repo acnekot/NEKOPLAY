@@ -181,7 +181,7 @@ private val SEARCH_KINDS = listOf("track", "album", "artist", "playlist", "user"
                 if (busy && (r == null || r.empty)) item { T("SEARCHING", 12, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 18.dp)) }
                 if (r != null && r.empty) item { T("NO RESULTS", 12, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 18.dp)) }
                 if (r != null) {
-                    itemsIndexed(r.tracks, key = { i, t -> "$i${t.id}" }, contentType = { _, _ -> "track" }) { i, t -> TrackRow(t, st.current?.id == t.id, onLong = { trackActions(nav, t) }) { Engine.playList(r.tracks, i) } }
+                    itemsIndexed(r.tracks, key = { i, t -> "$i:${t.id}" }, contentType = { _, _ -> "track" }) { i, t -> TrackRow(t, st.current?.id == t.id, onLong = { trackActions(nav, t) }) { Engine.playList(r.tracks, i) } }
                     items(r.albums, key = { "a" + it.id }, contentType = { "row" }) { al -> ListRow({ Cover(al.pic, 56.dp, al.name) }, al.name, listOf(al.artist, al.year).filter { it.isNotEmpty() }.joinToString(" · ")) { nav.push(Page.Album(al.id, al.name, al.pic)) } }
                     items(r.artists, key = { "r" + it.id }, contentType = { "row" }) { ar -> ListRow({ Cover(ar.pic, 56.dp, ar.name) }, ar.name, "${two(ar.songs)} 首 · ${two(ar.albums)} 张专辑") { nav.push(Page.Artist(ar.id, ar.name)) } }
                     items(r.playlists, key = { "p" + it.id }, contentType = { "row" }) { pl -> ListRow({ Cover(pl.cover, 56.dp, pl.name) }, pl.name, "${two(pl.count)} 首") { nav.push(Page.Detail("pl", pl.id, pl.name, pl.cover)) } }

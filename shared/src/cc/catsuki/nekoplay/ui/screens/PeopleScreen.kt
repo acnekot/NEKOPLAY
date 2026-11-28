@@ -103,7 +103,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
         }
         item { Column(Modifier.padding(top = 26.dp, bottom = 8.dp)) { TagRow("HOT SONGS", 12.dp) { T("${two(hot.size)} 首", 13, p.s, mono = true) } } }
         if (a == null && err == null) item { T("LOADING", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp)) }
-        itemsIndexed(hot, key = { i, t -> "$i${t.id}" }) { i, t -> TrackRow(t, st.current?.id == t.id, onLong = { trackActions(nav, t) }) { Engine.playList(hot, i) } }
+        itemsIndexed(hot, key = { i, t -> "$i:${t.id}" }) { i, t -> TrackRow(t, st.current?.id == t.id, onLong = { trackActions(nav, t) }) { Engine.playList(hot, i) } }
     }
 }
 
@@ -146,7 +146,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
                 else if (data == null) T("LOADING", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 28.dp))
             }
         }
-        itemsIndexed(list, key = { i, t -> "$i${t.id}" }) { i, t -> TrackRow(t, st.current?.id == t.id, onLong = { trackActions(nav, t) }) { Engine.playList(list, i) } }
+        itemsIndexed(list, key = { i, t -> "$i:${t.id}" }) { i, t -> TrackRow(t, st.current?.id == t.id, onLong = { trackActions(nav, t) }) { Engine.playList(list, i) } }
     }
 }
 

@@ -29,7 +29,10 @@ internal class EngineFade(private val scope: CoroutineScope, private val audio: 
         fadeJob?.cancel()
         val a = audio()
         if (fadeMs == 0 || !a.isPlaying) { a.pause(); return }
-        fadeJob = scope.launch { ramp(1f, 0f, fadeMs); a.pause(); a.volume = Vol.v }
+        // 从当前音量开始淡出：淡入途中按暂停时，不会先跳回满音量再降
+        val from = if (Vol.v > 0f) (a.volume / Vol.v).coerceIn(0f, 1f) else 1f
+        rampOnPlay = false
+        fadeJob = scope.launch { ramp(from, 0f, (fadeMs * from).toInt()); a.pause(); a.volume = Vol.v }
     }
 
     fun fadePlay() {

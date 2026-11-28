@@ -139,8 +139,10 @@ internal class MpvAudio : Audio {
     override fun queueNext(url: String?, cacheKey: String, meta: Track) {
         if (lib == null || h == null || url == null) return
         clearNext()
-        applyStreamHeaders(url)
-        cmd("loadfile", if (url.startsWith("file:")) File(java.net.URI(url)).absolutePath else url, "append")
+        // 请求头用 loadfile 的单文件选项带上：改全局选项会让正在放的这首在拖动 / 断线重连时用错 Referer
+        val src = if (url.startsWith("file:")) File(java.net.URI(url)).absolutePath else url
+        val opts = mpvFileOptions(MediaHeaders.forUrl(url))
+        if (newLoadfile) cmd("loadfile", src, "append", "-1", opts) else cmd("loadfile", src, "append", opts)
     }
     override fun clearNext() { if (lib == null || h == null) return; val n = str("playlist-count")?.toIntOrNull() ?: 0; for (i in n - 1 downTo 1) cmd("playlist-remove", i.toString()) }
     override fun play() { h?.let { lib!!.mpv_set_property_string(it, "pause", "no") } }
@@ -212,3 +214,10 @@ internal class MpvAudio : Audio {
 /** mpv 的 http-header-fields：Referer / User-Agent 有专门选项，其余（如 Origin）拼成 "Key: Value" 列表；值里有逗号的跳过（mpv 用逗号分隔） */
 internal fun mpvHeaderFields(hs: Map<String, String>): String =
     hs.filterKeys { it != "Referer" && it != "User-Agent" }.filterValues { ',' !in it }.entries.joinToString(",") { "${it.key}: ${it.value}" }
+
+/** loadfile 的单文件选项串；值用 mpv 的 %字节数% 写法包起来，里面有逗号、等号也不会被拆开 */
+internal fun mpvFileOptions(hs: Map<String, String>): String {
+    fun q(v: String) = "%${v.encodeToByteArray().size}%$v"
+    return listOf("referrer" to (hs["Referer"] ?: ""), "user-agent" to (hs["User-Agent"] ?: "Mozilla/5.0"), "http-header-fields" to mpvHeaderFields(hs))
+        .joinToString(",") { (k, v) -> "$k=${q(v)}" }
+}

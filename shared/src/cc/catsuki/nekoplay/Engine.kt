@@ -69,6 +69,8 @@ object Engine {
     /** 排好的下一首只能试听时的提示，接上时再显示 */
     private var queuedTrial: String? = null
     private var queuing = false
+    /** 每次撤掉排队都 +1：取地址途中队列 / 模式变了，回来时作废，不把过期的下一首排进去 */
+    private var queueGen = 0
     /** 快播完时（剩 12 秒）把下一首排到播放器里 */
     private fun maybeQueueNext() {
         val s = state.value
@@ -80,6 +82,7 @@ object Engine {
         val nt = s.queue[ni]
         queuing = true
         queuedTrial = null
+        val gen = queueGen
         scope.launch {
             try {
                 val dl = Downloads.file(nt.id)
@@ -90,11 +93,11 @@ object Engine {
                     hit != null && !Plat.isDesktop -> { audio.queueNext(null, cacheKey(nt.id, hit.first), nt); queuedFmt = hit.second }
                     else -> { val st = SourceApi.stream(nt.id, q); audio.queueNext(st.url, cacheKey(nt.id, st.level), nt); queuedFmt = st.format; queuedTrial = st.trial; prefs?.edit()?.putString("fmt_${cacheKey(nt.id, st.level)}", st.format)?.apply() }
                 }
-                if (state.value.current?.id == cur.id) queuedIndex = ni else audio.clearNext()
+                if (gen == queueGen && state.value.current?.id == cur.id) queuedIndex = ni else audio.clearNext()
             } catch (_: Exception) { } finally { queuing = false }
         }
     }
-    private fun dropNext() { if (queuedIndex >= 0) audio.clearNext(); queuedIndex = -1 }
+    private fun dropNext() { queueGen++; if (queuedIndex >= 0) audio.clearNext(); queuedIndex = -1 }
     /** 播放器已经自己接上了下一首：只更新状态，不重新加载 */
     private fun onAdvanced() {
         val ni = queuedIndex; queuedIndex = -1
@@ -343,6 +346,8 @@ object Engine {
     fun enqueue(t: Track) {
         val s = state.value
         if (s.queue.isEmpty()) { playList(listOf(t), 0); return }
+        // 正在放最后一首时，已排好的「下一首」是绕回开头的那首，加歌后要改排新加的这首
+        if (s.index == s.queue.lastIndex) dropNext()
         state.value = s.copy(queue = s.queue + t)
     }
 

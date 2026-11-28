@@ -7,6 +7,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -45,6 +46,8 @@ object Store {
     private lateinit var prefs: KV
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var saveRecentsJob: Job? = null
+    /** 播放历史上限：每次切歌都整份重写，不设上限的话文件和启动读取会越用越慢 */
+    private const val RECENT_MAX = 3000
 
     val profile = MutableStateFlow<Profile?>(null)
     val playlists = MutableStateFlow<List<Playlist>>(emptyList())
@@ -150,8 +153,14 @@ object Store {
     fun restoreRecentEntries(l: List<RecentEntry>) = setRecentEntries(l, save = true)
     fun clearRecents() = setRecentEntries(emptyList(), save = true)
     fun clearRecentDay(day: String) = setRecentEntries(recentEntries.value.filter { it.day != day }, save = true)
-    private fun writeTracks(name: String, l: List<Track>) = io.launch {
-        runCatching { File(dir, "$name.json").writeTextAtomic(JSONArray(l.map { it.toJson() }).toString()) }
+    /** 同一个文件的写入排队执行：共用「名字.tmp」临时文件，并发写会互相覆盖出半截 JSON；排队中的旧快照直接作废 */
+    private val writeLock = kotlinx.coroutines.sync.Mutex()
+    private val writeJobs = HashMap<String, Job>()
+    private fun writeTracks(name: String, l: List<Track>) = synchronized(writeJobs) {
+        writeJobs[name]?.cancel()
+        io.launch {
+            writeLock.withLock { runCatching { File(dir, "$name.json").writeTextAtomic(JSONArray(l.map { it.toJson() }).toString()) } }
+        }.also { writeJobs[name] = it }
     }
 
     /** 启动后调用：读缓存 → 联网刷新账号、歌单、每日推荐 */
@@ -227,6 +236,7 @@ object Store {
         val next = ArrayList<RecentEntry>(cur.size + 1)
         next.add(entry)
         for (e in cur) {
+            if (next.size >= RECENT_MAX) break
             if (!(e.day == day && e.track.id == t.id)) next.add(e)
         }
         setRecentEntries(next, save = true)

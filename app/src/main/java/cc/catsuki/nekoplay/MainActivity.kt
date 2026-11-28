@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(s)
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        AndroidPlat.attachFrameMetrics(window)
+        AndroidPlat.attachFrameMetrics(window, this)
         if (s == null) Perf.start()
         if (s == null) Store.refreshAll()
         setContent { NekoTheme { Root() } }

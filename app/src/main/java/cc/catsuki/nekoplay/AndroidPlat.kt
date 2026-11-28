@@ -27,6 +27,9 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.lifecycle.lifecycleScope
 import java.io.File
 
 /** 安卓平台实现 */
@@ -37,14 +40,22 @@ class AndroidPlat(private val ctx: Context) : PlatImpl {
     companion object {
         lateinit var exoAudio: ExoAudio
         /** 系统 FrameMetrics → 性能统计 */
-        fun attachFrameMetrics(w: Window) {
-            val t = HandlerThread("perf").apply { start() }
-            w.addOnFrameMetricsAvailableListener({ _, m, _ ->
+        private val perfThread by lazy { HandlerThread("perf").apply { start() } }
+        /** 只在性能浮窗 / 设置页性能区打开时挂监听：平时每帧不再多一次跨线程回调 */
+        fun attachFrameMetrics(w: Window, owner: androidx.lifecycle.LifecycleOwner) {
+            val l = Window.OnFrameMetricsAvailableListener { _, m, _ ->
                 val total = m.getMetric(FrameMetrics.TOTAL_DURATION)
                 val gpu = if (Build.VERSION.SDK_INT >= 31) m.getMetric(FrameMetrics.GPU_DURATION) else 0L
                 val deadline = if (Build.VERSION.SDK_INT >= 31) m.getMetric(FrameMetrics.DEADLINE) else 16_666_667L
                 Perf.frame(total, gpu, total > deadline)
-            }, Handler(t.looper))
+            }
+            var on = false
+            owner.lifecycleScope.launch {
+                Perf.active.distinctUntilChanged().collect { a ->
+                    if (a && !on) { w.addOnFrameMetricsAvailableListener(l, Handler(perfThread.looper)); on = true }
+                    else if (!a && on) { runCatching { w.removeOnFrameMetricsAvailableListener(l) }; on = false }
+                }
+            }
         }
     }
 

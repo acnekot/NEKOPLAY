@@ -231,7 +231,7 @@ suspend fun loadPlaylists(kind: String, arg: String): List<Playlist> = when (kin
                     data!!.isEmpty() -> T("EMPTY", 13, p.s, mono = true, ls = .08f, modifier = Modifier.padding(vertical = 24.dp)) }
             }
         }
-        itemsIndexed(data ?: emptyList(), key = { i, x -> "$i${x.first.id}" }) { i, (t, n) ->
+        itemsIndexed(data ?: emptyList(), key = { i, x -> "$i:${x.first.id}" }) { i, (t, n) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 T(two(i + 1), 13, if (i < 3) p.p else p.s, 700, mono = true, modifier = Modifier.width(30.dp))
                 Box(Modifier.weight(1f)) { TrackRow(t, st.current?.id == t.id, if (sel == 0) "$n 次" else "$n 分", onLong = { trackActions(nav, t) }) { Engine.playList(list, i) } }

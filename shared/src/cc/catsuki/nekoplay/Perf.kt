@@ -5,6 +5,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -25,6 +27,10 @@ data class PerfStat(
 object Perf {
     val stat = MutableStateFlow(PerfStat())
     val overlay = MutableStateFlow(false)
+    /** 设置页性能区、基准测试等「临时在看」的数量；为 0 且浮窗关着时采样线程挂起，不再每秒读 /proc、起 ps */
+    val watchers = MutableStateFlow(0)
+    /** 当前是否需要采样（安卓据此挂 / 摘 FrameMetrics 监听） */
+    val active = combine(overlay, watchers) { o, w -> o || w > 0 }
     private var frames = 0; private var totalNs = 0L; private var gpuNs = 0L; private var jank = 0
     private var lastTicks = -1L; private var lastAt = 0L; private var peak = 0f
     private var launchNs = 0L
@@ -50,6 +56,10 @@ object Perf {
 
     fun start() = CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
         while (true) {
+            if (!overlay.value && watchers.value <= 0) {
+                active.first { it }
+                lastTicks = -1L; synchronized(lock) { frames = 0; totalNs = 0; gpuNs = 0; jank = 0 }
+            }
             delay(1000)
             var cpu = 0f
             runCatching {

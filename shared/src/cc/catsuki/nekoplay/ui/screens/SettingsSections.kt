@@ -120,7 +120,11 @@ internal fun LazyListScope.settingsAdvSection(
     onAnalysis: (String) -> Unit,
 ) {
     item { Group("PERFORMANCE") }
-    item { val ps by Perf.stat.collectAsState(); T(Perf.line(ps), 11, p.s, mono = true, lines = 3, lh = 1.5f, modifier = Modifier.padding(vertical = 10.dp)) }
+    item {
+        // 看得到这一行时才让性能采样跑起来
+        DisposableEffect(Unit) { Perf.watchers.value++; onDispose { Perf.watchers.value-- } }
+        val ps by Perf.stat.collectAsState(); T(Perf.line(ps), 11, p.s, mono = true, lines = 3, lh = 1.5f, modifier = Modifier.padding(vertical = 10.dp))
+    }
     item { val po by Perf.overlay.collectAsState(); SwitchRow("性能浮窗", "在所有页面左下角显示 CPU、帧率和 GPU", po) { Perf.overlay.value = it; prefs.edit().putBoolean("perf", it).apply() } }
     if (Plat.isDesktop) item {
         val soft = prefs.getString("render", "gpu") == "soft"

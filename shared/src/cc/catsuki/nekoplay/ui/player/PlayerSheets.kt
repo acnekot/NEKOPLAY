@@ -71,7 +71,7 @@ import androidx.compose.runtime.withFrameMillis
                 Box(Modifier.fillMaxWidth().height(1.dp).background(if (Look.flat) Color.Transparent else p.l2))
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(Modifier.fillMaxSize(), ls, contentPadding = PaddingValues(start = 18.dp, end = 6.dp, bottom = 12.dp)) {
-                    itemsIndexed(st.queue, key = { i, t -> "$i${t.id}" }, contentType = { _, _ -> "queue" }) { i, t ->
+                    itemsIndexed(st.queue, key = { i, t -> "$i:${t.id}" }, contentType = { _, _ -> "queue" }) { i, t ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.weight(1f)) { TrackRow(t, i == st.index, st.format.uppercase().takeIf { i == st.index && it.isNotEmpty() }) { Engine.playAt(i) } }
                             Box(Modifier.size(44.dp).press { Engine.removeAt(i) }, contentAlignment = Alignment.Center) { NIcon(NIcons.close, 12.dp, p.s) }

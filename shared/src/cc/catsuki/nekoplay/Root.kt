@@ -40,6 +40,8 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 sealed interface Page {
     data class Detail(val kind: String, val id: String, val title: String, val cover: String? = null) : Page
@@ -142,7 +144,8 @@ object Boot {
     LaunchedEffect(Unit) { if (Edition.selfUpdate) { delay(2500); Updater.autoCheck() } }
     SideEffect { Keys.nav = nav }
     LaunchedEffect(Unit) { withFrameNanos { Perf.markHomeReady() } }
-    val st by Engine.state.collectAsState()
+    // 只关心「有没有歌」：播放 / 暂停 / 缓冲切换不再让整个 Root 重组
+    val hasTrack by remember { Engine.state.map { it.current != null }.distinctUntilChanged() }.collectAsState(Engine.state.value.current != null)
     val err by Engine.error.collectAsState()
     val openPlayer by PlayerBus.openSeq.collectAsState()
     LaunchedEffect(openPlayer) { if (openPlayer > 0 && Engine.state.value.current != null) nav.player = true }
@@ -164,7 +167,6 @@ object Boot {
     Plat.impl.BackHandler(Updater.dialog != null || nav.input != null || nav.sheet != null || nav.comments != null || nav.menu || nav.queue || nav.player || nav.stack.isNotEmpty() || nav.tab == 1) {
         if (Updater.dialog != null) Updater.dialog = null else nav.back()
     }
-    val hasTrack = st.current != null
 
     CompositionLocalProvider(LocalNav provides nav) {
         val dens = LocalDensity.current

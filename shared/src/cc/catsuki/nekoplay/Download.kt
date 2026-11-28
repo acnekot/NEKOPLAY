@@ -8,6 +8,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.update
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
@@ -81,10 +82,10 @@ object Downloads {
 
     fun download(t: Track, quality: Int = lastQuality.takeIf { it >= 0 } ?: Engine.quality) {
         if (has(t.id) || t.id in active.value) return
-        failed.value = failed.value - t.id
-        active.value = active.value + (t.id to -1f)
+        failed.update { it - t.id }
+        active.update { it + (t.id to -1f) }
         hasAny = true
-        jobs.value = jobs.value + (t to quality)
+        jobs.update { it + (t to quality) }
         queue.trySend(t to quality)
     }
 
@@ -94,8 +95,8 @@ object Downloads {
 
     /** 取消一首（排队中的直接移掉，正在下的中断并删掉半成品） */
     fun cancel(id: String) {
-        active.value = active.value - id
-        jobs.value = jobs.value.filter { it.first.id != id }
+        active.update { it - id }
+        jobs.update { l -> l.filter { it.first.id != id } }
         hasAny = items.value.isNotEmpty() || active.value.isNotEmpty()
         if (runningId == id) running?.cancel()
     }
@@ -141,7 +142,7 @@ object Downloads {
                             val nowMs = System.currentTimeMillis()
                             if (nowMs - lastMs >= 120L) {
                                 last = got; lastMs = nowMs
-                                if (t.id in active.value) active.value = active.value + (t.id to got.toFloat() / total)
+                                active.update { if (t.id in it) it + (t.id to got.toFloat() / total) else it }
                             }
                         }
                     }
@@ -160,10 +161,10 @@ object Downloads {
             tmp.delete()
         } catch (e: Exception) {
             tmp.delete()
-            failed.value = failed.value + (t.id to Triple(t, quality, e.message ?: "未知错误"))
+            failed.update { it + (t.id to Triple(t, quality, e.message ?: "未知错误")) }
         } finally {
-            active.value = active.value - t.id
-            jobs.value = jobs.value.filter { it.first.id != t.id }
+            active.update { it - t.id }
+            jobs.update { l -> l.filter { it.first.id != t.id } }
             hasAny = items.value.isNotEmpty() || active.value.isNotEmpty()
         }
     }

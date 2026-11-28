@@ -40,6 +40,7 @@ fun main() {
         Store.refreshAll()
     }.apply { isDaemon = true; name = "boot-deferred" }.start()
     if (System.getenv("NEKOPLAY_BENCH") == "1") {
+        Perf.watchers.value++
         Thread {
             val out = java.io.File(System.getProperty("user.home"), ".nekoplay/perf-bench.log")
             out.writeText("# NEKOPLAY macOS bench start\n")
